@@ -1,21 +1,21 @@
 {
   "version": "0.2.0",
-  "runUrl": "https://github.com/Dinomax2005/luno-animate/actions/runs/38059428753",
+  "runUrl": "https://github.com/Dinomax2005/luno-animate/actions/runs/38060005875",
   "expiresAt": "2026-11-09",
   "installers": [
     {
       "platform": "Windows",
-      "url": "https://github.com/Dinomax2005/luno-animate/actions/runs/38059428753/artifacts/11672697023",
+      "url": "https://github.com/Dinomax2005/luno-animate/actions/runs/38060005875/artifacts/11672663057",
       "sizeMB": 113
     },
     {
       "platform": "macOS",
-      "url": "https://github.com/Dinomax2005/luno-animate/actions/runs/38059428753/artifacts/11671664984",
+      "url": "https://github.com/Dinomax2005/luno-animate/actions/runs/38060005875/artifacts/11672238713",
       "sizeMB": 524
     },
     {
       "platform": "Linux",
-      "url": "https://github.com/Dinomax2005/luno-animate/actions/runs/38059428753/artifacts/11672202864",
+      "url": "https://github.com/Dinomax2005/luno-animate/actions/runs/38060005875/artifacts/11673090839",
       "sizeMB": 226
     }
   ]
