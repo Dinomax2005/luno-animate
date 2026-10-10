@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowUpRight, Bone, Brush, ChevronRight, Clock3, File, FolderOpen, Plus, Save } from 'lucide-react';
 import { APP_VERSION } from '../config/version';
 import { whatsNew } from '../config/whats-new';
 import { useEditor } from '../store/editor';
 import { useLaunch } from '../services/launch';
-import { openLibraryProject } from '../services/library';
+import { openLibraryProject, refreshLibrary } from '../services/library';
 import type { AnimationMode } from '../engine/types';
 import { Modal } from './Modal';
 
@@ -17,6 +17,11 @@ export function AnimationTypePicker({ value, onChange, disabled = false }: { val
 export function StartDialog({ onOpen }: { onOpen: () => void | Promise<void> }) {
   const projects = useEditor(s => s.projects), busy = useEditor(s => s.busy || !!s.blockReason), showStart = useLaunch(s => s.showStart);
   const [opening, setOpening] = useState<string | null>(null), [error, setError] = useState('');
+  useEffect(() => {
+    let mounted = true;
+    void refreshLibrary().catch(e => { if (mounted) setError(e instanceof Error ? e.message : 'Could not refresh recent documents.'); });
+    return () => { mounted = false; };
+  }, []);
   const recent = projects.filter(p => !p.deletedAt).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
   const close = () => { if (!busy && !opening) useEditor.getState().setDialog(null); };
   const create = (mode?: AnimationMode) => { if (mode) useLaunch.getState().setNewMode(mode); useEditor.getState().setDialog('new'); };

@@ -32,7 +32,8 @@ test('start preference survives restart and both windows can be reopened from He
   await page.getByRole('button', { name: 'New project', exact: true }).click(); await page.getByRole('button', { name: 'Create project', exact: true }).click(); await expect(page.getByTestId('stage')).toBeVisible();
   await page.getByRole('menuitem', { name: 'Help', exact: true }).click(); await page.getByRole('menuitem', { name: 'What’s New…', exact: true }).click();
   await page.getByRole('dialog', { name: 'What’s New', exact: true }).getByRole('button', { name: 'Continue', exact: true }).click(); await expect(page.getByRole('dialog')).toHaveCount(0); await expect(page.getByTestId('stage')).toBeVisible();
-  await page.getByRole('menuitem', { name: 'Help', exact: true }).click(); await page.getByRole('menuitem', { name: 'Start window…', exact: true }).click(); await expect(start).toBeVisible(); await expect(start.getByLabel('Show this window at startup')).not.toBeChecked();
+  await page.getByRole('menuitem', { name: 'Help', exact: true }).click(); await page.getByRole('menuitem', { name: 'Start window…', exact: true }).click(); await expect(start).toBeVisible();
+  await expect(start.getByRole('button', { name: 'Open recent Untitled-1', exact: true })).toBeVisible(); await expect(start.getByLabel('Show this window at startup')).not.toBeChecked();
 });
 
 test('upgrading from an acknowledged older version shows the current changes once', async ({ page }) => {
