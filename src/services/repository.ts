@@ -35,13 +35,17 @@ export class BrowserRepository implements Repository {
   async load(id: string) { await this.queue; const record = await (await this.db).get('projects', id); if (!record) throw new Error('This project could not be found.'); const project = decodeLam(record.bytes); if (project.id !== id) throw new Error('Project integrity mismatch.'); return project; }
   save(project: Project, thumbnail?: string | null) {
     const bytes = encodeLam(project);
+    // Derive queued metadata from these exact, canonical bytes, not a caller-owned
+    // object that may change while an earlier transaction is still running.
+    const captured = projectRecord(decodeLam(bytes));
     return this.serial(async () => {
       const db = await this.db; const tx = db.transaction(['projects', 'revisions'], 'readwrite');
       return protectTransaction(tx, async () => {
-      const previous = await tx.objectStore('projects').get(project.id); const record = projectRecord(project, previous, thumbnail);
+      const previous = await tx.objectStore('projects').get(captured.id);
+      const record = { ...captured, createdAt: previous?.createdAt ?? captured.createdAt, updatedAt: Date.now(), starred: previous?.starred ?? false, deletedAt: previous?.deletedAt ?? null, thumbnail: thumbnail === undefined ? previous?.thumbnail ?? null : thumbnail };
       if (previous) {
-        await tx.objectStore('revisions').add({ projectId: project.id, createdAt: previous.updatedAt, bytes: previous.bytes });
-        const revisions = await tx.objectStore('revisions').index('by-project').getAll(project.id);
+        await tx.objectStore('revisions').add({ projectId: captured.id, createdAt: previous.updatedAt, bytes: previous.bytes });
+        const revisions = await tx.objectStore('revisions').index('by-project').getAll(captured.id);
         for (const old of revisions.slice(0, Math.max(0, revisions.length - 3))) await tx.objectStore('revisions').delete(old.id!);
       }
       await tx.objectStore('projects').put({ ...record, bytes }); return record;
@@ -49,6 +53,7 @@ export class BrowserRepository implements Repository {
     });
   }
   patch(id: string, patch: RecordPatch) {
+    patch = { ...patch };
     return this.serial(async () => {
       const db = await this.db; const tx = db.transaction(['projects', 'revisions'], 'readwrite'); return protectTransaction(tx, async () => { const previous = await tx.objectStore('projects').get(id);
       if (!previous) { tx.abort(); void tx.done.catch(() => {}); throw new Error('This project could not be found.'); }
@@ -77,7 +82,7 @@ export class BrowserRepository implements Repository {
     throw new Error('No readable prior save is available. Your existing files have not been removed.');
   }
   async getSettings() { await this.queue; return (await (await this.db).get('settings', 'studio')) ?? { lastProjectId: null }; }
-  saveSettings(settings: LibrarySettings) { return this.serial(async () => { await (await this.db).put('settings', settings, 'studio'); }); }
+  saveSettings(settings: LibrarySettings) { const captured = structuredClone(settings); return this.serial(async () => { await (await this.db).put('settings', captured, 'studio'); }); }
   async close() { await this.queue; (await this.db).close(); }
 }
 export class NativeRepository implements Repository {

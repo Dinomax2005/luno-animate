@@ -35,6 +35,7 @@ function ExportDialog() {
   const [busy, setBusy] = useState(false), [progress, setProgress] = useState(0), [error, setError] = useState(''), [capability, setCapability] = useState<VideoCapabilities | null>(null);
   const abort = useRef<AbortController | null>(null);
   useEffect(() => { if (format !== 'mp4') return; let active = true; setCapability(null); void import('../engine/video').then(m => m.mp4Capabilities(project, resolution)).then(c => { if (active) setCapability(c); }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [format, project, resolution]);
+  useEffect(() => () => abort.current?.abort(), []);
   const requestClose = () => { if (busy) abort.current?.abort(); else close(); };
   const animated = format === 'mp4' || format === 'gif' || format === 'spritesheet', extension = format === 'spritesheet' ? 'zip' : format;
   const plan = framePlan(project, { scope, workArea });

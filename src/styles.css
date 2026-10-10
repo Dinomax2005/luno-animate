@@ -1032,3 +1032,8 @@ kbd { font-family: var(--mono); font-weight: 400; font-size: 9px; color: var(--m
 .new-project-modal .new-template-grid { grid-template-columns: repeat(3, 1fr); }
 .new-project-modal .new-template-grid > button { padding: 15px 8px 13px; }
 .new-project-modal .new-template-grid small { font-size: 8px; }
+
+/* Notices stay dismissible without ever intercepting stage/export controls. */
+.toast { pointer-events: none; }
+.toast > .icon-button { pointer-events: auto; }
+.toast.with-dialog { top: 12px; bottom: auto; left: auto; right: 12px; transform: none; max-width: min(480px, 85vw); }

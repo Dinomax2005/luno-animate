@@ -19,6 +19,7 @@ const Dialogs = lazy(() => import('./components/Dialogs').then(module => ({ defa
 
 export default function App() {
   const project = useEditor(s => s.project), preferences = useEditor(s => s.preferences), playing = useEditor(s => s.playing);
+  const busy = useEditor(s => s.busy);
   const dialog = useEditor(s => s.dialog), view = useEditor(s => s.view), ready = useEditor(s => s.libraryReady), blocked = useEditor(s => s.blockReason), saveStatus = useEditor(s => s.saveStatus);
   const inputProject = useRef<HTMLInputElement>(null), inputImage = useRef<HTMLInputElement>(null), inputAudio = useRef<HTMLInputElement>(null);
   const lastActivity = useRef(Date.now());
@@ -29,24 +30,30 @@ export default function App() {
     catch (error) { s.notify(error instanceof Error ? error.message : 'Could not save the project.', 'error'); }
     finally { s.setBusy(false); }
   }, []);
-  const loadProject = useCallback(async (raw: string | Uint8Array | ArrayBuffer) => {
-    const state = useEditor.getState(); if (state.blockReason || state.interacting) { state.notify('Finish the current operation before opening another project. Your file is unchanged.', 'info'); return; }
+  const loadProject = useCallback(async (raw: string | Uint8Array | ArrayBuffer, ownsBusyOperation = false) => {
+    const state = useEditor.getState(); if (state.blockReason || state.interacting || state.busy && !ownsBusyOperation) { state.notify('Finish the current operation before opening another project. Your file is unchanged.', 'info'); return; }
     try { const parsed = readProjectData(raw); await openDocument(parsed, true); useEditor.getState().notify(`“${parsed.name}” is in your project library. The original file is unchanged.`); }
     catch (error) { useEditor.getState().notify(error instanceof Error ? error.message : 'Could not read this project.', 'error'); }
   }, []);
   const onOpen = useCallback(async () => {
     if (window.luno) {
       const s = useEditor.getState(); s.setBusy(true);
-      try { const raw = await window.luno.openProject(); if (raw) await loadProject(raw); }
+      try { const raw = await window.luno.openProject(); if (raw) await loadProject(raw, true); }
       catch (error) { s.notify(error instanceof Error ? error.message : 'Could not open the project file.', 'error'); }
       finally { s.setBusy(false); }
     } else inputProject.current?.click();
   }, [loadProject]);
   const onImport = useCallback(() => inputImage.current?.click(), []), onImportAudio = useCallback(() => inputAudio.current?.click(), []);
   const importFile = useCallback(async (file: File) => {
-    if (/\.(lam|luno|json)$/i.test(file.name)) { if (file.size > MAX_LAM_BYTES) { useEditor.getState().notify('Choose a project smaller than 64 MB.', 'error'); return; } await loadProject(await file.arrayBuffer()); return; }
-    const s = useEditor.getState(); s.setBusy(true);
+    const s = useEditor.getState();
+    if (s.busy || s.blockReason || s.interacting) { s.notify('Finish the current operation before importing. Your original file is unchanged.', 'info'); return; }
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    s.setBusy(true);
     try {
+      if (/\.(lam|luno|json)$/i.test(file.name)) {
+        if (file.size > MAX_LAM_BYTES) { s.notify('Choose a project smaller than 64 MB.', 'error'); return; }
+        await loadProject(await file.arrayBuffer(), true); return;
+      }
       if (s.view === 'home') await openDocument(createProject('blank'));
       if (/\.(mp3|wav|ogg|m4a|aac|flac|webm)$/i.test(file.name)) {
         const clip = await audioFromFile(file, useEditor.getState().frame); useEditor.getState().addAudio(clip); s.notify('Sound added. Press play to hear it with your animation.'); return;
@@ -156,10 +163,10 @@ export default function App() {
     window.addEventListener('keydown', keys); return () => { window.removeEventListener('keydown', keys); unsubscribe?.(); };
   }, [onOpen, onSave]);
 
-  return <><SoundPlayback /><div className={`app-shell ${view === 'home' ? 'home-mode' : ''}`} inert={!!blocked} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file && !useEditor.getState().dialog && !useEditor.getState().blockReason && !useEditor.getState().busy && !useEditor.getState().interacting) void importFile(file); }}>
-    {view === 'home' ? <ProjectHome onOpen={() => void onOpen()} /> : <><Header onOpen={() => void onOpen()} onSave={() => void onSave()} onImport={onImport} /><div className="studio"><ToolRail onImport={onImport} /><main className="editor-main"><div className="workspace"><Library onImport={onImport} /><Stage /><Inspector /></div><Timeline onImportAudio={onImportAudio} /></main></div><footer className="app-footer"><span className="footer-studio-label"><span className="green-dot" /> YOUR LOCAL STUDIO <span className="footer-version">v0.2</span></span><span className="footer-message"><Heart size={10} /> A little less complicated. A lot more animated.</span><div><span><CloudOff size={11} /> Offline-ready</span><span><ShieldCheck size={11} /> {saveStatus === 'saved' ? 'Library protected' : 'Keeping your work local'}</span><button onClick={() => useEditor.getState().setDialog('help')}><Command size={11} /> Shortcuts</button><Check size={11} /></div></footer></>}
+  return <><SoundPlayback /><div className={`app-shell ${view === 'home' ? 'home-mode' : ''}`} inert={!!blocked} aria-busy={busy || !!blocked} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file && !useEditor.getState().dialog && !useEditor.getState().blockReason && !useEditor.getState().busy && !useEditor.getState().interacting) void importFile(file); }}>
+    {view === 'home' ? <ProjectHome onOpen={() => void onOpen()} /> : <><Header onOpen={() => void onOpen()} onSave={() => void onSave()} onImport={onImport} /><div className="studio" inert={busy}><ToolRail onImport={onImport} /><main className="editor-main"><div className="workspace"><Library onImport={onImport} /><Stage /><Inspector /></div><Timeline onImportAudio={onImportAudio} /></main></div><footer className="app-footer" inert={busy}><span className="footer-studio-label"><span className="green-dot" /> YOUR LOCAL STUDIO <span className="footer-version">v0.2</span></span><span className="footer-message"><Heart size={10} /> A little less complicated. A lot more animated.</span><div><span><CloudOff size={11} /> Offline-ready</span><span><ShieldCheck size={11} /> {saveStatus === 'saved' ? 'Library protected' : 'Keeping your work local'}</span><button onClick={() => useEditor.getState().setDialog('help')}><Command size={11} /> Shortcuts</button><Check size={11} /></div></footer></>}
     <Toast /><UpdateBanner /><Suspense fallback={<div className="dialog-loading" role="status">Preparing a little space…</div>}>{dialog && <Dialogs />}</Suspense>
-    <input ref={inputProject} type="file" className="visually-hidden" aria-label="Open Luno project file" accept=".lam,.luno,.json" onChange={async e => { const file = e.target.files?.[0]; if (file) { if (file.size > MAX_LAM_BYTES) useEditor.getState().notify('Choose a project smaller than 64 MB.', 'error'); else await loadProject(await file.arrayBuffer()); } e.target.value = ''; }} />
+    <input ref={inputProject} type="file" className="visually-hidden" aria-label="Open Luno project file" accept=".lam,.luno,.json" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
     <input ref={inputImage} type="file" className="visually-hidden" aria-label="Import image file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
     <input ref={inputAudio} type="file" className="visually-hidden" aria-label="Import audio file" accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,.webm" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
   </div>{blocked && <div className="safe-operation-overlay" role="status" aria-live="polite"><div><span><RefreshCw size={25} className="spin" /></span><h2>{blocked}</h2><p>Please keep Luno open. Your work comes first.</p></div></div>}</>;

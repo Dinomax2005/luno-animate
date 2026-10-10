@@ -23,6 +23,7 @@ on:
       - '!src/config/desktop-build.json'
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: desktop-installers-${{ github.ref }}
   cancel-in-progress: true
@@ -86,3 +87,29 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
+
+  verify-release-assets:
+    name: Verify installers and all update feeds
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: Luno-Animate-*
+          path: installers
+      - run: node scripts/prepare-release.mjs installers release-assets
+      - name: Record the verified installer checksums
+        run: |
+          echo '## Verified desktop installers and stable update feeds' >> "$GITHUB_STEP_SUMMARY"
+          echo 'These are unpublished build artifacts. Publishing a reviewed GitHub release is required for automatic updates.' >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat release-assets/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

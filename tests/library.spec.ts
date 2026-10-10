@@ -23,8 +23,8 @@ test('creates independent projects, persists thumbnails, renames, searches, star
 
 test('LAM import/export includes all scenes and importing the same ID never overwrites the existing project', async ({ page }) => {
   const project = createProject('title'); project.name = 'Portable creation'; const bytes = Buffer.from(encodeLam(project)); await page.goto('/');
-  await page.getByLabel('Open Luno project file').setInputFiles({ name: 'creation.lam', mimeType: 'application/vnd.luno.lam', buffer: bytes }); await expect(page.getByLabel('Project name')).toHaveValue(project.name);
-  await page.getByLabel('Open Luno project file').setInputFiles({ name: 'creation.lam', mimeType: 'application/vnd.luno.lam', buffer: bytes }); await expect(page.getByLabel('Project name')).toHaveValue('Portable creation (imported)');
+  await page.getByLabel('Open Luno project file').setInputFiles({ name: 'creation.lam', mimeType: 'application/vnd.luno.lam', buffer: bytes }); await expect(page.getByLabel('Project name')).toHaveValue(project.name); await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false');
+  await page.getByLabel('Open Luno project file').setInputFiles({ name: 'creation.lam', mimeType: 'application/vnd.luno.lam', buffer: bytes }); await expect(page.getByLabel('Project name')).toHaveValue('Portable creation (imported)'); await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false');
   const promise = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await promise; expect(download.suggestedFilename()).toBe('Portable creation imported.lam'); const path = await download.path(); const imported = decodeLam(await readFile(path!)); expect(imported.id).not.toBe(project.id); expect(imported.items).toEqual(project.items);
   await page.getByRole('button', { name: 'Back to all projects' }).click(); await expect(page.locator('.home-project-card')).toHaveCount(2);
 });

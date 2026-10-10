@@ -12,10 +12,10 @@ export function useUpdates() {
   return state;
 }
 export function UpdateBanner() {
-  const state = useUpdates(); const [hidden, setHidden] = useState(false);
+  const state = useUpdates(), busy = useEditor(s => s.busy); const [hidden, setHidden] = useState(false);
   useEffect(() => setHidden(false), [state.phase, state.version]);
   if (hidden || !['available', 'downloading', 'ready', 'waiting'].includes(state.phase)) return null;
-  return <div className="update-banner" role="status"><span className="update-badge"><Download size={15} /></span><div><strong>{state.countdown !== null ? `Safe restart in ${state.countdown}s` : `Luno ${state.version} ${state.phase === 'downloading' ? 'is downloading' : 'is ready'}`}</strong><span>{state.countdown !== null ? 'Your latest work will be saved and backed up first.' : 'Keep creating. Your work comes first.'}</span></div><button className="button secondary" onClick={() => useEditor.getState().setDialog('updates')}>View update</button>{state.countdown !== null && <button className="text-link" onClick={() => void window.luno?.updater.defer()}>Not now</button>}<button className="icon-button" aria-label="Hide update notice" onClick={() => { setHidden(true); void window.luno?.updater.defer(); }}><X size={14} /></button></div>;
+  return <div className="update-banner" role="status"><span className="update-badge"><Download size={15} /></span><div><strong>{state.countdown !== null ? `Safe restart in ${state.countdown}s` : `Luno ${state.version} ${state.phase === 'downloading' ? 'is downloading' : 'is ready'}`}</strong><span>{state.countdown !== null ? 'Your latest work will be saved and backed up first.' : 'Keep creating. Your work comes first.'}</span></div><button className="button secondary" disabled={busy} onClick={() => useEditor.getState().setDialog('updates')}>View update</button>{state.countdown !== null && <button className="text-link" onClick={() => void window.luno?.updater.defer()}>Not now</button>}<button className="icon-button" aria-label="Hide update notice" onClick={() => { setHidden(true); void window.luno?.updater.defer(); }}><X size={14} /></button></div>;
 }
 export function UpdatesDialog() {
   const state = useUpdates(), prefs = useEditor(s => s.preferences);

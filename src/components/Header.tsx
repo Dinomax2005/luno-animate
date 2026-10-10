@@ -9,6 +9,7 @@ export function Header({ onOpen, onSave }: FileActions) {
   const history = useEditor(s => s.history);
   const future = useEditor(s => s.future);
   const saveStatus = useEditor(s => s.saveStatus);
+  const busy = useEditor(s => s.busy);
   const [menu, setMenu] = useState(false);
   const [name, setName] = useState(project.name);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -19,7 +20,7 @@ export function Header({ onOpen, onSave }: FileActions) {
     document.addEventListener('mousedown', click); return () => document.removeEventListener('mousedown', click);
   }, [menu]);
   const action = (fn: () => void) => { fn(); setMenu(false); };
-  return <header className="app-header">
+  return <header className="app-header" inert={busy}>
     <a className="brand" href="#" onClick={e => { e.preventDefault(); void goHome(); }} aria-label="Project home"><img src="./favicon.svg" alt="" /><span>luno<span className="brand-dot">.</span></span><span className="brand-caption">ANIMATE</span></a>
     <div className="header-divider" /><button className="icon-button home-button" aria-label="Back to all projects" title="Your project library" onClick={() => void goHome()}><Home size={17} /></button>
     <div className="file-menu" ref={menuRef}><button className={`text-button file-menu-trigger ${menu ? 'active' : ''}`} onClick={() => setMenu(!menu)} aria-expanded={menu}>File <ChevronDown size={12} /></button>{menu && <div className="dropdown file-dropdown">
@@ -37,11 +38,11 @@ export function Header({ onOpen, onSave }: FileActions) {
   </header>;
 }
 export function Toast() {
-  const toast = useEditor(s => s.toast);
+  const toast = useEditor(s => s.toast), dialog = useEditor(s => s.dialog);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => useEditor.getState().clearToast(), toast.tone === 'error' ? 8000 : 4200); return () => clearTimeout(timer);
   }, [toast]);
   if (!toast) return null;
-  return <div className={`toast ${toast.tone}`} role={toast.tone === 'error' ? 'alert' : 'status'}><span className="toast-icon">{toast.tone === 'success' ? <Check size={15} /> : <Sparkles size={15} />}</span><span>{toast.message}</span><button className="icon-button" aria-label="Dismiss notification" onClick={() => useEditor.getState().clearToast()}><X size={14} /></button></div>;
+  return <div className={`toast ${toast.tone} ${dialog ? 'with-dialog' : ''}`} role={toast.tone === 'error' ? 'alert' : 'status'}><span className="toast-icon">{toast.tone === 'success' ? <Check size={15} /> : <Sparkles size={15} />}</span><span>{toast.message}</span><button className="icon-button" aria-label="Dismiss notification" onClick={() => useEditor.getState().clearToast()}><X size={14} /></button></div>;
 }
