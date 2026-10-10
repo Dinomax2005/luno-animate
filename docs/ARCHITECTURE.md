@@ -1,4 +1,4 @@
-# Architecture · v0.2
+# Architecture · v0.3.4
 
 ## Local-first boundaries
 

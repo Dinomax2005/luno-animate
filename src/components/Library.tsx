@@ -9,11 +9,11 @@ import { ItemGraphic } from './SceneGraphics';
 export const LayerIcon = ({ item, size = 15 }: { item: SceneItem; size?: number }) => item.type === 'text' ? <Type size={size} /> : item.type === 'group' ? <Group size={size} /> : item.type === 'drawing' ? <Brush size={size} /> : item.type === 'character' ? <Bot size={size} /> : item.type === 'image' ? <Image size={size} /> : item.type === 'path' ? <PenLine size={size} /> : item.shape === 'star' || item.shape === 'sparkle' ? <Sparkles size={size} /> : item.shape === 'ellipse' || item.shape === 'ground' ? <Circle size={size} /> : <Square size={size} />;
 const libraryItems: { name: string; caption: string; kind: ShapeKind | 'character'; color: string }[] = [
   { name: 'Milo', caption: 'RIGGED CHARACTER', kind: 'character', color: '#efecf6' },
-  { name: 'Circle', caption: 'A LITTLE ROUND', kind: 'ellipse', color: '#faeee5' },
-  { name: 'Rectangle', caption: 'KEEP IT SIMPLE', kind: 'rectangle', color: '#eaf0e7' },
-  { name: 'Star', caption: 'SHINE ON', kind: 'star', color: '#f6f1df' },
-  { name: 'Sparkle', caption: 'EXTRA MAGIC', kind: 'sparkle', color: '#f3eef7' },
-  { name: 'Ground', caption: 'A SOFT LANDING', kind: 'ground', color: '#edf0ed' },
+  { name: 'Circle', caption: 'VECTOR SHAPE', kind: 'ellipse', color: '#faeee5' },
+  { name: 'Rectangle', caption: 'VECTOR SHAPE', kind: 'rectangle', color: '#eaf0e7' },
+  { name: 'Star', caption: 'VECTOR SHAPE', kind: 'star', color: '#f6f1df' },
+  { name: 'Sparkle', caption: 'VECTOR SHAPE', kind: 'sparkle', color: '#f3eef7' },
+  { name: 'Ground', caption: 'VECTOR SHAPE', kind: 'ground', color: '#edf0ed' },
 ];
 function AssetPreview({ kind }: { kind: ShapeKind | 'character' }) {
   const item = kind === 'character' ? createCharacter() : createShape(kind);
@@ -29,7 +29,7 @@ export function Library({ onImport }: { onImport: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const selected = project.items.find(i => i.id === selectedId);
   return <aside className="library-panel">
-    <div className="panel-tabs"><button className={leftTab === 'layers' ? 'active' : ''} onClick={() => useEditor.getState().setLeftTab('layers')}>Scene <span className="tab-count">{String(project.sceneOrder.indexOf(project.sceneId) + 1).padStart(2, '0')}</span></button><button className={leftTab === 'assets' ? 'active' : ''} onClick={() => useEditor.getState().setLeftTab('assets')}>Assets <span className="new-dot" /></button></div>
+    <div className="panel-tabs"><button className={leftTab === 'layers' ? 'active' : ''} onClick={() => useEditor.getState().setLeftTab('layers')}>Layers <span className="tab-count">{String(project.sceneOrder.indexOf(project.sceneId) + 1).padStart(2, '0')}</span></button><button className={leftTab === 'assets' ? 'active' : ''} onClick={() => useEditor.getState().setLeftTab('assets')}>Library <span className="new-dot" /></button></div>
     {leftTab === 'layers' ? <>
       <div className="scene-heading"><div className="scene-icon"><Layers2 size={16} /></div><div><strong>{project.sceneName}</strong><span>{(project.duration / project.fps).toFixed(1)} seconds · {project.fps} fps</span></div><button className="icon-button" aria-label="Scene settings" onClick={() => useEditor.getState().setDialog('settings')}><ChevronDown size={15} /></button></div>
       <div className="section-heading"><span>LAYERS</span><span className="heading-actions"><span>{project.items.length}</span><button className="icon-button small" aria-label="Add layer from assets" onClick={() => useEditor.getState().setLeftTab('assets')}><Plus size={15} /></button></span></div>
@@ -40,19 +40,18 @@ export function Library({ onImport }: { onImport: () => void }) {
           <button className={`layer-action ${item.locked ? 'is-locked' : ''}`} aria-label={`${item.locked ? 'Unlock' : 'Lock'} ${item.name}`} onClick={() => useEditor.getState().editItem(item.id, { locked: !item.locked })}>{item.locked ? <LockKeyhole size={12} /> : <UnlockKeyhole size={12} />}</button>
         </div>
         {item.type === 'character' && selectedId === item.id && <div className="rig-subrow"><button onClick={() => setExpanded(!expanded)} className="rig-expand">{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}<span className="rig-dot" /> Character rig <span className="mini-count">{item.rig?.bones.length}</span></button>{expanded && <div className="rig-joints-list">{item.rig?.bones.map(bone => <button key={bone.id} onClick={() => { useEditor.getState().selectBone(bone.id); useEditor.getState().setTool('rig'); useEditor.getState().setPreference('showBones', true); }}><span className="hierarchy-line" />{bone.name}<span className="joint-dot" /></button>)}</div>}</div>}
-      </div>)}{!project.items.length && <div className="empty-layers"><Layers2 size={23} /><p>No layers yet</p><button className="text-link" onClick={() => useEditor.getState().setLeftTab('assets')}>Add something lovely</button></div>}</div>
-      <button className="add-layer-button" onClick={() => useEditor.getState().setLeftTab('assets')}><Plus size={14} /> Add an object <span>+</span></button>
+      </div>)}{!project.items.length && <div className="empty-layers"><Layers2 size={23} /><p>No layers yet</p><button className="text-link" onClick={() => useEditor.getState().setLeftTab('assets')}>Insert from Library</button></div>}</div>
+      <button className="add-layer-button" onClick={() => useEditor.getState().setLeftTab('assets')}><Plus size={14} /> Insert layer <span>+</span></button>
       {selected && <div className="layer-management"><span>Arrange layer</span><div><button className="icon-button small" aria-label="Move layer forward" onClick={() => useEditor.getState().moveLayer(selected.id, 'up')}><ArrowUp size={13} /></button><button className="icon-button small" aria-label="Move layer backward" onClick={() => useEditor.getState().moveLayer(selected.id, 'down')}><ArrowDown size={13} /></button><button className="icon-button small" aria-label="Duplicate layer" onClick={() => useEditor.getState().duplicateSelected()}><Copy size={13} /></button><button className="icon-button small" aria-label="Delete layer" onClick={() => useEditor.getState().deleteSelected()} disabled={selected.locked}><Trash2 size={13} /></button></div></div>}
       <div className="panel-spacer" />
-      <div className="starter-card"><div className="starter-card-heading"><span className="sparkle-tile"><Sparkles size={17} /></span><span>A small start.<br /><strong>A big possibility.</strong></span></div><p>Move a joint. Make a keyframe.<br />You’re already animating.</p><button onClick={() => useEditor.getState().setDialog('setup')}>Show me around <ArrowUpRight size={14} /></button><span className="starter-card-star">✳</span></div>
-      <button className="import-button" onClick={onImport}><Upload size={14} /> Import your artwork <span>↗</span></button>
+      <button className="import-button" onClick={onImport}><Upload size={14} /> Import artwork <span>↗</span></button>
     </> : <>
-      <div className="asset-intro"><h2>A little inspiration.</h2><p>Good things to get you moving.</p></div>
+      <div className="asset-intro"><h2>Symbols & primitives</h2></div>
       <div className="search-input"><Search size={14} /><input placeholder="Find an asset…" aria-label="Search assets" value={search} onChange={e => setSearch(e.target.value)} /><kbd>⌕</kbd></div>
       <div className="extra-assets"><button onClick={() => useEditor.getState().addBlankRig()}><BoneIcon size={15} /><span>Blank cutout rig</span><Plus size={12} /></button><button onClick={() => useEditor.getState().addText()}><Type size={15} /><span>Editable text</span><Plus size={12} /></button><button onClick={() => { useEditor.getState().setPreference('drawingMode', 'cel'); useEditor.getState().setTool('pen'); }}><Brush size={15} /><span>Frame-by-frame drawing</span><Plus size={12} /></button></div><div className="asset-grid">{libraryItems.filter(asset => asset.name.toLowerCase().includes(search.toLowerCase())).map(asset => <button className="asset-card" key={asset.kind} onClick={() => asset.kind === 'character' ? useEditor.getState().addCharacter() : useEditor.getState().addShape(asset.kind)}><div className="asset-preview" style={{ background: asset.color }}><AssetPreview kind={asset.kind} /><span className="asset-add"><Plus size={13} /></span>{asset.kind === 'character' && <span className="rigged-badge">RIGGED</span>}</div><strong>{asset.name}</strong><span>{asset.caption}</span></button>)}</div>
-      {!libraryItems.some(a => a.name.toLowerCase().includes(search.toLowerCase())) && <p className="empty-search">No assets found. Try “Milo” or “Star”.</p>}
-      <div className="asset-import-card"><Upload size={18} /><strong>Bring your own art</strong><p>PNG, SVG, JPG, and WebP.<br />Everything stays on your device.</p><button className="button secondary" onClick={onImport}>Choose a file <ArrowUpRight size={13} /></button></div>
-      <div className="panel-spacer" /><div className="library-footnote"><span className="green-dot" /> Yours to use. Yours to create.</div>
+      {!libraryItems.some(a => a.name.toLowerCase().includes(search.toLowerCase())) && <p className="empty-search">No matching assets.</p>}
+      <div className="asset-import-card"><Upload size={18} /><strong>Import artwork</strong><p>PNG · SVG · JPG · WebP</p><button className="button secondary" onClick={onImport}>Choose a file <ArrowUpRight size={13} /></button></div>
+      <div className="panel-spacer" /><div className="library-footnote"><span className="green-dot" /> Embedded assets · no external dependencies</div>
     </>}
   </aside>;
 }

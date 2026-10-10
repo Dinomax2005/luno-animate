@@ -16,13 +16,11 @@ function initialProject(): Project {
     recoveryMessage = 'Your previous project could not be opened. A recovery copy has been kept in local storage.';
     try { localStorage.setItem('luno.recovery.v1', localStorage.getItem(STORAGE_KEY) ?? ''); } catch { /* Storage may be unavailable. */ }
   }
-  const p = createProject();
-  const character = p.items.find(i => i.type === 'character')!;
-  p.keyframes[character.id] = createPreset(character, 'wave', p.duration);
+  const p = createProject('blank'); p.name = 'Untitled-1'; p.background = '#ffffff';
   return p;
 }
 function initialPreferences(): Preferences {
-  const defaults: Preferences = { onboardingComplete: false, showBones: true, showGrid: false, loop: true, autoKey: true, theme: 'light', onionSkin: false, onionBefore: 1, onionAfter: 1, showMotionPath: false, snapToGrid: false, gridSize: 20, inverseKinematics: true, brushColor: '#496853', brushSize: 5, drawingMode: 'vector', automaticUpdates: true };
+  const defaults: Preferences = { onboardingComplete: false, showBones: true, showGrid: false, loop: true, autoKey: true, theme: 'dark', onionSkin: false, onionBefore: 1, onionAfter: 1, showMotionPath: false, snapToGrid: false, gridSize: 20, inverseKinematics: true, brushColor: '#496853', brushSize: 5, drawingMode: 'vector', automaticUpdates: true };
   try {
     const value = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
     for (const key of ['onboardingComplete', 'showBones', 'showGrid', 'loop', 'autoKey', 'onionSkin', 'showMotionPath', 'snapToGrid', 'inverseKinematics', 'automaticUpdates'] as const) {
@@ -31,7 +29,7 @@ function initialPreferences(): Preferences {
     if (typeof value.brushColor === 'string' && /^#[0-9a-f]{6}$/i.test(value.brushColor)) defaults.brushColor = value.brushColor;
     if (value.drawingMode === 'cel') defaults.drawingMode = 'cel';
     for (const key of ['onionBefore', 'onionAfter', 'gridSize', 'brushSize'] as const) if (typeof value[key] === 'number' && Number.isFinite(value[key])) defaults[key] = clamp(value[key], key.startsWith('onion') ? 0 : 1, key.startsWith('onion') ? 5 : 100);
-    if (value.theme === 'dark') defaults.theme = 'dark';
+    if (value.theme === 'dark' || value.theme === 'light') defaults.theme = value.theme;
   } catch { /* Defaults are safe when storage is unavailable. */ }
   return defaults;
 }
@@ -53,6 +51,7 @@ export interface EditorStore {
   editCamera: (patch: Partial<Pick<Camera, 'x' | 'y' | 'zoom' | 'rotation'>>, record?: boolean) => void; resetCamera: () => void;
   addAudio: (clip: AudioClip) => void; editAudio: (id: string, patch: Partial<Pick<AudioClip, 'name' | 'startFrame' | 'trimStart' | 'volume' | 'muted'>>, record?: boolean) => void; removeAudio: (id: string) => void;
   setWorkArea: (start: number, end: number) => void;
+  nudgeSelected: (dx: number, dy: number) => void;
   selectKey: (itemId: string, frame: number, additive?: boolean) => void; copyKeys: () => void; pasteKeys: () => void; deleteKeys: () => void; setBezier: (bezier: [number, number, number, number]) => void;
 
   project: Project;
@@ -116,7 +115,7 @@ function writeKeyframe(project: Project, item: SceneItem, frame: number) {
 }
 
 export const useEditor = create<EditorStore>((set, get) => ({
-  project: initial, view: 'home', libraryReady: false, projects: [], selectedIds: [], selectedCamera: false, selectedAudio: null,
+  project: initial, view: 'home', libraryReady: false, projects: [], selectedIds: [initial.items.find(i => i.type === 'character')?.id ?? initial.items.at(-1)?.id].filter((id): id is string => !!id), selectedCamera: false, selectedAudio: null,
   busy: false, interacting: false, blockReason: null, keySelection: [], keyClipboard: [],
   setView: view => set({ view, playing: false }), setLibrary: projects => set({ projects, libraryReady: true }),
   toggleSelect: id => set(s => { const ids = s.selectedIds.includes(id) ? s.selectedIds.filter(i => i !== id) : [...s.selectedIds, id]; return { selectedIds: ids, selectedId: ids.at(-1) ?? null, selectedBone: null, selectedCamera: false, selectedAudio: null }; }),
@@ -135,7 +134,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
   checkpoint: () => set(s => ({ history: [...s.history.slice(-39), clone(s.project)], future: [] })),
   replaceProject: (project, keepHistory = true) => {
     if (keepHistory) get().checkpoint();
-    set({ project, view: 'editor', selectedIds: [], selectedCamera: false, selectedAudio: null, keySelection: [], selectedId: project.items.find(i => i.type === 'character')?.id ?? project.items.at(-1)?.id ?? null, selectedBone: null, frame: 0, playing: false, zoom: 100, pan: { x: 0, y: 0 }, ...(!keepHistory ? { history: [], future: [] } : {}) });
+    const primary = project.items.find(i => i.type === 'character')?.id ?? project.items.at(-1)?.id ?? null;
+    set({ project, view: 'editor', selectedIds: primary ? [primary] : [], selectedCamera: false, selectedAudio: null, keySelection: [], selectedId: primary, selectedBone: null, frame: 0, playing: false, zoom: 100, pan: { x: 0, y: 0 }, ...(!keepHistory ? { history: [], future: [] } : {}) });
   },
   setName: name => { if (!name.trim()) return; get().checkpoint(); set(s => ({ project: { ...s.project, name: name.trim().slice(0, 100) } })); },
   select: id => set({ selectedId: id, selectedIds: id ? [id] : [], selectedBone: null, selectedCamera: false, selectedAudio: null, keySelection: [] }),
@@ -185,6 +185,13 @@ export const useEditor = create<EditorStore>((set, get) => ({
       project.items.find(i => i.id === id)!.rig = rig;
     }
     set({ project });
+  },
+  nudgeSelected: (dx, dy) => {
+    const state = get(); if (state.busy || state.blockReason || state.interacting || !Number.isFinite(dx) || !Number.isFinite(dy) || (!dx && !dy)) return;
+    const hasSelectedAncestor = (id: string) => { let parent = parentOf(state.project.items.find(i => i.id === id)!); const seen = new Set<string>(); while (parent && !seen.has(parent)) { if (state.selectedIds.includes(parent)) return true; seen.add(parent); const item = state.project.items.find(i => i.id === parent); parent = item ? parentOf(item) : null; } return false; };
+    const targets = sceneNodes(state.project, state.frame).filter(n => state.selectedIds.includes(n.item.id) && !n.locked && !hasSelectedAncestor(n.item.id));
+    if (!targets.length) return; state.checkpoint(); state.setPlaying(false);
+    for (const n of targets) { const matrix = inverse(n.parentMatrix), start = transformPoint(matrix, { x: 0, y: 0 }), end = transformPoint(matrix, { x: dx, y: dy }); get().editItem(n.item.id, { x: n.item.x + end.x - start.x, y: n.item.y + end.y - start.y }, false); }
   },
   addItem: item => { if (get().project.items.length >= 500) { get().notify('This scene has reached its 500-layer limit.', 'error'); return; } get().checkpoint(); set(s => ({ project: { ...s.project, items: [...s.project.items, item] }, selectedId: item.id, selectedIds: [item.id], selectedBone: null, selectedCamera: false, selectedAudio: null, tool: 'select' })); },
   addCharacter: () => { get().addItem(createCharacter(get().project.width / 2, get().project.height * 0.47)); get().notify('Milo is ready to pose. Drag a joint to try it.'); },
@@ -434,8 +441,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
   deleteKeys: () => { const s = get(); if (!s.keySelection.length) return; s.checkpoint(); const project = clone(s.project); for (const ref of s.keySelection) { if (ref.itemId === '@camera') project.camera.keys = project.camera.keys.filter(k => k.frame !== ref.frame); else if (!isLayerLocked(project.items, ref.itemId)) project.keyframes[ref.itemId] = (project.keyframes[ref.itemId] ?? []).filter(k => k.frame !== ref.frame); } set({ project, keySelection: [] }); },
   setBezier: bezier => { const s = get(); const id = s.selectedCamera ? '@camera' : s.selectedId; if (!id || isLayerLocked(s.project.items, id)) return; const project = clone(s.project); const keys = id === '@camera' ? project.camera.keys : project.keyframes[id] ?? []; const nearest = [...keys].reverse().find(k => k.frame <= s.frame) ?? keys[0]; if (!nearest) return; s.checkpoint(); nearest.easing = 'bezier'; nearest.bezier = bezier; set({ project }); },
-  undo: () => { const s = get(); const previous = s.history.at(-1); if (!previous) return; set({ project: previous, history: s.history.slice(0, -1), future: [s.project, ...s.future].slice(0, 40), frame: Math.min(s.frame, previous.duration - 1), selectedId: previous.items.some(i => i.id === s.selectedId) ? s.selectedId : null, selectedIds: [], selectedCamera: false, selectedAudio: null, keySelection: [], selectedBone: null, playing: false }); },
-  redo: () => { const s = get(); const next = s.future[0]; if (!next) return; set({ project: next, history: [...s.history, s.project], future: s.future.slice(1), frame: Math.min(s.frame, next.duration - 1), selectedId: next.items.some(i => i.id === s.selectedId) ? s.selectedId : null, selectedIds: [], selectedCamera: false, selectedAudio: null, keySelection: [], selectedBone: null, playing: false }); },
+  undo: () => { const s = get(); const previous = s.history.at(-1); if (!previous) return; set({ project: previous, history: s.history.slice(0, -1), future: [s.project, ...s.future].slice(0, 40), frame: Math.min(s.frame, previous.duration - 1), selectedId: previous.items.some(i => i.id === s.selectedId) ? s.selectedId : null, selectedIds: s.selectedIds.filter(id => previous.items.some(i => i.id === id)), selectedCamera: false, selectedAudio: null, keySelection: [], selectedBone: null, playing: false }); },
+  redo: () => { const s = get(); const next = s.future[0]; if (!next) return; set({ project: next, history: [...s.history, s.project], future: s.future.slice(1), frame: Math.min(s.frame, next.duration - 1), selectedId: next.items.some(i => i.id === s.selectedId) ? s.selectedId : null, selectedIds: s.selectedIds.filter(id => next.items.some(i => i.id === id)), selectedCamera: false, selectedAudio: null, keySelection: [], selectedBone: null, playing: false }); },
   notify: (message, tone = 'success') => set({ toast: { id: uid(), message, tone } }),
   clearToast: () => set({ toast: null }),
   setSaveStatus: saveStatus => set({ saveStatus }),

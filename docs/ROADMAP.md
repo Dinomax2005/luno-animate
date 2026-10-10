@@ -8,7 +8,14 @@ Real persistent all-project home; schema-2 scenes; portable binary LAM with lega
 
 Clean Windows/macOS runtime/install testing, signing/notarization, and a real published-version update exercise on every supported OS remain release responsibilities. Hosted installer creation/Linux packaged smoke and mocked updater failure tests are not replacements for those checks. Configure/publish stable GitHub release manifests for automatic update delivery. Browser cross-tab concurrent editing is not coordinated.
 
-## Future features (not claimed in v0.2)
+## v0.3.4: implemented
+
+- Production-first document manager and blank-document defaults.
+- Eight menus, command search, technical Properties, resizable docks, timeline zoom, stage rulers/context actions, persistent workspaces, and light/dark themes.
+- Public stable release packaging with unchanged application/storage identity, exact checksums, and all three updater feeds.
+- Configuration forms replace beginner mascot/tour screens; motion presets are optional collapsed controls.
+
+## Future features (not claimed in v0.3.4)
 
 - Reusable symbols and nested timelines.
 - Vector shape morphing, masks/clipping, richer paths/brushes.

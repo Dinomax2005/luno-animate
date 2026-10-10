@@ -6,7 +6,7 @@ async function openStudio(page: Page) {
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'New project', exact: true })).toBeEnabled();
   if (await page.locator('.project-open').count()) await page.locator('.project-open').first().click();
-  else await page.getByRole('button', { name: 'Make a little magic', exact: false }).click();
+  else { await page.getByRole('button', { name: 'Templates', exact: true }).click(); await page.getByRole('button', { name: 'Character animation', exact: false }).click(); }
   await expect(page.getByTestId('stage')).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false');
 }
@@ -16,7 +16,7 @@ test('opens a working studio without runtime errors', async ({ page }) => {
   page.on('pageerror', error => errors.push(error.message));
   await openStudio(page);
   await expect(page.getByTestId('stage')).toBeVisible();
-  await expect(page.getByLabel('Project name')).toHaveValue('A little hello');
+  await expect(page.getByLabel('Project name')).toHaveValue('Character-1');
   await expect(page.getByText('15 bones · character')).toBeVisible();
   await expect(page.getByText('Saved locally', { exact: true })).toBeVisible();
   await expect(page.locator('[data-bone]')).toHaveCount(10);
@@ -56,8 +56,8 @@ test('draws a rectangle, edits a property, and undoes/redoes it', async ({ page 
 
 test('poses a connected joint and creates an automatic keyframe', async ({ page }) => {
   await openStudio(page);
-  await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('.');
+  await page.keyboard.press('.');
   const joint = page.locator('[data-bone="rightHand"]');
   const before = await joint.getAttribute('cx');
   const box = await joint.boundingBox(); if (!box) throw new Error('Missing joint');
@@ -71,11 +71,11 @@ test('poses a connected joint and creates an automatic keyframe', async ({ page 
 
 test('adds assets and hides, locks, and duplicates layers', async ({ page }) => {
   await openStudio(page);
-  await page.getByRole('button', { name: 'Assets', exact: false }).first().click();
+  await page.getByRole('button', { name: 'Library', exact: false }).first().click();
   await page.getByLabel('Search assets').fill('Star');
   await page.locator('.asset-card').click();
   await expect(page.getByLabel('Layer name')).toHaveValue('Star');
-  await page.getByRole('button', { name: 'Scene', exact: false }).first().click();
+  await page.getByRole('button', { name: 'Layers', exact: false }).first().click();
   await page.getByRole('button', { name: 'Hide Star', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Show Star', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Show Star', exact: true }).click();
@@ -88,12 +88,12 @@ test('adds assets and hides, locks, and duplicates layers', async ({ page }) => 
 
 test('chooses a motion starter and edits easing', async ({ page }) => {
   await openStudio(page);
-  await page.getByRole('button', { name: 'Walk', exact: true }).click();
+  await page.locator('.inspector-tabs button').filter({ hasText: 'Motion' }).click(); await page.locator('.motion-presets summary').click(); await page.getByLabel('Motion preset', { exact: true }).selectOption('walk'); await page.getByRole('button', { name: 'Apply preset', exact: true }).click();
   await expect(page.getByText('Walk motion added.', { exact: false })).toBeVisible();
   await page.locator('.inspector-tabs button').filter({ hasText: 'Motion' }).click();
   await expect(page.locator('.keyframe-list > div')).toHaveCount(5);
-  await page.locator('.select-field select').selectOption('hold');
-  await expect(page.getByText('Keep the pose until the next keyframe.')).toBeVisible();
+  await page.getByLabel('Keyframe easing', { exact: true }).selectOption('hold');
+  await expect(page.getByText('Constant value until the next keyframe.')).toBeVisible();
   await page.getByRole('button', { name: 'Delete keyframe at frame 72' }).click();
   await expect(page.locator('.keyframe-list > div')).toHaveCount(4);
 });
@@ -144,7 +144,7 @@ test('exports a real SVG without editing guides', async ({ page }) => {
 
 test('exports a real PNG image', async ({ page }) => {
   await openStudio(page); await page.getByRole('button', { name: 'Export', exact: true }).click();
-  await page.getByRole('button', { name: 'PNG A still moment', exact: true }).click();
+  await page.getByRole('button', { name: 'PNG Raster image', exact: true }).click();
   await page.getByText('Transparent background', { exact: true }).click();
   const promise = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export PNG', exact: true }).click();
   const download = await promise; const path = await download.path(); if (!path) throw new Error('Missing PNG download');
@@ -166,28 +166,28 @@ test('encodes a genuine animated GIF', async ({ page }) => {
 });
 
 test('completes the four-step setup wizard and creates a blank project', async ({ page }) => {
-  await openStudio(page); await page.getByRole('button', { name: 'Quick setup', exact: true }).click();
-  const dialog = page.getByRole('dialog'); await expect(dialog).toContainText('Little learning curve.');
-  await page.getByRole('button', { name: 'Let’s get started' }).click();
-  await page.getByRole('button', { name: 'Something entirely your own', exact: false }).click();
-  await page.getByRole('button', { name: 'Looks good' }).click();
+  await openStudio(page); await page.getByRole('menuitem', { name: 'Help', exact: true }).click(); await page.getByRole('menuitem', { name: 'Workspace setup', exact: true }).click();
+  const dialog = page.getByRole('dialog'); await expect(dialog).toContainText('Workspace');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Blank document', exact: false }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await dialog.getByText('Project name', { exact: true }).locator('..').locator('input').fill('A fresh possibility');
-  await page.getByRole('button', { name: 'Looks good' }).click();
-  await expect(dialog).toContainText('You’ve got this.');
-  await page.getByRole('button', { name: 'Start creating' }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(dialog).toContainText('Configuration summary');
+  await page.getByRole('button', { name: 'Open workspace' }).click();
   await expect(dialog).toHaveCount(0); await expect(page.getByLabel('Project name')).toHaveValue('A fresh possibility');
   await expect(page.getByText('No layers yet')).toBeVisible();
-  await page.getByRole('button', { name: 'Add your first character', exact: false }).click();
+  await page.getByRole('menuitem', { name: 'Insert', exact: true }).click(); await page.getByRole('menuitem', { name: 'Rigged character', exact: true }).click();
   await expect(page.getByLabel('Layer name')).toHaveValue('Milo');
 });
 
 test('automatically shows first-run setup in desktop mode', async ({ page }) => {
   await page.addInitScript(() => {
-    window.luno = { platform: 'win32', version: '0.2.0', saveProject: async () => true, openProject: async () => null, saveExport: async () => true, chooseFolder: async () => 'C:\\Animations', getWorkspace: async () => null, onCommand: () => () => {}, onProjectFile: () => () => {}, ready: async () => {}, library: { list: async () => [], save: async () => { throw new Error('Mock has no projects'); }, load: async () => { throw new Error('No projects'); }, patch: async () => {}, deleteForever: async () => {}, recover: async () => { throw new Error('No revisions'); }, getSettings: async () => ({ lastProjectId: null }), saveSettings: async () => {}, backups: async () => [], backup: async () => ({ id: 'test', createdAt: 0, reason: 'manual', version: '0.2.0', projects: 0 }), restore: async () => false }, updater: { state: async () => ({ phase: 'disabled', version: null, progress: 0, message: 'Test bridge', checkedAt: null, countdown: null, automatic: true, backupId: null }), check: async () => {}, install: async () => {}, defer: async () => {}, setAutomatic: async () => {}, activity: () => {}, onState: () => () => {} }, onPrepare: () => () => {}, preparationResult: () => {}, onResume: () => () => {} };
+    window.luno = { platform: 'win32', version: '0.3.4', saveProject: async () => true, openProject: async () => null, saveExport: async () => true, chooseFolder: async () => 'C:\\Animations', getWorkspace: async () => null, onCommand: () => () => {}, onProjectFile: () => () => {}, ready: async () => {}, library: { list: async () => [], save: async () => { throw new Error('Mock has no projects'); }, load: async () => { throw new Error('No projects'); }, patch: async () => {}, deleteForever: async () => {}, recover: async () => { throw new Error('No revisions'); }, getSettings: async () => ({ lastProjectId: null }), saveSettings: async () => {}, backups: async () => [], backup: async () => ({ id: 'test', createdAt: 0, reason: 'manual', version: '0.3.4', projects: 0 }), restore: async () => false }, updater: { state: async () => ({ phase: 'disabled', version: null, progress: 0, message: 'Test bridge', checkedAt: null, countdown: null, automatic: true, backupId: null }), check: async () => {}, install: async () => {}, defer: async () => {}, setAutomatic: async () => {}, activity: () => {}, onState: () => () => {} }, onPrepare: () => () => {}, preparationResult: () => {}, onResume: () => () => {} };
   });
   await page.goto('/');
-  await expect(page.getByRole('dialog', { name: 'Set up your Luno studio' })).toBeVisible();
-  await page.getByRole('button', { name: 'I’ll explore on my own' }).click();
+  await expect(page.getByRole('dialog', { name: 'Workspace configuration' })).toBeVisible();
+  await page.getByRole('button', { name: 'Skip setup' }).click();
   await page.reload(); await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
@@ -204,7 +204,7 @@ test('applies canvas settings and workspace preferences', async ({ page }) => {
 test('keeps dialogs keyboard accessible and renders on a small screen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await openStudio(page);
   expect(await page.evaluate(() => document.body.scrollWidth)).toBe(390);
-  await page.getByRole('button', { name: 'Quick setup', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Help', exact: true }).click(); await page.getByRole('menuitem', { name: 'Workspace setup', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Tab');
   expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))).toBe(true);

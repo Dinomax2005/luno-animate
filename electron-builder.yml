@@ -73,8 +73,8 @@ dmg:
 linux:
   icon: assets/icon.png
   category: Graphics
-  synopsis: A little less complicated. A lot more animated.
-  description: A friendly, local-first 2D animation studio with drawing, character rigging, keyframes, and animation exports.
+  synopsis: Vector animation and character production workspace
+  description: A local-first 2D animation workspace with vector drawing, FK / IK character rigging, frame-by-frame cels, keyframes, and media exports.
   maintainer: Luno Animate contributors
   target:
     - target: AppImage

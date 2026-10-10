@@ -1,8 +1,8 @@
 {
   "name": "luno-animate",
-  "version": "0.2.0",
+  "version": "0.3.4",
   "private": true,
-  "description": "A friendly, local-first 2D animation studio with character rigging.",
+  "description": "A local-first 2D animation workspace with vector, keyframe, and character-rigging workflows.",
   "author": "Luno Animate contributors",
   "license": "UNLICENSED",
   "type": "module",

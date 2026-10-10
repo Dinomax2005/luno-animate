@@ -36,7 +36,7 @@ export interface Preferences {
 export interface ProjectRecord { id: string; name: string; createdAt: number; updatedAt: number; starred: boolean; deletedAt: number | null; thumbnail: string | null; width: number; height: number; fps: number; frames: number; scenes: number; kind: string }
 export interface SavedProject extends ProjectRecord { bytes: Uint8Array }
 export type View = 'home' | 'editor';
-export type Dialog = 'setup' | 'export' | 'new' | 'help' | 'settings' | 'download' | 'updates' | null;
+export type Dialog = 'setup' | 'export' | 'new' | 'help' | 'settings' | 'download' | 'commands' | 'updates' | null;
 export interface KeyRef { itemId: string; frame: number }
 export interface UpdateState { phase: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'waiting' | 'preparing' | 'installing' | 'current' | 'unpublished' | 'disabled' | 'error'; version: string | null; progress: number; message: string; checkedAt: number | null; countdown: number | null; automatic: boolean; backupId: string | null }
 export interface BackupInfo { id: string; createdAt: number; reason: string; version: string; projects: number }

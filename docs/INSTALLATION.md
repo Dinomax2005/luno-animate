@@ -1,11 +1,22 @@
 # Installers, protected updates, and releases
 
-## For creators
+## Install v0.3.4
 
-1. Download an owner-reviewed public release, or a successful v0.2 [installer Actions run](https://github.com/Dinomax2005/luno-animate/actions/workflows/installers.yml). Actions downloads need GitHub login and expire after 30 days.
-2. Extract the artifact ZIP. Windows opens the `.exe` setup wizard; macOS uses the appropriate Intel/Apple silicon DMG; Linux uses the AppImage or DEB.
-3. Open Luno. Its separate first-run wizard chooses a starting project, canvas/FPS, and default export folder. Skipping the tour opens the real project home, not a fake pre-populated library.
-4. Create/animate locally. Export `.lam` copies for portable backups. Double-click `.lam` to open it with Luno where the OS association is installed; legacy `.luno` remains supported.
+Download the platform assets from the [official v0.3.4 release](https://github.com/Dinomax2005/luno-animate/releases/tag/v0.3.4). Public release downloads do not need a GitHub account or artifact ZIP extraction.
+
+- Windows x64: run the `.exe` setup.
+- macOS: use the appropriate Intel/Apple silicon `.dmg`; these development builds are unsigned, not notarized.
+- Linux x64: use the `.AppImage` or `.deb` as appropriate to your distribution.
+
+The separate first-run configuration chooses panel layout, theme, document source, stage size, and FPS. Skipping it opens the real local document manager. New documents default to a blank stage. Templates are opt-in under **Templates**.
+
+### Update an existing installation
+
+If you already use an updater-enabled v0.2 Windows build or Linux AppImage, **do not uninstall or reinstall**. Open **Updates & backups → Check GitHub**, download v0.3.4, then choose **Save, back up & restart**, or leave automatic updates enabled. The public stable release and its update manifests—not Actions artifacts—provide the update.
+
+Unsigned macOS and DEB installations still require manual replacement/package-manager updates. This preserves your native library; do not delete the application data directory. v0.1 has no updater and needs one initial manual upgrade.
+
+Save/export portable `.lam` copies for independent backups. `.lam` file association and legacy `.luno` import remain supported.
 
 No development tools/account/server are needed after installation. Linux AppImage may need distribution FUSE support. Do not disable the Chromium sandbox as a normal installation workaround.
 
@@ -27,7 +38,7 @@ The guarded install path flushes/acknowledges the renderer's latest work/setting
 | Linux AppImage | Protected AppImage replacement/restart |
 | DEB/system-managed Linux | Package-manager/manual update |
 
-There may be no published stable update yet. The app explicitly says so and remains usable offline. Version 0.1 has no updater; install v0.2 once manually. Future releases must preserve the same app identity/user-data directory and migrate document versions without deleting the previous data.
+Only published stable versions are discoverable. A draft is deliberately invisible to installed applications. The app remains usable offline if checking fails. v0.3.4 preserves application identity, user-data location, native storage, and document schema. Future schema changes need non-destructive migrations.
 
 ## Where your work lives
 
@@ -57,13 +68,13 @@ npm run desktop:linux
 - `installers.yml`: native Windows/macOS/Linux build and manifests; native tests on every OS; packaged Linux smoke covering isolation, real filesystem library/LAM/backup, native MP4 with audio, close and association-style startup. Updates are disabled and a temporary profile is used for smoke tests.
 - `release.yml`: exact successful installer source (only download-link metadata may differ), flattened assets, verified SHA-512 manifest references, flat SHA-256 download sums, and a **draft release** for explicit owner review.
 
-Workflows can be manually dispatched once they exist on the default branch. Arena branch source pushes already build test installers; publishing/merging main is not a prerequisite for those artifacts. The session branch does not automatically merge to main.
+An installer push marked `[prepare-release]` stages a draft only after all matrix builds, tests, and feed checks pass; the draft targets the exact build SHA. Other builds remain artifacts. Workflows can be manually dispatched once they exist on the default branch. Arena branch source pushes already build test installers; publishing/merging main is not a prerequisite for those artifacts. The session branch does not automatically merge to main.
 
 ## Publish an update feed
 
 After all installers/tests pass for the same source:
 
-1. Run the draft workflow with `v0.2.0` (matching `package.json`) and that successful installer run ID, or download the verified artifacts and run `node scripts/prepare-release.mjs installers release-assets`.
+1. Use the verified draft produced by the `[prepare-release]` installer build, run the draft workflow with `v0.3.4` (matching `package.json`) and that successful installer run ID, or download the artifacts and run `node scripts/prepare-release.mjs installers release-assets`.
 2. Upload the **flat** assets: Windows EXE + block map, macOS Intel/ARM ZIPs + DMGs + block maps, Linux AppImage/DEB, `latest.yml`, `latest-mac*.yml`, `latest-linux*.yml`, and `SHA256SUMS.txt`. Do not rename installers after generating manifests.
 3. Review notes and OS/signing checks. The script validates manifest version, referenced files, and exact SHA-512; SHA-256 sums use flat names matching GitHub downloads (`sha256sum -c SHA256SUMS.txt`).
 4. Publish the draft as a **stable, non-prerelease** only after review. Drafts and prereleases are deliberately excluded from the updater. Do not overwrite an existing version's assets—ship a newer version.

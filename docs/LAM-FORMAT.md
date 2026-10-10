@@ -1,6 +1,6 @@
 # Portable `.lam` format
 
-Luno Animate v0.2 writes `.lam`, a **binary project format**, not JSON with a different filename. It includes every ordered scene and embedded image/audio, rig, layer hierarchy, drawing cel, text, key, camera, and work area. File associations register Luno as its editor. Legacy `.luno` JSON remains importable and is never overwritten by migration.
+Luno Animate v0.3.4 writes `.lam`, a **binary project format**, not JSON with a different filename. It includes every ordered scene and embedded image/audio, rig, layer hierarchy, drawing cel, text, key, camera, and work area. File associations register Luno as its editor. Legacy `.luno` JSON remains importable and is never overwritten by migration.
 
 This is an application-specific format, **not a claim that only Luno could ever read it**. Someone could implement the decoder below. There is no password encryption, licensing lock, or DRM. SHA-256 detects accidental corruption, not a malicious author's intent.
 

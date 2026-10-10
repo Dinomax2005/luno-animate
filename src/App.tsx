@@ -1,11 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useRef } from 'react';
-import { Check, CloudOff, Command, Heart, RefreshCw, ShieldCheck } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { Header, Toast } from './components/Header';
-import { ToolRail } from './components/ToolRail';
-import { Library } from './components/Library';
-import { Stage } from './components/Stage';
-import { Inspector } from './components/Inspector';
-import { Timeline } from './components/Timeline';
+import { StudioWorkspace, StudioStatus } from './components/studio/Workspace';
+import { CommandPalette } from './components/studio/CommandPalette';
+import { useWorkspace } from './store/workspace';
 import { ProjectHome } from './components/home/ProjectHome';
 import { UpdateBanner } from './components/Updates';
 import { useEditor, PREFS_KEY } from './store/editor';
@@ -20,7 +18,7 @@ const Dialogs = lazy(() => import('./components/Dialogs').then(module => ({ defa
 export default function App() {
   const project = useEditor(s => s.project), preferences = useEditor(s => s.preferences), playing = useEditor(s => s.playing);
   const busy = useEditor(s => s.busy);
-  const dialog = useEditor(s => s.dialog), view = useEditor(s => s.view), ready = useEditor(s => s.libraryReady), blocked = useEditor(s => s.blockReason), saveStatus = useEditor(s => s.saveStatus);
+  const dialog = useEditor(s => s.dialog), view = useEditor(s => s.view), ready = useEditor(s => s.libraryReady), blocked = useEditor(s => s.blockReason);
   const inputProject = useRef<HTMLInputElement>(null), inputImage = useRef<HTMLInputElement>(null), inputAudio = useRef<HTMLInputElement>(null);
   const lastActivity = useRef(Date.now());
   const onSave = useCallback(async () => {
@@ -133,18 +131,22 @@ export default function App() {
     const unsubscribe = window.luno?.onCommand(command);
     const keys = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement, s = useEditor.getState();
-      if (event.defaultPrevented || s.dialog || s.blockReason || s.busy) return;
+      if (event.defaultPrevented || s.dialog || s.blockReason || s.busy || s.interacting) return;
       const key = event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === 'p') { event.preventDefault(); (document.activeElement as HTMLElement | null)?.blur?.(); s.setDialog('commands'); return; }
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) {
         if ((event.metaKey || event.ctrlKey) && key === 's' && s.view === 'editor') { event.preventDefault(); void onSave(); }
         return;
       }
       if (event.metaKey || event.ctrlKey) {
-        if (['s', 'o', 'n', 'z', 'y', 'd', 'e', 'g', 'a', 'c', 'v', 'home'].includes(key)) event.preventDefault();
+        if (['s', 'o', 'n', 'z', 'y', 'd', 'e', 'g', 'a', 'c', 'v', 'home', '0', '+', '=', '-', '[', ']', ','].includes(key)) event.preventDefault();
         if (key === 'o') void onOpen(); else if (key === 'n') event.shiftKey && s.view === 'editor' ? s.addScene() : s.setDialog('new');
         else if (s.view === 'editor') {
           if (key === 's') void onSave(); else if (key === 'e') s.setDialog('export'); else if (key === 'z') event.shiftKey ? s.redo() : s.undo(); else if (key === 'y') s.redo(); else if (key === 'd') s.duplicateSelected();
           else if (key === 'g') event.shiftKey ? s.ungroupSelected() : s.groupSelected(); else if (key === 'a') s.selectAll(); else if (key === 'c') s.copyKeys(); else if (key === 'v') s.pasteKeys(); else if (key === 'home') void goHome();
+          else if (key === '0') { s.setZoom(100); s.setPan({ x: 0, y: 0 }); }
+          else if (key === '+' || key === '=') s.setZoom(s.zoom * 1.25); else if (key === '-') s.setZoom(s.zoom / 1.25);
+          else if (key === ',') s.setDialog('settings'); else if ((key === '[' || key === ']') && s.selectedId) s.moveLayer(s.selectedId, key === ']' ? 'up' : 'down');
         }
         return;
       }
@@ -152,6 +154,8 @@ export default function App() {
       if (s.view !== 'editor') return;
       const tools: Record<string, Tool> = { v: 'select', h: 'hand', b: 'pen', r: 'rectangle', o: 'ellipse', g: 'rig', t: 'text', c: 'camera' };
       if (tools[key]) { s.setTool(tools[key]); if (key === 'g') s.setPreference('showBones', true); }
+      if (key === 'tab' && (target === document.body || !!target.closest('.stage-area'))) { event.preventDefault(); useWorkspace.getState().toggleFocus(); }
+      if (key === '<' || key === '>' || key === ',' || key === '.') { event.preventDefault(); s.setPlaying(false); s.setFrame(s.frame + (key === '<' || key === ',' ? -1 : 1)); }
       if (key === ' ') { event.preventDefault(); s.setPlaying(!s.playing); }
       if (key === 'k') s.addKeyframe(); if (key === 'u') s.setPreference('onionSkin', !s.preferences.onionSkin);
       if (key === 'f6') { event.preventDefault(); s.duplicateCel(); } if (key === 'f7') { event.preventDefault(); s.blankCel(); }
@@ -164,12 +168,17 @@ export default function App() {
   }, [onOpen, onSave]);
 
   return <><SoundPlayback /><div className={`app-shell ${view === 'home' ? 'home-mode' : ''}`} inert={!!blocked} aria-busy={busy || !!blocked} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file && !useEditor.getState().dialog && !useEditor.getState().blockReason && !useEditor.getState().busy && !useEditor.getState().interacting) void importFile(file); }}>
-    {view === 'home' ? <ProjectHome onOpen={() => void onOpen()} /> : <><Header onOpen={() => void onOpen()} onSave={() => void onSave()} onImport={onImport} /><div className="studio" inert={busy}><ToolRail onImport={onImport} /><main className="editor-main"><div className="workspace"><Library onImport={onImport} /><Stage /><Inspector /></div><Timeline onImportAudio={onImportAudio} /></main></div><footer className="app-footer" inert={busy}><span className="footer-studio-label"><span className="green-dot" /> YOUR LOCAL STUDIO <span className="footer-version">v0.2</span></span><span className="footer-message"><Heart size={10} /> A little less complicated. A lot more animated.</span><div><span><CloudOff size={11} /> Offline-ready</span><span><ShieldCheck size={11} /> {saveStatus === 'saved' ? 'Library protected' : 'Keeping your work local'}</span><button onClick={() => useEditor.getState().setDialog('help')}><Command size={11} /> Shortcuts</button><Check size={11} /></div></footer></>}
-    <Toast /><UpdateBanner /><Suspense fallback={<div className="dialog-loading" role="status">Preparing a little space…</div>}>{dialog && <Dialogs />}</Suspense>
+    {view === 'home' ? <ProjectHome onOpen={() => void onOpen()} /> : <>
+      <Header onOpen={() => void onOpen()} onSave={() => void onSave()} onImport={onImport} onImportAudio={onImportAudio} />
+      <StudioWorkspace onImport={onImport} onImportAudio={onImportAudio} /><StudioStatus />
+    </>}
+    <Toast /><UpdateBanner />
+    {dialog === 'commands' ? <CommandPalette onOpen={() => void onOpen()} onSave={() => void onSave()} onImport={onImport} onImportAudio={onImportAudio} /> : <Suspense fallback={<div className="dialog-loading" role="status">Loading panel…</div>}>{dialog && <Dialogs />}</Suspense>}
+
     <input ref={inputProject} type="file" className="visually-hidden" aria-label="Open Luno project file" accept=".lam,.luno,.json" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
     <input ref={inputImage} type="file" className="visually-hidden" aria-label="Import image file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
     <input ref={inputAudio} type="file" className="visually-hidden" aria-label="Import audio file" accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,.webm" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
-  </div>{blocked && <div className="safe-operation-overlay" role="status" aria-live="polite"><div><span><RefreshCw size={25} className="spin" /></span><h2>{blocked}</h2><p>Please keep Luno open. Your work comes first.</p></div></div>}</>;
+  </div>{blocked && <div className="safe-operation-overlay" role="status" aria-live="polite"><div><span><RefreshCw size={25} className="spin" /></span><h2>{blocked}</h2><p>Do not close Luno until this operation completes.</p></div></div>}</>;
 }
 
 function SoundPlayback() {

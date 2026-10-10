@@ -1,17 +1,31 @@
-## Luno Animate v0.2.0 — a real creative home
+# Luno Animate v0.3.4
 
-- Persistent project dashboard: thumbnails, favorites, search/sort, independent projects, rename/copy, Trash and recovery.
-- Portable **binary `.lam`** with compression/integrity checking, all embedded artwork/audio/scenes/rigs/cels/keys, and non-destructive legacy `.luno` migration. Application-specific does not mean encrypted or exclusively decodable.
-- Real **MP4** video with mixed audio, scene/work-area selection, progress, resolution and cancellation. H.264/AAC preferred, disclosed AV1/Opus fallbacks. PNG/SVG/GIF and sprite ZIP remain available.
-- Multiple scenes, editable text, multiselect/group transforms, hierarchy locks/order, frame-by-frame cels/blank/copy/onion exposure, animated camera, waveform audio tracks, key clipboard, advanced easing/Bézier and more motion starters.
-- Cutout artwork attachment, blank rigs, custom/parented joints, lengths, angle limits/locks and connected-limb IK.
-- Native immutable save revisions, verified library backups, staged/journaled restore, guarded close/update save acknowledgement, and stable GitHub update controller. Idle warning and failed-save/backup protection come before installation.
-- `.lam` OS association, Windows setup wizard, Intel/Apple silicon macOS DMG/ZIP, Linux AppImage/DEB, complete license notices/exact MPL source, and publishable update manifests/block maps with flat download checksums.
+## Production workspace
 
-### Important early-release notes
+- Conventional eight-menu application bar, document tabs, command search, and docked Layers, Library, Properties, and Timeline panels.
+- Neutral charcoal interface, compact technical controls, stage rulers, aligned frame cells, context menus, keyboard navigation, and resizable panels.
+- Animation, Drawing, and Rigging workspaces; panel layout persistence, timeline zoom, and stage-focused mode.
+- Document manager defaults to a sortable list of real local documents. Templates are an explicit library section, not a mascot-heavy welcome screen.
+- New documents default to a blank white stage. Compact source, width, height, and frame-rate controls replace beginner template cards.
+- Workspace configuration is a settings flow, without mascot artwork or step-by-step pose tutorials. Motion presets remain available under Motion, collapsed by default; they do not dominate object properties.
 
-This is not full Adobe Animate parity: symbols/nested timelines, mesh deformation, morphing, masks and lip-sync are not included. Projects stay local; GitHub is contacted only for updates/downloads. Export portable backups; storage/hardware failures cannot be universally prevented.
+## Update distribution
 
-Installers are unsigned development builds unless certificates are configured. Unsigned macOS and DEB/system-managed Linux use manual updates. Automatic delivery requires an actually **published stable** release with the supplied manifests; drafts/prereleases/Actions artifacts are not an update feed. Actual Windows/macOS installation, signing, and previous-version update testing are owner release checks; do not present unit simulations as full OS installation validation.
+This release provides public native installers, SHA256SUMS.txt, and the stable Windows, macOS, and Linux update manifests. Earlier Actions-only builds were not a published update feed.
 
-Actions artifact ZIPs expire after 30 days and require GitHub sign-in. Public release assets do not. Verify flat `SHA256SUMS.txt`; keep installer names exactly as referenced by update manifests. Version 0.1 users need one manual v0.2 installation before using the updater.
+**Updater-enabled v0.2 Windows installations and Linux AppImages can discover v0.3.4 without uninstalling.** Open **Updates & backups → Check GitHub**, or leave automatic updates enabled. A download is verified; the application then awaits a durable save and a verified native library backup before replacing its binaries. Editing, export, playback, or a failed save/backup blocks installation.
+
+The package name (`luno-animate`), product name (`Luno Animate`), application ID (`studio.luno.animate`), storage partition (`persist:luno-studio`), native library location, and document schema are unchanged. Existing .lam files, project libraries, settings, revisions, and backups are retained. No new account or library migration is required.
+
+### Platform limits
+
+- **Windows x64:** NSIS update package. These builds are unsigned unless a signing certificate is configured; Windows may show a publisher/SmartScreen warning.
+- **Linux x64 AppImage:** built-in in-place update when running a writable AppImage. DEB/package-manager installations require a manual/package-manager update.
+- **macOS Intel/Apple silicon:** unsigned development DMG/ZIP builds. Built-in installation remains disabled without proper Developer ID signing; do not bypass Gatekeeper. Manual replacement retains the library.
+- **v0.1:** lacks an updater; an initial manual upgrade is required.
+
+Cross-version Windows GUI installation and signed/notarized macOS installation have not been independently exercised on physical systems. Keep portable .lam copies of important work in addition to automatic snapshots.
+
+## Retained animation features
+
+FK / IK rigging, cutout attachments, nested layers and groups, scene sequencing, camera keyframes, cel drawing/onion skin, easing, embedded audio, portable .lam documents, MP4 with audio, GIF, PNG, SVG, and sprite-sheet export remain available. This is an independent early-stage animation editor, not Adobe software or full Animate feature parity.

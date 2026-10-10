@@ -16,11 +16,11 @@ export function createShape(shape: ShapeKind, x = 480, y = 300): SceneItem {
   const colors = { rectangle: '#c5b1ed', ellipse: '#f0b88e', star: '#e9c669', sparkle: '#e9c669', ground: '#e9e7dd' };
   return createItem('shape', { shape, name: shape[0].toUpperCase() + shape.slice(1), x, y, width: 100, height: 100, fill: colors[shape] });
 }
-export function createText(x = 480, y = 300, text = 'A little imagination.'): SceneItem {
-  return createItem('text', { name: 'Your words', x, y, width: 620, height: 84, text, fontSize: 56, fontWeight: 600, textAlign: 'middle', fill: '#496853' });
+export function createText(x = 480, y = 300, text = 'Text'): SceneItem {
+  return createItem('text', { name: 'Text', x, y, width: 620, height: 84, text, fontSize: 56, fontWeight: 600, textAlign: 'middle', fill: '#496853' });
 }
 export function createScene(width: number, height: number, name = 'Scene 01'): Scene {
-  return { id: uid(), name, duration: 72, background: '#fffdf7', items: [], keyframes: {},
+  return { id: uid(), name, duration: 72, background: '#ffffff', items: [], keyframes: {},
     camera: { x: width / 2, y: height / 2, zoom: 1, rotation: 0, keys: [] }, audio: [], workArea: { start: 0, end: 71 } };
 }
 export function activeScene(p: Project): Scene {
@@ -41,24 +41,24 @@ export function activateScene(p: Project, id: string): Project {
 export const totalFrames = (p: Project) => getScenes(p).reduce((sum, s) => sum + s.duration, 0);
 export function createProject(template: Template = 'character'): Project {
   const scene = createScene(960, 600);
-  const project: Project = { ...scene, version: 2, id: uid(), name: template === 'title' ? 'Words in motion' : template === 'cutout' ? 'My cutout character' : template === 'blank' ? 'Untitled animation' : 'A little hello',
+  const project: Project = { ...scene, version: 2, id: uid(), name: template === 'title' ? 'Typography-1' : template === 'cutout' ? 'Cutout-1' : template === 'character' ? 'Character-1' : template === 'shapes' ? 'Motion-1' : 'Untitled-1',
     width: 960, height: 600, fps: 24, sceneId: scene.id, sceneName: scene.name, sceneOrder: [scene.id], scenes: [] };
   if (template === 'character') {
     const ground = createShape('ground', 480, 493); Object.assign(ground, { name: 'Ground', width: 210, height: 26, locked: true });
-    const orbit = createShape('ellipse', 695, 203); Object.assign(orbit, { name: 'Little orbit', width: 46, height: 46, fill: '#f0b793' });
+    const orbit = createShape('ellipse', 695, 203); Object.assign(orbit, { name: 'Accent circle', width: 46, height: 46, fill: '#f0b793' });
     const sparkle = createShape('sparkle', 296, 247); Object.assign(sparkle, { name: 'Sparkle', width: 42, height: 42, fill: '#dac56e' });
     project.items = [ground, sparkle, orbit, createCharacter()];
   }
   if (template === 'shapes') {
-    const ball = createShape('ellipse'); Object.assign(ball, { name: 'Bouncy ball', fill: '#c5b1ed' });
+    const ball = createShape('ellipse'); Object.assign(ball, { name: 'Circle', fill: '#c5b1ed' });
     const ground = createShape('ground', 480, 420); Object.assign(ground, { width: 280, height: 25, locked: true });
     project.items = [ground, ball];
   }
   if (template === 'title') {
-    const text = createText(); const sub = createText(480, 380, 'Made with a little Luno.'); Object.assign(sub, { name: 'Subtitle', fontSize: 22, fontWeight: 400, height: 40 });
+    const text = createText(); const sub = createText(480, 380, 'Subtitle'); Object.assign(sub, { name: 'Subtitle', fontSize: 22, fontWeight: 400, height: 40 });
     project.items = [text, sub];
   }
-  if (template === 'cutout') project.items = [{ ...createCharacter(), name: 'My rig', characterStyle: 'skeleton' }];
+  if (template === 'cutout') project.items = [{ ...createCharacter(), name: 'Skeleton', characterStyle: 'skeleton' }];
   return project;
 }
 const finite = z.number().finite();

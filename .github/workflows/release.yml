@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag matching package.json (for example v0.2.0)'
+        description: 'Tag matching package.json (for example v0.3.4)'
         required: true
         type: string
       run_id:

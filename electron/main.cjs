@@ -24,7 +24,7 @@ async function closeSafely() {
   try { await prepare('close'); allowQuit = true; app.quit(); }
   catch (error) {
     window?.webContents.send('luno:resume');
-    const result = await dialog.showMessageBox(window, { type: 'warning', buttons: ['Keep editing', 'Quit without saving'], defaultId: 0, cancelId: 0, title: 'Keep your creation safe', message: 'The latest save could not be completed.', detail: `${error.message} Export a .lam copy before quitting.` });
+    const result = await dialog.showMessageBox(window, { type: 'warning', buttons: ['Keep editing', 'Quit without saving'], defaultId: 0, cancelId: 0, title: 'Unsaved document', message: 'The latest save could not be completed.', detail: `${error.message} Export a .lam copy before quitting.` });
     if (result.response === 1) { allowQuit = true; app.quit(); }
   } finally { closing = false; }
 }
@@ -66,7 +66,7 @@ async function deliverPendingFile() {
   if (!pendingFile || !rendererReady || !window) return;
   const file = pendingFile; pendingFile = undefined;
   try { window.webContents.send('luno:project-file', await readProject(file)); }
-  catch (error) { await dialog.showMessageBox(window, { type: 'error', title: 'Could not open this little project', message: error.message }); }
+  catch (error) { await dialog.showMessageBox(window, { type: 'error', title: 'Open document failed', message: error.message }); }
 }
 function command(name) { window?.webContents.send('luno:command', name); }
 function installMenu() {
@@ -86,7 +86,7 @@ function installMenu() {
       { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
     ] },
     { label: 'View', submenu: [{ role: 'togglefullscreen' }, ...(!app.isPackaged ? [{ role: 'reload' }, { role: 'toggleDevTools' }] : [])] },
-    { label: 'Help', submenu: [{ label: 'Check for updates…', click: () => command('updates') }, { label: 'Quick setup', click: () => command('setup') }, { label: 'A little help & shortcuts', click: () => command('help') }] },
+    { label: 'Help', submenu: [{ label: 'Check for updates…', click: () => command('updates') }, { label: 'Workspace configuration', click: () => command('setup') }, { label: 'Reference', click: () => command('help') }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -94,7 +94,7 @@ function createWindow() {
   rendererReady = false;
   window = new BrowserWindow({
     width: 1440, height: 950, minWidth: 1024, minHeight: 720,
-    title: 'Luno Animate', show: false, backgroundColor: '#f7f8f4',
+    title: 'Luno Animate', show: false, backgroundColor: '#242424',
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
@@ -119,7 +119,7 @@ function createWindow() {
   window.webContents.on('will-prevent-unload', event => {
     const response = dialog.showMessageBoxSync(window, {
       type: 'warning', buttons: ['Keep editing', 'Quit without saving'], defaultId: 0, cancelId: 0,
-      title: 'Keep your little creation', message: 'Your local save did not finish.', detail: 'Use File → Save a .lam copy to keep your project before quitting.',
+      title: 'Unsaved document', message: 'Your local save did not finish.', detail: 'Use File → Save a .lam copy to keep your project before quitting.',
     });
     if (response === 1) event.preventDefault();
   });
@@ -151,26 +151,26 @@ else {
       assertTrusted(event);
       if (!(data instanceof Uint8Array) || data.byteLength > MAX_LAM_BYTES) throw new Error('The project must be smaller than 64 MB.');
       decodeLam(data);
-      const result = await dialog.showSaveDialog(window, { title: 'Save your little creation', defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.lam`), filters: [{ name: 'Luno Animate project', extensions: ['lam'] }] });
+      const result = await dialog.showSaveDialog(window, { title: 'Save Luno document', defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.lam`), filters: [{ name: 'Luno Animate project', extensions: ['lam'] }] });
       if (result.canceled || !result.filePath) return false;
       await atomicWrite(result.filePath, data); return true;
     });
     ipcMain.handle('luno:open-project', async event => {
       assertTrusted(event);
-      const result = await dialog.showOpenDialog(window, { title: 'Open a little creation', defaultPath: await getWorkspace() || app.getPath('documents'), properties: ['openFile'], filters: [{ name: 'Luno Animate project', extensions: ['lam', 'luno'] }] });
+      const result = await dialog.showOpenDialog(window, { title: 'Open Luno document', defaultPath: await getWorkspace() || app.getPath('documents'), properties: ['openFile'], filters: [{ name: 'Luno Animate project', extensions: ['lam', 'luno'] }] });
       if (result.canceled || !result.filePaths[0]) return null;
       return readProject(result.filePaths[0]);
     });
     ipcMain.handle('luno:save-export', async (event, bytes, name, extension) => {
       assertTrusted(event);
       if (!allowedExportTypes.has(extension) || !(bytes instanceof Uint8Array) || bytes.byteLength > 150_000_000) throw new Error('Invalid export data.');
-      const result = await dialog.showSaveDialog(window, { title: 'Share a little magic', defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.${extension}`), filters: [{ name: `${extension.toUpperCase()} file`, extensions: [extension] }] });
+      const result = await dialog.showSaveDialog(window, { title: 'Export media', defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.${extension}`), filters: [{ name: `${extension.toUpperCase()} file`, extensions: [extension] }] });
       if (result.canceled || !result.filePath) return false;
       await atomicWrite(result.filePath, Buffer.from(bytes)); return true;
     });
     ipcMain.handle('luno:choose-folder', async event => {
       assertTrusted(event);
-      const result = await dialog.showOpenDialog(window, { title: 'A home for your little creations', properties: ['openDirectory', 'createDirectory'] });
+      const result = await dialog.showOpenDialog(window, { title: 'External project folder', properties: ['openDirectory', 'createDirectory'] });
       if (result.canceled || !result.filePaths[0]) return null;
       workspace = result.filePaths[0]; await atomicWrite(path.join(app.getPath('userData'), 'workspace.json'), JSON.stringify({ folder: workspace })); return workspace;
     });

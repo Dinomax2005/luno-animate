@@ -24,3 +24,19 @@ test('startup restores an interrupted library/settings/workspace transaction', a
 test('an invalid restore journal blocks every subsequent operation, not just the first', async t => { const { vault, folder } = await fixture(t); await atomicWrite(path.join(vault.root, 'restore-journal.json'), JSON.stringify({ staged: '../unsafe', rollback: '../unsafe' })); const restart = new ProjectVault(folder, '0.2.0'); await assert.rejects(restart.list(), /journal/); await assert.rejects(restart.list(), /journal/); await assert.rejects(restart.save(encodeLam(document())), /journal/); });
 test('backup retention keeps five and always preserves the just-created backup', async t => { const { vault } = await fixture(t); await vault.save(encodeLam(document())); await Promise.all(Array.from({ length: 6 }, () => vault.backup())); const now = Date.now; Date.now = () => 1; let newest; try { newest = await vault.backup(); } finally { Date.now = now; } const backups = await vault.backups(); assert.equal(backups.length, 5); assert(backups.some(b => b.id === newest.id)); });
 test('settings validation and bounded file reads reject unsafe data', async t => { const { folder } = await fixture(t); assert.throws(() => validateSettings({ lastProjectId: '../oops' })); assert.throws(() => validateSettings({ lastProjectId: null, preferences: { theme: 'light' } })); const file = path.join(folder, 'large'); await fs.writeFile(file, Buffer.alloc(256)); await assert.rejects(boundedRead(file, 128), /large/); });
+
+test('a v0.2 library reopens in the current version without resetting documents, revisions, preferences, or backups', async t => {
+  const { vault, folder } = await fixture(t); const p = document();
+  await vault.save(encodeLam(p)); await vault.save(encodeLam({ ...p, name: 'Retained animation' })); await vault.patch(p.id, { starred: true });
+  const preferences = { onboardingComplete: true, theme: 'light', automaticUpdates: false, showBones: false, showGrid: true, loop: true, autoKey: false, onionSkin: false, showMotionPath: false, snapToGrid: true, inverseKinematics: true, drawingMode: 'cel', brushColor: '#123456', brushSize: 4, gridSize: 20, onionBefore: 1, onionAfter: 2 };
+  await vault.saveSettings({ lastProjectId: p.id, preferences });
+  await atomicWrite(vault.workspaceFile, JSON.stringify({ folder: '/existing-project-folder' }));
+  const snapshot = await vault.backup('manual'); await vault.flush();
+  const upgraded = new ProjectVault(folder, require('../package.json').version); await upgraded.flush();
+  assert.equal(decodeLam(await upgraded.load(p.id)).name, 'Retained animation'); assert.equal((await upgraded.list())[0].starred, true);
+  assert.deepEqual((await upgraded.getSettings()).preferences, preferences);
+  assert.equal(JSON.parse(await fs.readFile(upgraded.workspaceFile, 'utf8')).folder, '/existing-project-folder');
+  assert((await upgraded.backups()).some(backup => backup.id === snapshot.id && backup.version === '0.2.0'));
+  assert.equal((await fs.readdir(upgraded.folder(p.id))).filter(name => name.endsWith('.lam')).length, 2);
+  const currentBackup = await upgraded.backup('before-update'); assert.equal(currentBackup.version, require('../package.json').version);
+});

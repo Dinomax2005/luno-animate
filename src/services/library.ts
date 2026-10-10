@@ -59,7 +59,7 @@ export async function goHome() {
   finally { useEditor.getState().setBlocked(null); }
 }
 export async function openLibraryProject(id: string) {
-  useEditor.getState().setBlocked('Opening your little creation…');
+  useEditor.getState().setBlocked('Opening document…');
   try {
   await flushProject(true); const project = await repository().load(id);
   useEditor.getState().replaceProject(project, false); lastSaved = project; useEditor.getState().markSaved();

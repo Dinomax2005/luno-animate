@@ -114,3 +114,35 @@ jobs:
           echo '```text' >> "$GITHUB_STEP_SUMMARY"
           cat release-assets/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  prepare-draft-release:
+    name: Stage the verified stable release
+    needs: verify-release-assets
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[prepare-release]')
+    permissions:
+      contents: write
+      actions: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: Luno-Animate-*
+          path: installers
+      - run: node scripts/prepare-release.mjs installers release-assets
+      - name: Create an exact-source draft, never an automatic public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(node -p '`v${require("./package.json").version}`')
+          node scripts/release-report.mjs release-assets .cache/release-notes.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Luno Animate $TAG" --notes-file .cache/release-notes.md
+          gh release upload "$TAG" release-assets/*
+          echo 'A draft with verified installers and all stable feeds is ready for review. It is not discoverable by installed applications until published.' >> "$GITHUB_STEP_SUMMARY"

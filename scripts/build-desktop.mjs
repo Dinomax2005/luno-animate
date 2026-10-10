@@ -1,5 +1,9 @@
 import { build } from 'esbuild';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+const { version } = JSON.parse(await readFile('package.json', 'utf8'));
+const preload = await readFile('electron/preload.cjs', 'utf8');
+if (!preload.includes(`version: '${version}'`)) throw new Error('Preload version does not match package.json.');
+if (JSON.parse(await readFile('src/config/desktop-build.json', 'utf8')).version !== version) throw new Error('Desktop build metadata is out of date.');
 await mkdir('electron/lib', { recursive: true });
 await build({ entryPoints: ['electron/core.ts'], outfile: 'electron/lib/core.cjs', bundle: true, platform: 'node', format: 'cjs', target: 'node22', legalComments: 'eof' });
 await build({ entryPoints: ['electron/updater.cjs'], outfile: 'electron/lib/updater.cjs', bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron', 'original-fs'], legalComments: 'eof', metafile: true }).then(async result => { await mkdir('.cache', { recursive: true }); await writeFile('.cache/native-packages.json', JSON.stringify(Object.keys(result.metafile.inputs))); });

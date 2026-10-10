@@ -1,12 +1,15 @@
-# Luno Animate · v0.2
+# Luno Animate · v0.3.4
 
-**A little less complicated. A lot more animated.**
+**Precision. Every frame.**
 
-A beginner-friendly, local-first 2D animation studio. React + TypeScript power the editor; Electron provides standalone desktop installers, a native project library, and protected updates.
+A professional, local-first 2D animation workspace with vector, keyframe, frame-by-frame, and character-rigging workflows. React + TypeScript power the editor; Electron provides standalone desktop installers, a native project library, and protected updates.
 
 ## What works
 
-- **A real creative home:** every saved project, thumbnails, favorites, search/sort, rename, duplicate, Trash/restore, revision recovery, and five editable templates. Projects remain independent and survive restarting.
+This version removes the beginner-first welcome art, tutorial prompts, and prominent preset cards. New documents default to a blank stage; the document manager defaults to a sortable list. Technical controls, menus, and shortcuts take priority.
+
+- **Production workspace:** dense charcoal/light interfaces; eight context-aware application menus; searchable command palette; persistent Animation/Drawing/Rigging layouts; pointer/keyboard-resizable docks; stage rulers, context actions, spatial nudging, and focus mode; responsive panel overlays and document properties. See the [workspace reference](docs/WORKSPACE.md).
+- **Document manager:** every saved project, thumbnails, favorites, search/sort, rename, duplicate, Trash/restore, revision recovery, and five editable templates. Projects remain independent and survive restarting.
 - **Compose:** vector strokes/shapes, imported artwork, editable text, multiselect, marquee selection, move/rotate/scale, alignment, animated groups, layer ordering, inherited visibility/opacity/locks, and artwork blend modes.
 - **Rig:** a ready-to-pose 15-bone Milo, blank cutout rigs, joint-attached imported body parts, forward kinematics, two-bone hand/foot IK, custom child bones, editable parents/lengths, angle limits, and joint locks. No automatic mesh skinning.
 - **Animate:** automatic/manual keys, draggable timeline keys, key multiselection/copy/paste/delete, nine easing modes including custom Bézier, eight editable motion starters, work areas, timeline zoom, and elapsed-time playback.
@@ -19,27 +22,29 @@ This is a **working early studio, not full Adobe Animate parity**. Symbols/neste
 
 ## Download and install
 
-Open the newest successful **[Build desktop installers](https://github.com/Dinomax2005/luno-animate/actions/workflows/installers.yml)** run for v0.2. Download your platform artifact and extract its ZIP:
+Use the **[official v0.3.4 release](https://github.com/Dinomax2005/luno-animate/releases/tag/v0.3.4)** for installers and stable update feeds. Existing updater-enabled Windows and AppImage installations can use **Updates & backups → Check GitHub** without uninstalling.
 
 | Platform | Installer | How to install |
 | --- | --- | --- |
-| Windows x64 | `Luno-Animate-0.2.0-win-x64.exe` | Guided setup, selectable installation folder, shortcuts, first-run studio wizard. |
-| macOS Apple silicon | `Luno-Animate-0.2.0-mac-arm64.dmg` | Drag the app to Applications. |
-| macOS Intel | `Luno-Animate-0.2.0-mac-x64.dmg` | Drag the app to Applications. |
+| Windows x64 | `Luno-Animate-0.3.4-win-x64.exe` | NSIS setup, selectable installation folder, shortcuts, workspace configuration. |
+| macOS Apple silicon | `Luno-Animate-0.3.4-mac-arm64.dmg` | Drag the app to Applications. |
+| macOS Intel | `Luno-Animate-0.3.4-mac-x64.dmg` | Drag the app to Applications. |
 | Linux x64 | `.AppImage` or `.deb` | Make the AppImage executable, or install the DEB with your package manager. |
 
-Actions artifacts require GitHub sign-in and expire after 30 days. Owner-reviewed [public releases](https://github.com/Dinomax2005/luno-animate/releases) can provide permanent downloads and the update feed. **An Actions artifact is not a published release.** Without configured certificates, installers are unsigned development builds; macOS automatic updates require Developer ID signing. See [installation and releases](docs/INSTALLATION.md).
+Public release downloads do not require GitHub sign-in and do not expire like Actions artifacts. Installers are unsigned development builds without configured certificates; macOS automatic installation remains disabled without Developer ID signing. DEB packages require manual/package-manager updates; v0.1 has no updater. See [installation and releases](docs/INSTALLATION.md).
 
 No Node.js, server, terminal, or account is needed to **use an installed build**. Projects are never uploaded. Fonts and artwork are bundled. Desktop update checks/downloads contact GitHub; automatic updates can be switched off.
 
-## Your first animation
+## Animation workflow
 
-1. From the project home, choose **A little character**, **Motion playground**, or **A fresh canvas**.
+1. Create a **New project** (blank by default), import a `.lam`, or choose an opt-in document under **Templates**.
 2. Pose Milo by dragging a hand/foot joint, or draw/add/import your own artwork.
 3. Move the playhead, make another pose, and let Auto-key capture it. Press **Space** to play.
 4. For drawings, choose **Draw → Frame-by-frame**; **F7** creates a blank cel and **F6** copies the previous drawing.
 5. Use **Add scene**, **Animate camera**, or **Import sound** to build a longer story.
 6. **Export → MP4** creates video. **File → Export .lam project** keeps an editable portable copy. **Back to all projects** durably saves before returning home.
+
+Workspace: `Ctrl/⌘ Shift P` command search · stage `Tab` focus/restore panels · stage arrows nudge (Shift: 10 px) · `, / .` step frames · `Ctrl/⌘ 0` fit stage. See **Help → Tools & keyboard reference**.
 
 Shortcuts: `V` select · `B` draw · `T` text · `G` pose · `C` camera · `K` key · `U` onion skin · `Ctrl/⌘ G` group · `Ctrl/⌘ C/V` keys · `Ctrl/⌘ S` `.lam` · `Ctrl/⌘ Z` undo. Open Help for the complete list.
 
@@ -85,13 +90,13 @@ Build output, native generated bundles, test artifacts, and exact third-party so
 
 `src/engine/` — versioned document, LAM codec, hierarchy, rigs, sampling, shared exports/video.
 `src/services/` — browser/native repositories, durable workflows, audio.
-`src/store/` — editor actions and undo transactions.
-`src/components/` — project home, studio, timeline, inspectors, setup, export, updates.
+`src/store/` — editor actions/undo transactions and independent persistent workspace layout.
+`src/components/` — project home, application menus/commands, resizable studio, timeline, Properties, setup, export, updates.
 `electron/` — sandboxed bridge, trusted IPC, serialized filesystem vault, guarded updater.
 `src/test/`, `native-tests/`, `tests/`, `desktop-tests/` — engine/store/IDB, disk/update failures, browser, packaged acceptance.
 `.github/workflows/` — checks, native installers/manifests, verified draft release.
 
-Read [architecture](docs/ARCHITECTURE.md) and [installation/release instructions](docs/INSTALLATION.md).
+Read the [production workspace reference](docs/WORKSPACE.md), [architecture](docs/ARCHITECTURE.md) and [installation/release instructions](docs/INSTALLATION.md).
 
 ## Licenses
 
