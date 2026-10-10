@@ -98,3 +98,7 @@ tests/            Playwright browser acceptance tests
 ```
 
 See [architecture](docs/ARCHITECTURE.md), [installation](docs/INSTALLATION.md), and [roadmap](docs/ROADMAP.md).
+
+## License notices
+
+The application source is intentionally `UNLICENSED` until the owner chooses a license. Dependency licenses, including the Inter font’s SIL Open Font License, are generated at build time and bundled with the app. Read them in **Help → Third-party notices** or `public/third-party-notices.txt`.

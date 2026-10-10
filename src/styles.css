@@ -736,3 +736,5 @@ kbd { font-family: var(--mono); font-weight: 400; font-size: 9px; color: var(--m
 .desktop-platforms .platform-download:hover { color: #526e39; background: #deebc8; }
 [data-theme=dark] .desktop-platforms .platform-download { background: #3c512e; border-color: #52673f; color: #a3c47a; }
 @media (max-width: 600px) { .desktop-platforms .platform-download { font-size: 7px; padding: 0 6px; gap: 3px; } .download-modal .dialog-footer { flex-wrap: wrap; } }
+.license-notices { padding: 17px; max-height: 300px; min-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 7px; font: 9px/1.8 var(--mono); color: var(--secondary); }
+@media (max-width: 600px) { .help-tabs { gap: 12px; } .help-tabs > button { font-size: 8px; } }

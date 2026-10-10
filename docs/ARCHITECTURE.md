@@ -37,6 +37,8 @@ Only documents and preferences are persisted. Selection, playback, undo history,
 - GIF: each frame sampled/rasterized, palette-quantized, then encoded with `gifenc`. Full loop, progress, cancellation, up to 300 frames and 960 px longest side. The GIF format rounds delays to centiseconds.
 - Project: complete versioned document, including embedded artwork and rigs.
 
+The build preserves dependency/font license notices and exposes them in the Help dialog.
+
 The export encoder and dialogs are lazy-loaded. All chunks/fonts are included in native packaging. No network renderer or export service is required.
 
 ## Desktop security

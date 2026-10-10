@@ -61,9 +61,9 @@ jobs:
           CSC_LINK: ${{ matrix.name == 'Windows' && secrets.WINDOWS_CERTIFICATE || matrix.name == 'macOS' && secrets.MACOS_CERTIFICATE || '' }}
           CSC_KEY_PASSWORD: ${{ matrix.name == 'Windows' && secrets.WINDOWS_CERTIFICATE_PASSWORD || matrix.name == 'macOS' && secrets.MACOS_CERTIFICATE_PASSWORD || '' }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MACOS_CERTIFICATE && 'true' || 'false' }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
       - name: Smoke test the packaged Linux desktop app
         if: matrix.name == 'Linux'
         run: xvfb-run -a npm run test:desktop
