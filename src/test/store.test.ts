@@ -5,7 +5,7 @@ import { sampleItem } from '../engine/animation';
 
 beforeEach(() => {
   const project = createProject(); useEditor.getState().replaceProject(project, false);
-  useEditor.setState({ preferences: { onboardingComplete: true, autoKey: true, showBones: true, showGrid: false, loop: true, theme: 'light' }, toast: null });
+  useEditor.setState({ preferences: { ...useEditor.getState().preferences, onboardingComplete: true, autoKey: true, showBones: true, showGrid: false, loop: true, theme: 'light' }, toast: null });
 });
 describe('editor state and history', () => {
   it('adds, undoes, and redoes an object', () => {

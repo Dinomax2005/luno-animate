@@ -14,9 +14,14 @@ files:
 asar: true
 npmRebuild: false
 fileAssociations:
+  - ext: lam
+    name: Luno Animate Project
+    description: Portable Luno animation project (binary)
+    role: Editor
+    mimeType: application/vnd.luno.lam
   - ext: luno
     name: Luno Animate Project
-    description: Editable Luno animation project
+    description: Legacy Luno animation project
     role: Editor
     mimeType: application/x-luno-project
 win:
@@ -81,4 +86,9 @@ linux:
       Name: Luno Animate
       StartupWMClass: luno-animate
       Keywords: Animation;Rigging;Drawing;2D;
-publish: null
+publish:
+  provider: github
+  owner: Dinomax2005
+  repo: luno-animate
+  releaseType: release
+  private: false

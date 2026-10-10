@@ -1,0 +1,14 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { createHash } = require('node:crypto');
+const { promisify } = require('node:util');
+const { execFile } = require('node:child_process');
+const run = promisify(execFile);
+async function fixture(t) { const root = await fs.mkdtemp(path.join(os.tmpdir(), 'luno-release-')); t.after(() => fs.rm(root, { recursive: true, force: true })); const input = path.join(root, 'artifacts'), output = path.join(root, 'flat'); for (const [platform, manifest, ext] of [['Windows', 'latest.yml', 'exe'], ['macOS', 'latest-mac.yml', 'zip'], ['Linux', 'latest-linux.yml', 'AppImage']]) { const dir = path.join(input, `Luno-${platform}`); await fs.mkdir(dir, { recursive: true }); const file = `Luno-${platform}-0.2.0.${ext}`, bytes = Buffer.from(platform); await fs.writeFile(path.join(dir, file), bytes); await fs.writeFile(path.join(dir, manifest), `version: 0.2.0\nfiles:\n  - url: ${file}\n    sha512: ${createHash('sha512').update(bytes).digest('base64')}\n`); } return { input, output, root }; }
+test('release assets/checksums are flattened and match update manifest files', async t => { const { input, output } = await fixture(t); await run(process.execPath, ['scripts/prepare-release.mjs', input, output]); const sums = await fs.readFile(path.join(output, 'SHA256SUMS.txt'), 'utf8'); assert.equal((await fs.readdir(output)).length, 7); assert(!sums.includes('artifacts/')); for (const line of sums.trim().split('\n')) { const [hash, name] = line.split('  '); assert.equal(createHash('sha256').update(await fs.readFile(path.join(output, name))).digest('hex'), hash); } });
+test('missing manifests and damaged installers cannot become a release', async t => { const { input, output } = await fixture(t); await fs.writeFile(path.join(input, 'Luno-Windows', 'Luno-Windows-0.2.0.exe'), 'tampered'); await assert.rejects(run(process.execPath, ['scripts/prepare-release.mjs', input, output]), /checksum mismatch/); assert.equal((await fs.readdir(output)).length, 0); });
+test('duplicate filenames are refused instead of silently replacing another platform asset', async t => { const { input, output } = await fixture(t); await fs.writeFile(path.join(input, 'Luno-Linux', 'latest.yml'), 'duplicate'); await assert.rejects(run(process.execPath, ['scripts/prepare-release.mjs', input, output]), /Duplicate/); });
+test('an existing output directory is left intact', async t => { const { input, output } = await fixture(t); await fs.mkdir(output); await fs.writeFile(path.join(output, 'keep-me'), 'work'); await assert.rejects(run(process.execPath, ['scripts/prepare-release.mjs', input, output]), /empty/); assert.equal(await fs.readFile(path.join(output, 'keep-me'), 'utf8'), 'work'); });

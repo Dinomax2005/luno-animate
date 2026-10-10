@@ -1,161 +1,105 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
-import { Expand, Minus, Plus, MousePointer2, MoveUpRight, Sparkles } from 'lucide-react';
+import { Camera as CameraIcon, Copy, Expand, Grid3X3, Magnet, Minus, MousePointer2, MoveUpRight, Plus, Route, Sparkles, SquarePlus, Layers2 } from 'lucide-react';
 import { useEditor } from '../store/editor';
-import { sampleProject } from '../engine/animation';
-import { createItem, createShape } from '../engine/project';
-import { forwardKinematics, poseJoint, radians } from '../engine/rig';
-import type { Point, Rig, SceneItem } from '../engine/types';
-import { ItemGraphic, itemTransform } from './SceneGraphics';
+import { sampleCamera } from '../engine/animation';
+import { createItem, createShape, createText } from '../engine/project';
+import { forwardKinematics, poseJoint, radians, clamp } from '../engine/rig';
+import { sceneNodes, matrixString, inverse, transformPoint, itemBounds, type RenderNode } from '../engine/geometry';
+import type { Camera, Point, Rig } from '../engine/types';
+import { ItemGraphic, cameraTransform } from './SceneGraphics';
+import { SceneSwitcher } from './studio/SceneSwitcher';
 
-interface Gesture {
-  kind: 'move' | 'bone' | 'pan' | 'draw';
-  start: Point;
-  item?: SceneItem;
-  boneId?: string;
-  rig?: Rig;
-  pan?: Point;
-  checkpointed?: boolean;
-}
+interface Gesture { kind: 'move' | 'bone' | 'pan' | 'draw' | 'box' | 'scale' | 'rotate' | 'camera'; start: Point; node?: RenderNode; nodes?: RenderNode[]; boneId?: string; rig?: Rig; pan?: Point; camera?: Camera; corner?: Point; checkpointed?: boolean }
 export function Stage() {
-  const project = useEditor(s => s.project);
-  const frame = useEditor(s => s.frame);
-  const selectedId = useEditor(s => s.selectedId);
-  const selectedBone = useEditor(s => s.selectedBone);
-  const playing = useEditor(s => s.playing);
-  const tool = useEditor(s => s.tool);
-  const zoom = useEditor(s => s.zoom);
-  const pan = useEditor(s => s.pan);
-  const preferences = useEditor(s => s.preferences);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const gesture = useRef<Gesture | null>(null);
-  const [size, setSize] = useState({ width: 760, height: 530 });
-  const [draft, setDraft] = useState<Point[]>([]);
-  const items = sampleProject(project, frame);
-  const selected = items.find(i => i.id === selectedId);
-  const fit = Math.max(0.1, Math.min((size.width - 92) / project.width, (size.height - 112) / project.height));
-  const scale = fit * zoom / 100;
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver(entries => { const rect = entries[0].contentRect; setSize({ width: rect.width, height: rect.height }); });
-    observer.observe(containerRef.current); return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-    const wheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.metaKey) {
-        event.preventDefault();
-        useEditor.getState().setZoom(useEditor.getState().zoom * (event.deltaY > 0 ? 0.9 : 1.1));
-      }
-    };
-    element.addEventListener('wheel', wheel, { passive: false });
-    return () => element.removeEventListener('wheel', wheel);
-  }, []);
-
-  const point = (event: PointerEvent): Point => {
-    const svg = svgRef.current;
-    const matrix = svg?.getScreenCTM();
-    if (!matrix) return { x: 0, y: 0 };
-    const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
-    return { x: p.x, y: p.y };
+  const project = useEditor(s => s.project), frame = useEditor(s => s.frame), selectedId = useEditor(s => s.selectedId), selectedIds = useEditor(s => s.selectedIds), selectedBone = useEditor(s => s.selectedBone);
+  const playing = useEditor(s => s.playing), tool = useEditor(s => s.tool), zoom = useEditor(s => s.zoom), pan = useEditor(s => s.pan), preferences = useEditor(s => s.preferences);
+  const containerRef = useRef<HTMLDivElement>(null), svgRef = useRef<SVGSVGElement>(null), worldRef = useRef<SVGGElement>(null), gesture = useRef<Gesture | null>(null);
+  const [size, setSize] = useState({ width: 760, height: 530 }), [draft, setDraft] = useState<Point[]>([]), [box, setBox] = useState<{ start: Point; end: Point } | null>(null);
+  const nodes = sceneNodes(project, frame), selected = nodes.find(n => n.item.id === selectedId);
+  const fit = Math.max(0.1, Math.min((size.width - 92) / project.width, (size.height - 134) / project.height)), scale = fit * zoom / 100;
+  const camera = sampleCamera(project.camera, frame);
+  useEffect(() => { if (!containerRef.current) return; const observer = new ResizeObserver(entries => { const r = entries[0].contentRect; setSize({ width: r.width, height: r.height }); }); observer.observe(containerRef.current); return () => observer.disconnect(); }, []);
+  useEffect(() => { const element = containerRef.current; if (!element) return; const wheel = (e: WheelEvent) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); const s = useEditor.getState(); s.setZoom(s.zoom * (e.deltaY > 0 ? 0.9 : 1.1)); } }; element.addEventListener('wheel', wheel, { passive: false }); return () => element.removeEventListener('wheel', wheel); }, []);
+  const point = (event: PointerEvent, screen = false): Point => { const matrix = (screen ? svgRef.current : worldRef.current)?.getScreenCTM(); if (!matrix) return { x: 0, y: 0 }; const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse()); return { x: p.x, y: p.y }; };
+  const capture = (e: PointerEvent) => { svgRef.current?.setPointerCapture(e.pointerId); e.preventDefault(); useEditor.getState().setInteracting(true); };
+  const snap = (v: number) => preferences.snapToGrid ? Math.round(v / preferences.gridSize) * preferences.gridSize : Math.round(v);
+  const onItemDown = (event: PointerEvent, original: RenderNode) => {
+    if (!['select', 'rig'].includes(tool) || event.button !== 0) return; event.stopPropagation(); const s = useEditor.getState(); s.setPlaying(false); let node = original;
+    if (!event.ctrlKey && !event.metaKey) while (node.item.parentId) node = nodes.find(n => n.item.id === node.item.parentId)!;
+    if (event.shiftKey) { s.toggleSelect(node.item.id); return; }
+    const ids = selectedIds.includes(node.item.id) ? selectedIds : [node.item.id]; if (!selectedIds.includes(node.item.id)) s.select(node.item.id);
+    if (node.locked) { s.notify('This layer or its parent is locked. Unlock it in Layers.', 'info'); return; }
+    capture(event); gesture.current = { kind: 'move', start: point(event), node, nodes: nodes.filter(n => ids.includes(n.item.id) && !n.locked && !(n.item.parentId && ids.includes(n.item.parentId)) && !(n.item.attachment && ids.includes(n.item.attachment.characterId))) };
   };
-  const localPoint = (p: Point, item: SceneItem): Point => {
-    const dx = p.x - item.x, dy = p.y - item.y;
-    const r = radians(-item.rotation);
-    return { x: (dx * Math.cos(r) - dy * Math.sin(r)) / item.scaleX, y: (dx * Math.sin(r) + dy * Math.cos(r)) / item.scaleY };
+  const onBoneDown = (event: PointerEvent, node: RenderNode, boneId: string) => {
+    if (node.locked || playing || node.item.rig?.bones.find(b => b.id === boneId)?.locked) return; event.stopPropagation(); capture(event);
+    const s = useEditor.getState(); if (s.selectedId !== node.item.id) s.select(node.item.id); s.selectBone(boneId); s.setTool('rig');
+    gesture.current = { kind: 'bone', start: point(event), node, boneId, rig: node.item.rig };
   };
-  const capture = (event: PointerEvent) => { svgRef.current?.setPointerCapture(event.pointerId); event.preventDefault(); };
-  const onItemDown = (event: PointerEvent, item: SceneItem) => {
-    if (!['select', 'rig'].includes(tool) || event.button !== 0) return;
-    event.stopPropagation();
-    const s = useEditor.getState(); s.select(item.id); s.setPlaying(false);
-    if (item.locked) { s.notify('This layer is locked. Unlock it in the Layers panel.', 'info'); return; }
-    capture(event);
-    gesture.current = { kind: 'move', start: point(event), item };
-  };
-  const onBoneDown = (event: PointerEvent, item: SceneItem, boneId: string) => {
-    if (item.locked || playing) return;
-    event.stopPropagation(); capture(event);
-    const s = useEditor.getState(); s.selectBone(boneId);
-    gesture.current = { kind: 'bone', start: point(event), item, boneId, rig: item.rig };
-  };
+  const onHandleDown = (event: PointerEvent, kind: 'scale' | 'rotate', corner?: Point) => { if (!selected || selected.locked) return; event.stopPropagation(); capture(event); gesture.current = { kind, start: point(event), node: selected, corner }; };
   const onDown = (event: PointerEvent<SVGSVGElement>) => {
-    if (event.button !== 0 && event.button !== 1) return;
-    capture(event); const s = useEditor.getState(); s.setPlaying(false);
-    const p = point(event);
-    if (tool === 'hand' || event.button === 1) {
-      gesture.current = { kind: 'pan', start: { x: event.clientX, y: event.clientY }, pan };
-    } else if (['pen', 'rectangle', 'ellipse'].includes(tool)) {
-      gesture.current = { kind: 'draw', start: p }; setDraft([p, p]);
-    } else { s.select(null); }
+    if (event.button !== 0 && event.button !== 1) return; capture(event); const s = useEditor.getState(); s.setPlaying(false); const p = point(event);
+    if (tool === 'hand' || event.button === 1) gesture.current = { kind: 'pan', start: { x: event.clientX, y: event.clientY }, pan };
+    else if (tool === 'camera') gesture.current = { kind: 'camera', start: point(event, true), camera };
+    else if (['pen', 'rectangle', 'ellipse'].includes(tool)) { gesture.current = { kind: 'draw', start: p }; setDraft([p, p]); }
+    else if (tool === 'text') { s.addItem(createText(snap(p.x), snap(p.y), 'Your words here')); s.setInteracting(false); }
+    else { if (!event.shiftKey) s.select(null); gesture.current = { kind: 'box', start: p }; setBox({ start: p, end: p }); }
   };
   const onMove = (event: PointerEvent<SVGSVGElement>) => {
-    const g = gesture.current; if (!g) return;
-    const s = useEditor.getState(); const p = point(event);
-    if ((g.kind === 'move' || g.kind === 'bone') && !g.checkpointed) {
-      if (Math.hypot(p.x - g.start.x, p.y - g.start.y) < 1) return;
-      s.checkpoint(); g.checkpointed = true;
-    }
-    if (g.kind === 'move' && g.item) {
-      s.editItem(g.item.id, { x: Math.round(g.item.x + p.x - g.start.x), y: Math.round(g.item.y + p.y - g.start.y) }, false);
-    } else if (g.kind === 'bone' && g.item && g.rig && g.boneId) {
-      const angles = poseJoint(g.rig, g.boneId, localPoint(p, g.item), !event.shiftKey);
-      s.editBone(g.item.id, angles, false);
-    } else if (g.kind === 'pan' && g.pan) {
-      s.setPan({ x: g.pan.x + event.clientX - g.start.x, y: g.pan.y + event.clientY - g.start.y });
-    } else if (g.kind === 'draw') {
-      if (tool === 'pen') setDraft(previous => Math.hypot(p.x - previous.at(-1)!.x, p.y - previous.at(-1)!.y) > 3 ? [...previous, p] : previous);
-      else setDraft([g.start, p]);
-    }
+    const g = gesture.current; if (!g) return; const s = useEditor.getState(), p = point(event);
+    if (['move', 'bone', 'scale', 'rotate', 'camera'].includes(g.kind) && !g.checkpointed) { const current = g.kind === 'camera' ? point(event, true) : p; if (Math.hypot(current.x - g.start.x, current.y - g.start.y) < 1) return; s.checkpoint(); g.checkpointed = true; }
+    if (g.kind === 'move') for (const node of g.nodes ?? []) { const parent = inverse(node.parentMatrix), start = transformPoint(parent, g.start), end = transformPoint(parent, p); s.editItem(node.item.id, { x: snap(node.item.x + end.x - start.x), y: snap(node.item.y + end.y - start.y) }, false); }
+    else if (g.kind === 'bone' && g.node && g.rig && g.boneId) s.editBone(g.node.item.id, poseJoint(g.rig, g.boneId, transformPoint(inverse(g.node.matrix), p), preferences.inverseKinematics && !event.shiftKey), false);
+    else if (g.kind === 'scale' && g.node && g.corner) {
+      const item = g.node.item, local = transformPoint(inverse(g.node.matrix), p); let x = Math.abs(local.x / g.corner.x), y = Math.abs(local.y / g.corner.y);
+      if (event.shiftKey || item.type === 'character') x = y = Math.max(x, y);
+      s.editItem(item.id, { scaleX: clamp(item.scaleX * x, 0.01, 100), scaleY: clamp(item.scaleY * y, 0.01, 100) }, false);
+    } else if (g.kind === 'rotate' && g.node) { const item = g.node.item, start = transformPoint(inverse(g.node.parentMatrix), g.start), end = transformPoint(inverse(g.node.parentMatrix), p); const angle = item.rotation + (Math.atan2(end.y - item.y, end.x - item.x) - Math.atan2(start.y - item.y, start.x - item.x)) * 180 / Math.PI; s.editItem(item.id, { rotation: event.shiftKey ? Math.round(angle / 15) * 15 : Math.round(angle) }, false); }
+    else if (g.kind === 'camera' && g.camera) { const now = point(event, true), dx = (now.x - g.start.x) / g.camera.zoom, dy = (now.y - g.start.y) / g.camera.zoom, r = radians(g.camera.rotation); s.editCamera({ x: g.camera.x - dx * Math.cos(r) + dy * Math.sin(r), y: g.camera.y - dx * Math.sin(r) - dy * Math.cos(r) }, false); }
+    else if (g.kind === 'pan' && g.pan) s.setPan({ x: g.pan.x + event.clientX - g.start.x, y: g.pan.y + event.clientY - g.start.y });
+    else if (g.kind === 'box') setBox({ start: g.start, end: p });
+    else if (g.kind === 'draw') { if (tool === 'pen') setDraft(previous => previous.length < 20000 && Math.hypot(p.x - previous.at(-1)!.x, p.y - previous.at(-1)!.y) > 2 ? [...previous, p] : previous); else setDraft([g.start, p]); }
   };
-  const onUp = (event: PointerEvent<SVGSVGElement>) => {
-    if (gesture.current?.kind === 'draw' && draft.length >= 2) {
-      const xs = draft.map(p => p.x), ys = draft.map(p => p.y);
-      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-      const w = Math.max(2, maxX - minX), h = Math.max(2, maxY - minY);
+  const onUp = (event: PointerEvent<SVGSVGElement>, cancelled = false) => {
+    const s = useEditor.getState();
+    if (!cancelled && gesture.current?.kind === 'box' && box && Math.hypot(box.end.x - box.start.x, box.end.y - box.start.y) > 3) {
+      const left = Math.min(box.start.x, box.end.x), top = Math.min(box.start.y, box.end.y), right = Math.max(box.start.x, box.end.x), bottom = Math.max(box.start.y, box.end.y);
+      const ids = nodes.filter(n => n.visible && !n.locked && !n.item.parentId && n.item.type !== 'group').filter(n => { const b = itemBounds(n.item); const points = [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]].map(([x, y]) => transformPoint(n.matrix, { x, y })); return Math.min(...points.map(p => p.x)) < right && Math.max(...points.map(p => p.x)) > left && Math.min(...points.map(p => p.y)) < bottom && Math.max(...points.map(p => p.y)) > top; }).map(n => n.item.id);
+      useEditor.setState({ selectedIds: event.shiftKey ? [...new Set([...s.selectedIds, ...ids])] : ids, selectedId: ids.at(-1) ?? null, selectedBone: null });
+    }
+    if (!cancelled && gesture.current?.kind === 'draw' && draft.length >= 2) {
+      const xs = draft.map(p => p.x), ys = draft.map(p => p.y), minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys), w = Math.max(2, maxX - minX), h = Math.max(2, maxY - minY);
       if (w > 3 || h > 3) {
-        const x = (minX + maxX) / 2, y = (minY + maxY) / 2;
-        const item = tool === 'pen'
-          ? createItem('path', { name: 'Drawing', x, y, width: w, height: h, points: draft.map(p => ({ x: p.x - x, y: p.y - y })), stroke: '#496853', strokeWidth: 5 })
-          : { ...createShape(tool === 'ellipse' ? 'ellipse' : 'rectangle', x, y), width: w, height: h };
-        useEditor.getState().addItem(item);
+        if (tool === 'pen' && preferences.drawingMode === 'cel') s.addCelStroke(draft);
+        else { const x = (minX + maxX) / 2, y = (minY + maxY) / 2; const item = tool === 'pen' ? createItem('path', { name: 'Drawing', x, y, width: w, height: h, points: draft.map(p => ({ x: p.x - x, y: p.y - y })), stroke: preferences.brushColor, strokeWidth: preferences.brushSize }) : { ...createShape(tool === 'ellipse' ? 'ellipse' : 'rectangle', x, y), width: w, height: h }; s.addItem(item); if (tool === 'pen') s.setTool('pen'); }
       }
     }
-    gesture.current = null; setDraft([]);
-    if (svgRef.current?.hasPointerCapture(event.pointerId)) svgRef.current.releasePointerCapture(event.pointerId);
+    gesture.current = null; setDraft([]); setBox(null); s.setInteracting(false); if (svgRef.current?.hasPointerCapture(event.pointerId)) svgRef.current.releasePointerCapture(event.pointerId);
   };
-  const bounds = selected?.type === 'character' ? { x: -126, y: -152, w: 264, h: 370 } : { x: -(selected?.width ?? 0) / 2, y: -(selected?.height ?? 0) / 2, w: selected?.width ?? 0, h: selected?.height ?? 0 };
-  const draftFirst = draft[0], draftLast = draft.at(-1);
+  const chosen = selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], first = draft[0], last = draft.at(-1);
+  const celFrames = [...new Set(project.items.filter(i => i.type === 'drawing').flatMap(i => i.cels?.map(c => c.frame) ?? []))].sort((a, b) => a - b);
+  const ghostFrames = celFrames.length ? [...celFrames.filter(f => f < frame).slice(-preferences.onionBefore), ...celFrames.filter(f => f > frame).slice(0, preferences.onionAfter)] : [...Array.from({ length: preferences.onionBefore }, (_, n) => frame - n - 1), ...Array.from({ length: preferences.onionAfter }, (_, n) => frame + n + 1)].filter(f => f >= 0 && f < project.duration);
+  const motionFrames = selected && preferences.showMotionPath ? Array.from({ length: Math.min(180, project.duration) }, (_, n) => Math.round(n / (Math.min(180, project.duration) - 1) * (project.duration - 1))) : [];
+  const motion = motionFrames.map(f => { const node = sceneNodes(project, f).find(n => n.item.id === selectedId)!; return transformPoint(node.matrix, { x: 0, y: 0 }); });
   return <section className={`stage-area tool-${tool}`} ref={containerRef} aria-label="Animation canvas">
-    <div className="stage-meta"><span className="scene-badge"><span className="green-dot" /> Scene 01 <span className="meta-divider" /> Main scene</span><span className="artboard-dimensions">{project.width} × {project.height}</span></div>
-    <div className="stage-board" style={{ width: project.width * scale, height: project.height * scale, transform: `translate(${pan.x}px, ${pan.y}px)` }}>
-      <svg ref={svgRef} data-testid="stage" viewBox={`0 0 ${project.width} ${project.height}`} className="stage-svg" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} role="img" aria-label={`${project.name}, frame ${frame + 1}`}>
-        <defs><pattern id="canvas-grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#a0afa4" strokeWidth="0.6" opacity="0.3" /></pattern></defs>
-        <rect width={project.width} height={project.height} fill={project.background} />
-        {preferences.showGrid && <rect width={project.width} height={project.height} fill="url(#canvas-grid)" pointerEvents="none" />}
-        {items.map(item => <g key={item.id} transform={itemTransform(item)} opacity={item.opacity} onPointerDown={event => onItemDown(event, item)} className={item.locked ? 'art-item locked' : 'art-item'}><ItemGraphic item={item} /></g>)}
-        {selected && !playing && <g transform={itemTransform(selected)} className="selection-overlay" pointerEvents="none">
-          <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="none" stroke="#6e9b75" strokeWidth={1 / scale} strokeDasharray={`${4 / scale} ${4 / scale}`} opacity="0.65" />
-          {[[bounds.x, bounds.y], [bounds.x + bounds.w, bounds.y], [bounds.x, bounds.y + bounds.h], [bounds.x + bounds.w, bounds.y + bounds.h]].map(([x, y], i) => <rect key={i} x={x - 3 / scale} y={y - 3 / scale} width={6 / scale} height={6 / scale} fill="#fffdf7" stroke="#6e9b75" strokeWidth={1 / scale} />)}
-        </g>}
-        {selected?.rig && preferences.showBones && !playing && <g transform={itemTransform(selected)} className="rig-overlay">
-          {forwardKinematics(selected.rig).filter(b => !['leftShoulder', 'rightShoulder', 'leftHip', 'rightHip', 'root'].includes(b.id)).map(b => <g key={b.id}>
-            <path d={`M${b.start.x} ${b.start.y}L${b.end.x} ${b.end.y}`} stroke={selectedBone === b.id ? '#337a46' : '#5a8a5e'} strokeWidth={1.8 / scale} strokeDasharray={`${3 / scale} ${3 / scale}`} opacity="0.7" pointerEvents="none" />
-            <circle cx={b.end.x} cy={b.end.y} r={13 / scale} fill="transparent" onPointerDown={event => onBoneDown(event, selected, b.id)} className="bone-hit" data-bone={b.id} aria-label={`Pose ${b.name}`} />
-            <circle cx={b.end.x} cy={b.end.y} r={(selectedBone === b.id ? 5 : 3.8) / scale} fill={selectedBone === b.id ? '#daf4a6' : '#fffdf7'} stroke="#4f8155" strokeWidth={1.5 / scale} pointerEvents="none" />
-          </g>)}
-        </g>}
-        {draft.length > 0 && <g pointerEvents="none">
-          {tool === 'pen' ? <path d={draft.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ')} fill="none" stroke="#496853" strokeWidth="5" strokeLinecap="round" /> : draftFirst && draftLast && (tool === 'ellipse' ? <ellipse cx={(draftFirst.x + draftLast.x) / 2} cy={(draftFirst.y + draftLast.y) / 2} rx={Math.abs(draftLast.x - draftFirst.x) / 2} ry={Math.abs(draftLast.y - draftFirst.y) / 2} fill="#f0b88e" opacity="0.75" /> : <rect x={Math.min(draftFirst.x, draftLast.x)} y={Math.min(draftFirst.y, draftLast.y)} width={Math.abs(draftLast.x - draftFirst.x)} height={Math.abs(draftLast.y - draftFirst.y)} rx="8" fill="#c5b1ed" opacity="0.75" />)}
-        </g>}
-      </svg>
-      <div className="artboard-label">{project.name} <span>01</span></div>
-    </div>
-    {!project.items.length && <div className="empty-canvas"><Sparkles size={28} /><h3>A blank canvas. A fresh start.</h3><p>Draw something, import your art, or add a character.</p><button className="button primary" onClick={() => useEditor.getState().addCharacter()}>Add your first character <MoveUpRight size={15} /></button></div>}
-    <div className="stage-bottom"><div className="stage-hint"><MousePointer2 size={13} /><span>{tool === 'rig' ? 'Drag a joint to pose · Shift for free rotation' : tool === 'pen' ? 'Click and drag to draw a stroke' : tool === 'hand' ? 'Drag to move around your canvas' : ['rectangle', 'ellipse'].includes(tool) ? 'Click and drag to draw a shape' : selected?.rig && preferences.showBones ? 'A little drag. A little magic. Try a joint.' : 'Select an object to make it your own'}</span></div><div className="zoom-controls"><button className="icon-button" aria-label="Zoom out" onClick={() => useEditor.getState().setZoom(zoom - 10)}><Minus size={14} /></button><button className="zoom-value" onClick={() => { useEditor.getState().setZoom(100); useEditor.getState().setPan({ x: 0, y: 0 }); }} title="Reset zoom">{Math.round(zoom)}%</button><button className="icon-button" aria-label="Zoom in" onClick={() => useEditor.getState().setZoom(zoom + 10)}><Plus size={14} /></button><span className="zoom-divider" /><button className="icon-button" aria-label="Fit canvas" onClick={() => { useEditor.getState().setZoom(100); useEditor.getState().setPan({ x: 0, y: 0 }); }}><Expand size={14} /></button></div></div>
-    <div className="workspace-mark">YOUR IDEAS, IN MOTION.</div>
+    <div className="stage-meta"><SceneSwitcher /><span className="artboard-dimensions">{project.width} × {project.height}</span></div>
+    <div className="stage-tools"><div><button aria-label="Onion skin" title="Onion skin · U" aria-pressed={preferences.onionSkin} className={preferences.onionSkin ? 'active' : ''} onClick={() => useEditor.getState().setPreference('onionSkin', !preferences.onionSkin)}><Layers2 size={14} /><span>Onion skin</span></button><button aria-label="Motion path" title="Show motion path" aria-pressed={preferences.showMotionPath} className={preferences.showMotionPath ? 'active' : ''} onClick={() => useEditor.getState().setPreference('showMotionPath', !preferences.showMotionPath)}><Route size={14} /></button><button aria-label="Canvas grid" aria-pressed={preferences.showGrid} className={preferences.showGrid ? 'active' : ''} onClick={() => useEditor.getState().setPreference('showGrid', !preferences.showGrid)}><Grid3X3 size={13} /></button><button aria-label="Snap to grid" aria-pressed={preferences.snapToGrid} className={preferences.snapToGrid ? 'active' : ''} onClick={() => useEditor.getState().setPreference('snapToGrid', !preferences.snapToGrid)}><Magnet size={13} /></button><button aria-label="Animate camera" title="Camera · C" className={tool === 'camera' ? 'active' : ''} onClick={() => useEditor.getState().selectCamera()}><CameraIcon size={14} /></button></div>{tool === 'pen' && <div className="brush-options"><select aria-label="Drawing mode" value={preferences.drawingMode} onChange={e => useEditor.getState().setPreference('drawingMode', e.target.value as 'vector' | 'cel')}><option value="vector">Vector stroke</option><option value="cel">Frame-by-frame</option></select><input type="color" aria-label="Brush color" value={preferences.brushColor} onChange={e => useEditor.getState().setPreference('brushColor', e.target.value)} /><input type="number" aria-label="Brush size" min={1} max={100} value={preferences.brushSize} onChange={e => useEditor.getState().setPreference('brushSize', clamp(Number(e.target.value) || 1, 1, 100))} />{preferences.drawingMode === 'cel' && <><button aria-label="New blank cel" title="Blank cel · F7" onClick={() => useEditor.getState().blankCel()}><SquarePlus size={13} /></button><button aria-label="Copy previous cel" title="Copy previous cel · F6" onClick={() => useEditor.getState().duplicateCel()}><Copy size={13} /></button></>}</div>}</div>
+    <div className="stage-board" style={{ width: project.width * scale, height: project.height * scale, transform: `translate(${pan.x}px, ${pan.y}px)` }}><svg ref={svgRef} data-testid="stage" viewBox={`0 0 ${project.width} ${project.height}`} className="stage-svg" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={e => onUp(e)} onPointerCancel={e => onUp(e, true)} role="img" aria-label={`${project.name}, frame ${frame + 1}`}>
+      <defs><pattern id="canvas-grid" width={preferences.gridSize} height={preferences.gridSize} patternUnits="userSpaceOnUse"><path d={`M${preferences.gridSize} 0H0V${preferences.gridSize}`} fill="none" stroke="#a0afa4" strokeWidth="0.6" opacity="0.3" /></pattern><filter id="onion-before"><feColorMatrix type="matrix" values="0 0 0 0 0.8 0 0 0 0 0.34 0 0 0 0 0.4 0 0 0 1 0" /></filter><filter id="onion-after"><feColorMatrix type="matrix" values="0 0 0 0 0.25 0 0 0 0 0.58 0 0 0 0 0.85 0 0 0 1 0" /></filter></defs>
+      <rect width={project.width} height={project.height} fill={project.background} />
+      <g ref={worldRef} transform={cameraTransform(project, frame)}>
+        {preferences.showGrid && <rect x={-project.width * 2} y={-project.height * 2} width={project.width * 5} height={project.height * 5} fill="url(#canvas-grid)" pointerEvents="none" />}
+        {preferences.onionSkin && !playing && ghostFrames.map(f => <g key={f} data-testid="onion-ghost" opacity={0.2 / Math.max(1, Math.abs(f - frame) ** 0.2)} filter={`url(#onion-${f < frame ? 'before' : 'after'})`} pointerEvents="none">{sceneNodes(project, f).filter(n => n.visible && ((project.keyframes[n.item.id]?.length ?? 0) > 0 || n.item.type === 'drawing')).map(n => <g key={n.item.id} transform={matrixString(n.matrix)} opacity={n.opacity}><ItemGraphic item={{ ...n.item, id: `${n.item.id}-ghost-${f}` }} frame={f} /></g>)}</g>)}
+        {motion.length > 0 && !playing && <g pointerEvents="none" data-testid="motion-path"><path d={motion.map((p, n) => `${n ? 'L' : 'M'}${p.x} ${p.y}`).join(' ')} fill="none" stroke="#8aab63" strokeWidth={1.4 / (scale * camera.zoom)} strokeDasharray="5 4" />{motion.filter((_, n) => n % 8 === 0).map((p, n) => <circle key={n} cx={p.x} cy={p.y} r={2 / (scale * camera.zoom)} fill="#9daf7a" />)}</g>}
+        {nodes.filter(n => n.visible).map(n => <g key={n.item.id} transform={matrixString(n.matrix)} opacity={n.opacity} style={n.item.blendMode && n.item.blendMode !== 'normal' ? { mixBlendMode: n.item.blendMode } : undefined} onPointerDown={event => onItemDown(event, n)} className={n.locked ? 'art-item locked' : 'art-item'}><ItemGraphic item={n.item} frame={frame} />{n.item.characterStyle === 'skeleton' && n.item.id !== selectedId && n.item.rig && <g opacity="0.3">{forwardKinematics(n.item.rig).map(b => <path key={b.id} d={`M${b.start.x} ${b.start.y}L${b.end.x} ${b.end.y}`} fill="none" stroke="#6e9b75" strokeWidth="6" strokeLinecap="round" />)}</g>}</g>)}
+        {!playing && nodes.filter(n => chosen.includes(n.item.id)).map(n => { const b = itemBounds(n.item); return <g key={n.item.id} transform={matrixString(n.matrix)} className="selection-overlay"><rect x={b.x} y={b.y} width={b.w} height={b.h} fill="none" stroke="#6e9b75" vectorEffect="non-scaling-stroke" strokeWidth="1" strokeDasharray="4 4" opacity="0.65" pointerEvents="none" />{n.item.id === selectedId && !n.locked && <>{[[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]].map(([x, y], i) => <rect key={i} className="scale-handle" data-testid={`scale-handle-${i}`} x={x - 4 / (scale * camera.zoom * n.item.scaleX)} y={y - 4 / (scale * camera.zoom * n.item.scaleY)} width={8 / (scale * camera.zoom * n.item.scaleX)} height={8 / (scale * camera.zoom * n.item.scaleY)} fill="#fffdf7" stroke="#6e9b75" vectorEffect="non-scaling-stroke" onPointerDown={e => onHandleDown(e, 'scale', { x, y })} />)}<path d={`M0 ${b.y}V${b.y - 23 / (scale * camera.zoom * n.item.scaleY)}`} stroke="#6e9b75" vectorEffect="non-scaling-stroke" pointerEvents="none" /><circle data-testid="rotation-handle" className="rotation-handle" cx="0" cy={b.y - 23 / (scale * camera.zoom * n.item.scaleY)} r={4.5 / (scale * camera.zoom * n.item.scaleX)} fill="#fffdf7" stroke="#6e9b75" vectorEffect="non-scaling-stroke" onPointerDown={e => onHandleDown(e, 'rotate')} /></>}</g>; })}
+        {selected?.item.rig && preferences.showBones && !playing && <g transform={matrixString(selected.matrix)} className="rig-overlay">{forwardKinematics(selected.item.rig).filter(b => !['leftShoulder', 'rightShoulder', 'leftHip', 'rightHip', 'root'].includes(b.id)).map(b => <g key={b.id}><path d={`M${b.start.x} ${b.start.y}L${b.end.x} ${b.end.y}`} stroke={selectedBone === b.id ? '#337a46' : '#5a8a5e'} vectorEffect="non-scaling-stroke" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.7" pointerEvents="none" /><circle cx={b.end.x} cy={b.end.y} r={13 / (scale * camera.zoom * selected.item.scaleX)} fill="transparent" onPointerDown={event => onBoneDown(event, selected, b.id)} className="bone-hit" data-bone={b.id} aria-label={`Pose ${b.name}`} /><circle cx={b.end.x} cy={b.end.y} r={(selectedBone === b.id ? 5 : 3.8) / (scale * camera.zoom * selected.item.scaleX)} fill={b.locked ? '#a3aa9b' : selectedBone === b.id ? '#daf4a6' : '#fffdf7'} stroke="#4f8155" vectorEffect="non-scaling-stroke" strokeWidth="1.3" pointerEvents="none" /></g>)}</g>}
+        {draft.length > 0 && <g pointerEvents="none">{tool === 'pen' ? <path d={draft.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ')} fill="none" stroke={preferences.brushColor} strokeWidth={preferences.brushSize} strokeLinecap="round" /> : first && last && (tool === 'ellipse' ? <ellipse cx={(first.x + last.x) / 2} cy={(first.y + last.y) / 2} rx={Math.abs(last.x - first.x) / 2} ry={Math.abs(last.y - first.y) / 2} fill="#f0b88e" opacity="0.75" /> : <rect x={Math.min(first.x, last.x)} y={Math.min(first.y, last.y)} width={Math.abs(last.x - first.x)} height={Math.abs(last.y - first.y)} rx="8" fill="#c5b1ed" opacity="0.75" />)}</g>}
+        {box && <rect x={Math.min(box.start.x, box.end.x)} y={Math.min(box.start.y, box.end.y)} width={Math.abs(box.end.x - box.start.x)} height={Math.abs(box.end.y - box.start.y)} fill="#94b97220" stroke="#7d9d61" strokeWidth="1" vectorEffect="non-scaling-stroke" pointerEvents="none" />}
+      </g>
+    </svg><div className="artboard-label">{project.sceneName} <span>{String(project.sceneOrder.indexOf(project.sceneId) + 1).padStart(2, '0')}</span></div></div>
+    {!project.items.length && tool === 'select' && <div className="empty-canvas"><Sparkles size={28} /><h3>A blank canvas. A fresh start.</h3><p>Draw something, import your art, or add a character.</p><button className="button primary" onClick={() => useEditor.getState().addCharacter()}>Add your first character <MoveUpRight size={15} /></button></div>}
+    <div className="stage-bottom"><div className="stage-hint"><MousePointer2 size={13} /><span>{tool === 'rig' ? 'Drag a joint · Shift: direct rotation' : tool === 'pen' ? preferences.drawingMode === 'cel' ? 'Draw a cel · F7: blank · F6: copy previous' : 'Draw a stroke · choose Frame-by-frame for cels' : tool === 'hand' ? 'Drag to explore your canvas' : tool === 'camera' ? 'Drag to pan the animated camera' : tool === 'text' ? 'Click the canvas to add your words' : chosen.length > 1 ? `${chosen.length} layers selected · Ctrl/⌘ G to group` : 'Shift-click to multiselect · drag corners to scale'}</span></div><div className="zoom-controls"><button className="icon-button" aria-label="Zoom out" onClick={() => useEditor.getState().setZoom(zoom - 10)}><Minus size={14} /></button><button className="zoom-value" onClick={() => { useEditor.getState().setZoom(100); useEditor.getState().setPan({ x: 0, y: 0 }); }} title="Reset editor zoom (not camera)">{Math.round(zoom)}%</button><button className="icon-button" aria-label="Zoom in" onClick={() => useEditor.getState().setZoom(zoom + 10)}><Plus size={14} /></button><span className="zoom-divider" /><button className="icon-button" aria-label="Fit canvas" onClick={() => { useEditor.getState().setZoom(100); useEditor.getState().setPan({ x: 0, y: 0 }); }}><Expand size={14} /></button></div></div><div className="workspace-mark">YOUR IDEAS, IN MOTION.</div>
   </section>;
 }

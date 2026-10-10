@@ -3,11 +3,36 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL, fileURLToPath } = require('node:url');
 const { randomUUID } = require('node:crypto');
+const { decodeLam, readProjectData, MAX_LAM_BYTES } = require('./lib/core.cjs');
+const { ProjectVault, atomicWrite, boundedRead } = require('./vault.cjs');
+const { SafeUpdater } = require('./lib/updater.cjs');
+// A separate profile keeps packaged CI smoke tests away from real creator data.
+if (process.env.LUNO_TEST_USER_DATA && process.env.LUNO_DISABLE_UPDATES === '1') app.setPath('userData', path.resolve(process.env.LUNO_TEST_USER_DATA));
+let vault; let updater; let allowQuit = false; let closing = false;
+const preparations = new Map();
+async function prepare(reason) {
+  if (!window || !rendererReady) throw new Error('The editor has not finished opening. Please try again.');
+  const id = randomUUID();
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { preparations.delete(id); reject(new Error('The editor did not confirm a durable save.')); }, 45_000);
+    preparations.set(id, { resolve, reject, timer }); window.webContents.send('luno:prepare', { id, reason });
+  });
+  await vault.flush();
+}
+async function closeSafely() {
+  if (closing || allowQuit) return; closing = true;
+  try { await prepare('close'); allowQuit = true; app.quit(); }
+  catch (error) {
+    window?.webContents.send('luno:resume');
+    const result = await dialog.showMessageBox(window, { type: 'warning', buttons: ['Keep editing', 'Quit without saving'], defaultId: 0, cancelId: 0, title: 'Keep your creation safe', message: 'The latest save could not be completed.', detail: `${error.message} Export a .lam copy before quitting.` });
+    if (result.response === 1) { allowQuit = true; app.quit(); }
+  } finally { closing = false; }
+}
 
 let window;
 let workspace;
 function projectArgument(args) {
-  const value = args.find(arg => arg.toLowerCase().endsWith('.luno'));
+  const value = args.find(arg => /\.(lam|luno)$/i.test(arg));
   if (!value) return undefined;
   try { return value.startsWith('file:') ? fileURLToPath(value) : value; }
   catch { return undefined; }
@@ -15,8 +40,8 @@ function projectArgument(args) {
 let pendingFile = projectArgument(process.argv);
 let rendererReady = false;
 const devUrl = process.env.LUNO_DEV_URL;
-const MAX_PROJECT_BYTES = 40_000_000;
-const allowedExportTypes = new Set(['png', 'svg', 'gif']);
+
+const allowedExportTypes = new Set(['png', 'svg', 'gif', 'mp4', 'zip']);
 const trustedFile = pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href;
 
 // The renderer gets narrow capabilities, never Node, arbitrary paths, or raw IPC.
@@ -32,15 +57,10 @@ async function getWorkspace() {
   catch { workspace = null; }
   return workspace;
 }
-async function atomicWrite(file, data) {
-  const temporary = `${file}.${randomUUID()}.tmp`;
-  try { await fs.writeFile(temporary, data, { flag: 'wx' }); await fs.rename(temporary, file); }
-  finally { await fs.rm(temporary, { force: true }).catch(() => {}); }
-}
 async function readProject(file) {
-  const stat = await fs.stat(file);
-  if (!stat.isFile() || stat.size > MAX_PROJECT_BYTES) throw new Error('Please choose a Luno project smaller than 40 MB.');
-  return fs.readFile(file, 'utf8');
+  const bytes = await boundedRead(file, MAX_LAM_BYTES);
+  readProjectData(bytes); // Validate before crossing the process boundary; do not modify the source.
+  return bytes;
 }
 async function deliverPendingFile() {
   if (!pendingFile || !rendererReady || !window) return;
@@ -66,7 +86,7 @@ function installMenu() {
       { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
     ] },
     { label: 'View', submenu: [{ role: 'togglefullscreen' }, ...(!app.isPackaged ? [{ role: 'reload' }, { role: 'toggleDevTools' }] : [])] },
-    { label: 'Help', submenu: [{ label: 'Quick setup', click: () => command('setup') }, { label: 'A little help & shortcuts', click: () => command('help') }] },
+    { label: 'Help', submenu: [{ label: 'Check for updates…', click: () => command('updates') }, { label: 'Quick setup', click: () => command('setup') }, { label: 'A little help & shortcuts', click: () => command('help') }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -84,6 +104,7 @@ function createWindow() {
       partition: 'persist:luno-studio',
     },
   });
+  window.on('close', event => { if (!allowQuit) { event.preventDefault(); void closeSafely(); } });
   window.once('ready-to-show', () => window.show());
   window.webContents.setWindowOpenHandler(({ url }) => {
     try {
@@ -98,7 +119,7 @@ function createWindow() {
   window.webContents.on('will-prevent-unload', event => {
     const response = dialog.showMessageBoxSync(window, {
       type: 'warning', buttons: ['Keep editing', 'Quit without saving'], defaultId: 0, cancelId: 0,
-      title: 'Keep your little creation', message: 'Your local save did not finish.', detail: 'Use File → Save a copy to keep your project before quitting.',
+      title: 'Keep your little creation', message: 'Your local save did not finish.', detail: 'Use File → Save a .lam copy to keep your project before quitting.',
     });
     if (response === 1) event.preventDefault();
   });
@@ -107,7 +128,7 @@ function createWindow() {
   studioSession.setPermissionCheckHandler(() => false);
   studioSession.webRequest.onHeadersReceived((details, callback) => {
     const development = Boolean(devUrl && !app.isPackaged);
-    const policy = `default-src 'self'; script-src 'self'${development ? " 'unsafe-inline'" : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'${development ? ' ws://127.0.0.1:5173 ws://localhost:5173' : ''}; object-src 'none'; base-uri 'self'; frame-src 'none'`;
+    const policy = `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${development ? " 'unsafe-inline'" : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' data:${development ? ' ws://127.0.0.1:5173 ws://localhost:5173' : ''}; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-src 'none'`;
     callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] } });
   });
   if (devUrl && !app.isPackaged) {
@@ -128,22 +149,21 @@ else {
   app.whenReady().then(() => {
     ipcMain.handle('luno:save-project', async (event, data, name) => {
       assertTrusted(event);
-      if (typeof data !== 'string' || Buffer.byteLength(data) > MAX_PROJECT_BYTES) throw new Error('The project must be smaller than 40 MB.');
-      let project; try { project = JSON.parse(data); } catch { throw new Error('Invalid project data.'); }
-      if (project.version !== 1 || !Array.isArray(project.items)) throw new Error('Invalid project data.');
-      const result = await dialog.showSaveDialog(window, { title: 'Save your little creation', defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.luno`), filters: [{ name: 'Luno Animate project', extensions: ['luno'] }] });
+      if (!(data instanceof Uint8Array) || data.byteLength > MAX_LAM_BYTES) throw new Error('The project must be smaller than 64 MB.');
+      decodeLam(data);
+      const result = await dialog.showSaveDialog(window, { title: 'Save your little creation', defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.lam`), filters: [{ name: 'Luno Animate project', extensions: ['lam'] }] });
       if (result.canceled || !result.filePath) return false;
       await atomicWrite(result.filePath, data); return true;
     });
     ipcMain.handle('luno:open-project', async event => {
       assertTrusted(event);
-      const result = await dialog.showOpenDialog(window, { title: 'Open a little creation', defaultPath: await getWorkspace() || app.getPath('documents'), properties: ['openFile'], filters: [{ name: 'Luno Animate project', extensions: ['luno'] }] });
+      const result = await dialog.showOpenDialog(window, { title: 'Open a little creation', defaultPath: await getWorkspace() || app.getPath('documents'), properties: ['openFile'], filters: [{ name: 'Luno Animate project', extensions: ['lam', 'luno'] }] });
       if (result.canceled || !result.filePaths[0]) return null;
       return readProject(result.filePaths[0]);
     });
     ipcMain.handle('luno:save-export', async (event, bytes, name, extension) => {
       assertTrusted(event);
-      if (!allowedExportTypes.has(extension) || !Array.isArray(bytes) || bytes.length > 150_000_000 || !bytes.every(value => Number.isInteger(value) && value >= 0 && value <= 255)) throw new Error('Invalid export data.');
+      if (!allowedExportTypes.has(extension) || !(bytes instanceof Uint8Array) || bytes.byteLength > 150_000_000) throw new Error('Invalid export data.');
       const result = await dialog.showSaveDialog(window, { title: 'Share a little magic', defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.${extension}`), filters: [{ name: `${extension.toUpperCase()} file`, extensions: [extension] }] });
       if (result.canceled || !result.filePath) return false;
       await atomicWrite(result.filePath, Buffer.from(bytes)); return true;
@@ -156,8 +176,22 @@ else {
     });
     ipcMain.handle('luno:get-workspace', async event => { assertTrusted(event); return getWorkspace(); });
     ipcMain.handle('luno:ready', async event => { assertTrusted(event); rendererReady = true; await deliverPendingFile(); });
+    vault = new ProjectVault(app.getPath('userData'), app.getVersion());
+    const handle = (name, callback) => ipcMain.handle(`luno:${name}`, async (event, ...args) => { assertTrusted(event); return callback(...args); });
+    handle('library-list', () => vault.list()); handle('library-save', (bytes, thumb) => vault.save(bytes, thumb)); handle('library-load', id => vault.load(id));
+    handle('library-patch', (id, patch) => vault.patch(id, patch)); handle('library-delete', id => vault.deleteForever(id)); handle('library-recover', id => vault.recover(id));
+    handle('settings-get', () => vault.getSettings()); handle('settings-save', settings => vault.saveSettings(settings));
+    handle('backups-list', () => vault.backups()); handle('backup-create', () => vault.backup('manual'));
+    handle('backup-restore', async id => { const result = await dialog.showMessageBox(window, { type: 'warning', title: 'Restore your library', message: 'Restore every project from this backup?', detail: 'A new backup of your current library is kept first. Stay on the project home until restore is complete.', buttons: ['Cancel', 'Restore backup'], defaultId: 0, cancelId: 0 }); if (result.response !== 1) return false; const restored = await vault.restore(id); workspace = undefined; return restored; });
+    ipcMain.on('luno:prepared', (event, result) => { try { assertTrusted(event); } catch { return; } const pending = preparations.get(result?.id); if (!pending || typeof result.ok !== 'boolean') return; clearTimeout(pending.timer); preparations.delete(result.id); if (result.ok) pending.resolve(); else pending.reject(new Error(typeof result.error === 'string' ? result.error.slice(0, 400) : 'The editor is still busy.')); });
+    updater = new SafeUpdater({ app, send: state => { if (!window) return; window.webContents.send(state ? 'luno:update-state' : 'luno:resume', state); }, prepare, backup: reason => vault.backup(reason), allowQuit: value => { allowQuit = value; } });
+    handle('update-state', () => updater.state); handle('update-check', () => updater.check()); handle('update-install', () => updater.install()); handle('update-defer', () => updater.defer());
+    handle('update-automatic', enabled => updater.setAutomatic(enabled));
+    ipcMain.on('luno:activity', (event, activity) => { try { assertTrusted(event); updater.updateActivity(activity); } catch { /* Untrusted activity cannot influence installation. */ } });
     installMenu(); createWindow();
+    void vault.getSettings().then(settings => updater.initialize(settings.preferences?.automaticUpdates ?? true)).catch(() => updater.initialize(false));
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
+  app.on('before-quit', event => { if (!allowQuit && window) { event.preventDefault(); void closeSafely(); } });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }

@@ -1,4 +1,4 @@
-import { serializeProject } from './project';
+import { encodeLam } from './lam';
 import type { Project } from './types';
 export const safeName = (name: string) => name.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 80) || 'Luno animation';
 export function downloadBlob(blob: Blob, name: string) {
@@ -8,14 +8,14 @@ export function downloadBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export async function saveProject(project: Project): Promise<boolean> {
-  const data = serializeProject(project);
+  const data = encodeLam(project);
   if (window.luno) return window.luno.saveProject(data, safeName(project.name));
-  downloadBlob(new Blob([data], { type: 'application/json' }), `${safeName(project.name)}.luno`);
+  downloadBlob(new Blob([data], { type: 'application/vnd.luno.lam' }), `${safeName(project.name)}.lam`);
   return true;
 }
 export async function saveExport(blob: Blob, name: string, extension: string): Promise<boolean> {
   if (window.luno) {
-    const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+    const bytes = new Uint8Array(await blob.arrayBuffer());
     return window.luno.saveExport(bytes, safeName(name), extension);
   }
   downloadBlob(blob, `${safeName(name)}.${extension}`); return true;

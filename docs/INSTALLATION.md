@@ -1,70 +1,95 @@
-# Installers and releases
+# Installers, protected updates, and releases
 
-## Installation for creators
+## For creators
 
-A packaged Luno build is a standalone desktop app. Its installation wizard and first-run studio wizard are separate:
+1. Download an owner-reviewed public release, or a successful v0.2 [installer Actions run](https://github.com/Dinomax2005/luno-animate/actions/workflows/installers.yml). Actions downloads need GitHub login and expire after 30 days.
+2. Extract the artifact ZIP. Windows opens the `.exe` setup wizard; macOS uses the appropriate Intel/Apple silicon DMG; Linux uses the AppImage or DEB.
+3. Open Luno. Its separate first-run wizard chooses a starting project, canvas/FPS, and default export folder. Skipping the tour opens the real project home, not a fake pre-populated library.
+4. Create/animate locally. Export `.lam` copies for portable backups. Double-click `.lam` to open it with Luno where the OS association is installed; legacy `.luno` remains supported.
 
-1. **The OS installer** puts Luno on your computer. Windows uses an NSIS guided wizard, macOS uses a drag-to-Applications DMG, Linux uses AppImage/DEB.
-2. **The studio wizard** chooses your project template, canvas, frame rate, and (on desktop) default project folder. It only appears automatically on first launch. Reopen it any time with **Quick setup**.
+No development tools/account/server are needed after installation. Linux AppImage may need distribution FUSE support. Do not disable the Chromium sandbox as a normal installation workaround.
 
-Download installer artifacts from a successful `Build desktop installers` GitHub Actions run. Artifacts are ZIP containers, not the installer itself: extract them before opening the enclosed `.exe`, `.dmg`, `.deb`, or `.AppImage`. Artifacts require a GitHub login and expire after 30 days.
+Unsigned development installers may trigger Windows publisher warnings and are not a frictionless macOS public installer. Download only the official repository's assets. Signing/notarization and clean-machine Windows/macOS installation tests are required before calling a build a trusted production release.
 
-For Linux AppImage, your distribution may require FUSE support. The DEB is the alternative on Debian/Ubuntu. Do not disable Chromium's sandbox as a normal installation workaround.
+## What the updater does
 
-Use `.luno` project files for reliable backups and sharing between computers. Images are embedded; no external assets need to be copied. The desktop app registers `.luno` file associations where supported by the operating system.
+**Updates & backups** shows actual GitHub status, automation preference, downloaded update state, and five local complete library snapshots. Automatic checks use official **published stable releases**, never prereleases/drafts/downgrades. Downloads are checksum-verified by electron-updater. Actions ZIP artifacts by themselves cannot update an installed app.
 
-## Building on your computer
+After 2 clean idle minutes, a 30-second notice warns of restart; any activity pauses it. Editing dialogs, playback, exports, imports, dirty/failed saves, and gestures block installation. Choose **Not now** to defer 4 hours. You can also turn automation off or explicitly choose **Save, back up & restart**.
 
-Install Node.js 22.12+ once, then:
+The guarded install path flushes/acknowledges the renderer's latest work/settings, validates and copies the entire native library, fsyncs/re-reads the backup, then permits installation. A failure or interrupted verification does **not** install or close the studio. Regular quitting does not trigger an update. External `.lam` originals are never touched. Close-time failed saves offer Keep editing/Quit without saving.
+
+| Installation | Update installation |
+| --- | --- |
+| Windows NSIS | Protected download + setup restart |
+| macOS Developer ID signed app + signed ZIP feed | Protected automatic installation |
+| Unsigned macOS / development | Manual newer installer; automatic install disabled |
+| Linux AppImage | Protected AppImage replacement/restart |
+| DEB/system-managed Linux | Package-manager/manual update |
+
+There may be no published stable update yet. The app explicitly says so and remains usable offline. Version 0.1 has no updater; install v0.2 once manually. Future releases must preserve the same app identity/user-data directory and migrate document versions without deleting the previous data.
+
+## Where your work lives
+
+- Browser: IndexedDB `luno-library-v1`, three prior saves, separately persisted preferences. Clearing browser data can remove it; exported `.lam` files are independent.
+- Desktop: Electron user-data directory (`luno-animate` under the platform app-data location). `library/projects` contains immutable binary revisions and atomic pointers. `work-backups` contains five complete library snapshots, including Trash/revisions/settings and the **default export-folder setting**, not the external files in that folder.
+- Each native project retains current + three prior saves. The home project menu offers **Recover prior save**.
+- Backup restore stages/validates the replacement first, makes a new current-library backup, and uses a rollback journal for crash recovery. It restores all projects and settings, not just the selected project.
+- A corrupt pointer/file blocks automatic installation instead of silently excluding work. Preserve the entire user-data folder before manual recovery; do not delete it to troubleshoot an update. Keep independent `.lam` copies on another device. No software backup can protect against every hardware/OS failure.
+
+The old current-project localStorage entry is migrated once and retains a migration/recovery copy. Uninstall intentionally leaves app data (`deleteAppDataOnUninstall: false`). Do not use two browser tabs to concurrently edit the same project; cross-tab collaborative merging is not implemented.
+
+## Build and verification
+
+Requires Node.js 22.12+; build on the target OS:
 
 ```sh
 npm ci
 npm run verify
-npm run desktop:windows # on Windows
-npm run desktop:mac     # on macOS
-npm run desktop:linux   # on Linux
+npm run desktop:windows
+npm run desktop:mac
+npm run desktop:linux
 ```
 
-Find the installers in `release/`. The `electron-builder.yml` file contains all packaging settings. On Windows, `oneClick: false` and `allowToChangeInstallationDirectory: true` provide guided installation rather than a silent installer. User app data is not intentionally removed during uninstall.
+`release/` is ignored. Packaging includes generated native validator/updater bundles, renderer/fonts, notices, exact unmodified MPL source ZIP, file associations, and `app-update.yml`. Build-time downloads require GitHub/Electron helper access. Use hosted Actions when local networking blocks them; do not bypass TLS.
 
-Initial builds download Electron and electron-builder helper binaries from GitHub. A network that blocks GitHub release-asset hosts can prevent native packaging even when the editor builds successfully. In that environment use the native GitHub Actions build workflow, not an insecure TLS override.
+- `ci.yml`: types, engine/store/IDB tests, production build, native vault/updater failure tests, full browser media/library/editor tests.
+- `installers.yml`: native Windows/macOS/Linux build and manifests; native tests on every OS; packaged Linux smoke covering isolation, real filesystem library/LAM/backup, native MP4 with audio, close and association-style startup. Updates are disabled and a temporary profile is used for smoke tests.
+- `release.yml`: exact successful installer source (only download-link metadata may differ), flattened assets, verified SHA-512 manifest references, flat SHA-256 download sums, and a **draft release** for explicit owner review.
 
-## Build automation
+Workflows can be manually dispatched once they exist on the default branch. Arena branch source pushes already build test installers; publishing/merging main is not a prerequisite for those artifacts. The session branch does not automatically merge to main.
 
-- `ci.yml`: types, unit tests, production renderer, and browser tests on pushes and PRs.
-- `installers.yml`: builds Windows, macOS, and Linux on native runners. After the workflow is on the default branch, it can be run manually. It runs automatically on Arena working branches when app sources change. It uploads installers without publishing a public release or changing the default branch.
-- `release.yml`: accepts a version tag and successful installer run ID, validates that the run belongs to the exact source commit, downloads the artifacts, computes SHA-256 checksums, and creates a **draft, prerelease** release. Publication is an explicit owner action.
+## Publish an update feed
 
-Nothing in the app auto-updates or downloads remote code. Creators can download a newer installer and keep using existing `.luno` files.
+After all installers/tests pass for the same source:
 
-Manual workflow dispatch becomes available after the workflow files are on the repository’s default branch. Arena branch pushes already trigger installer builds; no default-branch change is required to get test artifacts.
+1. Run the draft workflow with `v0.2.0` (matching `package.json`) and that successful installer run ID, or download the verified artifacts and run `node scripts/prepare-release.mjs installers release-assets`.
+2. Upload the **flat** assets: Windows EXE + block map, macOS Intel/ARM ZIPs + DMGs + block maps, Linux AppImage/DEB, `latest.yml`, `latest-mac*.yml`, `latest-linux*.yml`, and `SHA256SUMS.txt`. Do not rename installers after generating manifests.
+3. Review notes and OS/signing checks. The script validates manifest version, referenced files, and exact SHA-512; SHA-256 sums use flat names matching GitHub downloads (`sha256sum -c SHA256SUMS.txt`).
+4. Publish the draft as a **stable, non-prerelease** only after review. Drafts and prereleases are deliberately excluded from the updater. Do not overwrite an existing version's assets—ship a newer version.
+5. Test an actual update from the prior packaged version on each supported OS, including update cancellation, insufficient disk space, locked/corrupt documents, interrupted restart, and backup restore. Mock policy tests do not prove real installation on every OS.
 
-## Signing for public distribution
+Configured feed: `Dinomax2005/luno-animate`, public GitHub stable releases. No credentials are required by the installed app.
 
-Without certificates, artifacts are **unsigned development builds**. Windows may warn about an unknown publisher. macOS unsigned builds are not intended for normal double-click public distribution. Production release claims should only be made after signing, notarization, and installation tests on the target OS.
+## Signing secrets
 
-Optional GitHub Actions repository secrets:
+Configure secrets in **GitHub Settings → Secrets and variables → Actions**, never in code/chat:
 
 | Secret | Use |
 | --- | --- |
-| `WINDOWS_CERTIFICATE` | Windows code-signing certificate accepted by electron-builder (`CSC_LINK`). |
-| `WINDOWS_CERTIFICATE_PASSWORD` | Password for the Windows certificate. |
-| `MACOS_CERTIFICATE` | Apple Developer ID certificate accepted by electron-builder. |
-| `MACOS_CERTIFICATE_PASSWORD` | Password for the Apple certificate. |
-| `APPLE_ID` | Apple account for notarization. |
-| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific notarization password. |
-| `APPLE_TEAM_ID` | Apple Developer team. |
+| `WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD` | Windows signing certificate/password accepted by electron-builder. |
+| `MACOS_CERTIFICATE` / `MACOS_CERTIFICATE_PASSWORD` | Apple Developer ID certificate/password. |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Apple notarization. |
 
-Configure secrets **in GitHub Settings → Secrets and variables → Actions**, never in source code or chat. The build workflow passes them only to the appropriate platform job. Full production Windows trust also depends on your certificate provider/reputation.
+Missing/empty secrets are omitted, not interpreted as certificate paths. Public Windows trust depends on certificate reputation too. App ID/name/user-data location must remain stable across releases.
 
 ## Release checklist
 
-- [ ] Update `package.json`, preload version, and UI version labels together.
-- [ ] Pass CI and all native installer jobs for the same source commit.
-- [ ] Configure signing and notarization for a frictionless public release.
-- [ ] Install/uninstall on clean Windows, macOS, and Linux machines.
-- [ ] Open a `.luno` file through the OS file association.
-- [ ] Verify wizard state and autosave survive app restart/update.
-- [ ] Export/import a project containing embedded artwork.
-- [ ] Verify published checksums and document early-version limitations.
-- [ ] Publish the draft release after review; keep a copy of install artifacts.
+- [ ] Version metadata and native bridge match; no schema changes without migrations.
+- [ ] Types, unit/IDB/native failure tests, browser media decode/cancel, and production build pass.
+- [ ] All native installer jobs pass; manifests/block maps are present.
+- [ ] Signing/notarization configured where required.
+- [ ] Clean-machine Windows/macOS/Linux install/uninstall/file association tested.
+- [ ] Actual previous-to-newer update tested, including save/backup failure and restart recovery.
+- [ ] Portable import/export with embedded image/audio and multiple scenes verified.
+- [ ] Flat checksum/manifest assets validated; publish only after owner review.

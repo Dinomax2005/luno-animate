@@ -1,57 +1,65 @@
-# Architecture
+# Architecture · v0.2
 
-## Guiding choices
+## Local-first boundaries
 
-**Local-first, no backend.** The editor has no accounts, telemetry, cloud storage, remote fonts, or API dependency. This keeps first use simple and packaged use offline. A desktop bridge adds native dialogs without exposing Node to the renderer.
+There are no creator accounts, telemetry, cloud storage, remote fonts, backend, or server-side encoders. React renders an offline SVG studio. Electron adds a narrow context bridge, native file dialogs, filesystem persistence, and optional GitHub update traffic. Artwork never goes to the update service.
 
-**One document, explicit version.** `Project` is a version-1 JSON document with canvas settings, ordered scene items, bone hierarchies, and per-item keyframes. Zod validates imports and recovery documents. Limits protect the renderer against oversized canvases, embedded images, cyclic rigs, reserved IDs, duplicate IDs/frames, and keys outside the timeline.
+## Versioned engine
 
-**Keep the engine independent.** Project construction, kinematics, pose capture, and interpolation are UI-independent TypeScript. Drawing/import/export need browser APIs; rig and animation logic do not. Future renderers can reuse the core document and sampling functions.
+`Project` is schema 2: stable document identity, global canvas/FPS, ordered scenes, and an inline active scene plus separate inactive scenes. Each scene owns layers, keys, cels, camera, sounds, duration, background, and work area. Activating a scene creates a new root and retains the previous scene; it does not duplicate or discard its art. Schema-1 `.luno` JSON migration supplies scene/camera/audio defaults without changing original source files.
 
-## Render path
+Zod and semantic validation check bounds, identities, duplicate frames, missing layer/bone/scene references, rig/layer cycles, audio timing, and work areas. `.lam` adds a versioned compressed container, bounded inflation, and payload integrity checking; see [LAM-FORMAT](LAM-FORMAT.md). Checksums detect accidental corruption, not authorship or malicious changes.
 
-`Project → sampleProject(frame) → SceneItem transforms → SVG primitives`
+`project.ts`, `animation.ts`, `rig.ts`, and `geometry.ts` are UI-independent. Affine matrices compose animated group/rig/attachment ancestry. Layers paint in coherent hierarchical stacks; sibling ordering controls stacking. Visibility, opacity, and locking inherit. Cutout parts follow selected bone positions/angles; imported art is not automatically mesh-skinned.
 
-Characters use forward kinematics to position artwork parts. Bone local angles inherit parent world angles; each segment length stays fixed. The two-bone IK solver handles hand/foot endpoint drags, clamps unreachable targets to the limb's reach, and retains bend direction. Shift bypasses IK for direct joint rotation. Custom child bones are rendered as added character segments.
+## Sampling and rendering
 
-The same `ItemGraphic` / `SceneArtwork` components render the editor and exports. Selection handles, bone guides, grids, and playheads live outside exported artwork. Image imports are decoded and rasterized to embedded PNGs, including SVG imports, instead of accepting executable SVG markup into the DOM.
+`Project + active frame → sampled channels/cels/camera → hierarchical RenderNodes → shared SVG artwork`
 
-The initial character is procedurally assembled, not mesh-skinned. Arbitrary imported images support whole-object transform animation. A future mesh/weight system can add attachment data to the versioned document; do not present today's whole-image transforms as automatic skinning.
+Forward kinematics resolves bone hierarchies; connected hand/foot IK maintains segment lengths and bend direction, clamps reach, and respects joint locks/limits through editor actions. Shift performs direct rotation. Text is escaped React content. SVG image imports are rasterized into embedded PNGs, not inserted as untrusted markup.
 
-## Animation
+Nine easing modes include configurable cubic Bézier, overshoot, bounce, elastic, hold, and conventional curves. Auto-key seeds the starting pose before a later edit. Drawing cels hold until the next cel unless single-frame exposure is selected; empty cels end a held drawing. Camera channels use position, zoom, and rotation independently of editor pan/zoom.
 
-A keyframe stores transform channels and optional bone-angle channels. Sparse channels are sampled independently. Interpolation supports linear, smooth in/out, soft landing, and stepped hold. Rotation channels take the short angular path; a full spin preset uses quarter-turn intermediate keys. Motions replace the selected layer's keys and remain editable.
+Editor-only grids, onion ghosts, handles, paths, bones, and guides do not enter exports. Shared `SceneArtwork` implements all real artwork. Uniform animated grouping can be flattened by baking child keys at every frame; lossy skew/out-of-range flattening is refused instead of silently changing the picture. Attaching/detaching parts explicitly warns about replacing transform keys; Undo retains the previous state.
 
-Playback uses `requestAnimationFrame` and elapsed real time rather than incrementing a frame on every browser repaint. It respects document FPS, loop state, pause, and background-tab visibility. Auto-key records edits on animated/later frames, seeding frame zero when the first later pose is made.
+Elapsed-time requestAnimationFrame playback respects FPS, work range, loop/pause, and document visibility. Sound playback follows the same frame clock, seeks on loop/scrub, and pauses outside playback. A separate sound subscriber avoids rerendering the entire app every frame.
 
-## State and history
+## State and transactions
 
-Zustand holds the document and transient editor state. Document-changing actions record immutable snapshots; undo history is bounded at 40 entries. Drag gestures begin one checkpoint and update without adding a snapshot for each pointer event. Redo is discarded when a new edit starts. Keyframe drags commit only on pointer release.
+Zustand holds immutable document roots and transient selection/tools/playback/modal state. History is limited to 40 document snapshots. Pointer gestures record one checkpoint, then make non-recording updates; timeline key drags commit on release. Keys can be selected/copied/pasted with relative timing and fresh IDs. Scene/layer duplication rebinds group/rig references and key IDs.
 
-Only documents and preferences are persisted. Selection, playback, undo history, canvas pan, and modal state are transient. Autosave is debounced and flushed on backgrounding/unload. The header reports saving/saved/error state. Storage quota failures are surfaced and users can save a `.luno` file. Invalid stored documents preserve a recovery copy. Desktop unload failures get an explicit keep-editing/quit prompt.
+History/selection are not persisted. Renderer file/navigation services serialize writes, check document identity before marking saved, and flush before switching projects/home. Imported document ID collisions receive a new document identity rather than overwriting another project. Native preparation blurs pending fields before taking the final save snapshot. Browser unload warns during dirty/failed saves, ongoing gestures, and protected navigation; it cannot await asynchronous disk writes, so wait for the saved indicator before closing a tab.
 
-## Exports
+## Two real repositories
 
-- SVG: static React serialization of sampled artwork; vectors remain vectors except embedded raster imports.
-- PNG: SVG rasterized on a browser canvas; 1×/2× scaling and optional transparent background.
-- GIF: each frame sampled/rasterized, palette-quantized, then encoded with `gifenc`. Full loop, progress, cancellation, up to 300 frames and 960 px longest side. The GIF format rounds delays to centiseconds.
-- Project: complete versioned document, including embedded artwork and rigs.
+**Browser:** IndexedDB atomically stores binary payload + card metadata; revisions and the replacement document share one readwrite transaction. Failed transactions abort cleanly. Three prior saves, favorites, trash, and preferences persist. Storage cleanup/quota and conflicting edits in multiple browser tabs remain browser limitations; portable copies are the safety net.
 
-The build preserves dependency/font license notices and exposes them in the Help dialog.
+**Desktop:** one serialized vault stores `library/projects/<safe-id>/<sequence>-<uuid>.lam`, with an atomic `entry.json` pointer. It fsyncs a complete immutable revision before changing the pointer and retains the current + three prior revisions. Numeric monotonic sequences tolerate a backwards wall clock. Trash is metadata until explicit permanent deletion. Damaged pointers offer recovery; a damaged project cannot be silently omitted from an update backup.
 
-The export encoder and dialogs are lazy-loaded. All chunks/fonts are included in native packaging. No network renderer or export service is required.
+Complete native snapshots include projects/trash/revisions, studio settings, and the default export-folder setting. Copy/read/parse/integrity verification and file/directory fsync precede committing their manifests. Five verified snapshots are retained. Restore first validates a staged tree, protects the current library in a new backup, and records a durable rollback journal before swapping directories/settings. Startup rolls back incomplete restores. Initialization failures remain fail-closed across every subsequent request. Backups are local; export important projects to other media as well.
+
+The v0.1 current-project localStorage key is imported once; a migration recovery copy remains. Invalid legacy storage also retains a recovery copy. An uninstall does not intentionally remove desktop creator data.
+
+## Media exports
+
+- **SVG/PNG:** shared sampled vector artwork; embedded imports remain raster. PNG supports transparency and up to 8192 px per side.
+- **GIF:** sampled scoped scenes/work areas, palette quantization/real GIF encoding; 300 frames/960 px, progress and cancellation, no sound.
+- **MP4:** capability-probed WebCodecs + Mediabunny MP4 muxing; H.264/AAC preferred, AV1/Opus fallbacks are disclosed. OfflineAudioContext mixes audible clipped/trimmed scene tracks at correct timeline offsets. Video/audio encode concurrently with cancellation/progress. Up to 300 seconds/18,000 frames/150 MB. No cloud converter.
+- **Sprite ZIP:** transparent PNG atlas plus ordered per-frame JSON, max 256 frames/8192 px atlas.
+- **LAM:** the entire editable document, independent of the current export scope.
+
+Media and server-side React serialization are lazy-loaded. Build output contains all needed chunks/fonts and an exact unmodified Mediabunny source ZIP with MPL notices.
+
+## Guarded updater
+
+`electron-updater` is bundled into an isolated native module; development/unsupported platform installs are disabled. Feed: public `Dinomax2005/luno-animate` stable releases, newer semantic versions only, never downgrades. Automatic checks start after 20 seconds and repeat every 6 hours; checks do not block offline editing. SDK eager downloads and quit-triggered installation are disabled; the controller explicitly downloads then guards installation.
+
+Clean 120-second idle + a 30-second cancellable warning precede automatic installation. Pointer/key/input/wheel, playback, gestures, dialogs, exports/imports, dirty work, and persistence failures prevent that restart. Manual install still requires no active operation. Installation requires a UUID renderer save acknowledgement (45-second timeout), flushed vault, and successful verified complete backup. Any failed/interrupted preparation or backup leaves the app open/resumes editing, with a delayed retry. Only this guarded path permits silent `quitAndInstall`.
+
+Stable published releases must include matching `latest*.yml`, checksum-referenced installers/ZIPs/AppImages, and block maps. A draft/prerelease/Actions artifact is not a stable feed. Unsigned macOS and system-package Linux use manual updates. End-to-end installation still requires target-OS/release/signing validation, not just mocked policy tests.
 
 ## Desktop security
 
-`contextIsolation`, `sandbox`, and `webSecurity` remain enabled; `nodeIntegration` is disabled. The preload exposes only save/open/export/folder and narrow menu/file-event subscriptions. Main-process IPC checks the originating window and URL, validates arguments and file-size boundaries, uses native dialogs, and writes atomically. No renderer-provided arbitrary filesystem path is accepted.
+Sandbox/context isolation/web security remain enabled; Node is not exposed. Main IPC verifies sender window/origin, argument types/size bounds, safe project IDs, and document integrity. No arbitrary renderer path is accepted; native dialogs choose external paths. Permissions are denied. Remote navigation/scripts/assets/frames/plugins are blocked; external links are restricted to this repository's HTTPS GitHub pages. CSP permits local data/blob media for offline audio/images/exports.
 
-Permission requests are denied. Navigation is restricted to the bundled editor/local dev origin. External links are restricted to the project's GitHub path and open in the OS browser. Production CSP blocks remote scripts, embedded frames, plugins, and remote assets. The developer URL is accepted only in unpackaged mode and only for localhost HTTP.
-
-## Adding a feature
-
-1. Extend versioned document types/schema if the feature changes project data.
-2. Implement sampling/math independently of UI where possible.
-3. Add a store action and decide its undo transaction boundaries.
-4. Share artwork rendering with exports instead of implementing a second renderer.
-5. Add engine tests and a browser test for the creator workflow.
-6. Update early-version limitations and migrate existing projects before changing format versions.
+Native tests run against temporary directories; packaged smoke uses an isolated test profile with updates disabled. Build/release scripts verify exact successful source, flatten asset filenames, and validate manifest SHA-512 plus flat SHA-256 download checksums before drafting a release.

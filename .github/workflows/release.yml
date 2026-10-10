@@ -1,42 +1,54 @@
-name: Publish a desktop release
+name: Prepare a verified desktop release
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag, matching package.json (for example v0.1.0)'
+        description: 'Tag matching package.json (for example v0.2.0)'
         required: true
         type: string
       run_id:
-        description: 'Successful Build desktop installers run ID on this branch'
+        description: 'Successful Build desktop installers run ID for this exact source'
         required: true
         type: string
 permissions:
   contents: write
   actions: read
 jobs:
-  publish:
+  prepare:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Validate release inputs
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - name: Validate the build and tag
         env:
           TAG: ${{ inputs.tag }}
           RUN_ID: ${{ inputs.run_id }}
           GH_TOKEN: ${{ github.token }}
         run: |
           node -e 'const p=require("./package.json"); if(process.env.TAG !== `v${p.version}` || !/^\d+$/.test(process.env.RUN_ID)) process.exit(1);'
-          gh run view "$RUN_ID" --json conclusion,headSha,workflowName > /tmp/run.json
-          node -e 'const r=require("/tmp/run.json"); if(r.conclusion !== "success" || r.headSha !== process.env.GITHUB_SHA || r.workflowName !== "Build desktop installers") process.exit(1);'
-      - name: Download verified installers
+          gh run view "$RUN_ID" --json conclusion,headSha,workflowName > /tmp/luno-build.json
+          BUILT_SHA=$(node -e 'const r=require("/tmp/luno-build.json"); if(r.conclusion !== "success" || r.workflowName !== "Build desktop installers") process.exit(1); process.stdout.write(r.headSha);')
+          test -n "$BUILT_SHA"
+          git diff --exit-code "$BUILT_SHA" "$GITHUB_SHA" -- . ':(exclude)src/config/desktop-build.json'
+          echo "BUILT_SHA=$BUILT_SHA" >> "$GITHUB_ENV"
+      - name: Download verified installers and update manifests
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.run_id }}
         run: gh run download "$RUN_ID" --dir installers
-      - name: Create draft release with checksums
+      - run: node scripts/prepare-release.mjs installers release-assets
+      - name: Create a draft release for owner review
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
-          find installers -type f -print0 | sort -z | xargs -0 sha256sum > installers/SHA256SUMS.txt
-          gh release create "$TAG" --target "$GITHUB_SHA" --draft --prerelease --title "Luno Animate ${TAG}" --notes-file docs/release-notes.md
-          find installers -type f -print0 | xargs -0 gh release upload "$TAG" --clobber
+          gh release create "$TAG" --target "$BUILT_SHA" --draft --title "Luno Animate ${TAG}" --notes-file docs/release-notes.md
+          gh release upload "$TAG" release-assets/*

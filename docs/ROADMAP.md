@@ -1,36 +1,21 @@
-# A sensible path from early studio to production tool
+# Roadmap
 
-## Working foundation
+## v0.2: implemented
 
-- Drawing and imported artwork; vector shape library.
-- Connected character bones; FK and two-bone IK; custom bones.
-- Keyframes, auto-key, easing, editable motion presets, and timeline playback.
-- Local persistence, validated project files, undo/redo, GIF/PNG/SVG export.
-- Desktop packaging, first-run wizard, automated quality/build workflows.
+Real persistent all-project home; schema-2 scenes; portable binary LAM with legacy migration; WebCodecs MP4 with sound/progress/cancel; vector/text/group composition; drawing cels/onion exposure; key clipboard and advanced easing; camera; audio waveform/timing; FK/IK/custom/limited joints and cutout attachments; filesystem revisions/backups/transactional restore; guarded newer-stable GitHub updater; installer associations/feed manifests; beginner-first setup.
 
-## Next: richer drawing and rigs
+## Validation and distribution work
 
-- Editable Bézier paths, pressure-aware brushes, and fill tools.
-- Frame-by-frame cels and onion skinning (not present in the initial build).
-- Drawable part attachments, cut-out artwork segmentation, bind/rest poses.
-- Mesh deformation, bone weights, skinning, rotation limits, and IK constraints.
-- Facial parts, mouth switches, reusable/custom character assets.
+Clean Windows/macOS runtime/install testing, signing/notarization, and a real published-version update exercise on every supported OS remain release responsibilities. Hosted installer creation/Linux packaged smoke and mocked updater failure tests are not replacements for those checks. Configure/publish stable GitHub release manifests for automatic update delivery. Browser cross-tab concurrent editing is not coordinated.
 
-## Next: larger animation projects
+## Future features (not claimed in v0.2)
 
-- Multiple scenes, nested groups/symbols, motion clips, copy/paste pose keys.
-- Dedicated pose override buffers for manual-key workflows.
-- Audio tracks, waveforms, lip-sync helpers.
-- Video/WebM/MP4, sprite sheets, larger GIF rendering in workers.
-- Optimized storage (IndexedDB/native assets), autosave versions, recent projects.
+- Reusable symbols and nested timelines.
+- Vector shape morphing, masks/clipping, richer paths/brushes.
+- Arbitrary mesh skinning, deformable art/weights, richer custom rig creation.
+- Lip-sync and stronger audio/scene editing.
+- Better large-document undo/memory budgets and GPU rendering.
+- Broad platform/codec compatibility and production export pipelines.
+- Optional password encryption (not “only this program can read”).
 
-## Before calling it production-ready
-
-- Choose an explicit source license before public open-source distribution.
-- Signed/notarized installer releases and clean-machine installation tests.
-- Native crash recovery and durable per-project backups.
-- Large-document profiling, lazy asset decoding, worker-based export.
-- Accessibility/contrast audit, touch-first inspector navigation, translations.
-- Format migration tests, release/update policy, reproducible artifact checksums.
-
-Adobe Animate has many years of drawing, scene, audio, and publishing features. Luno's initial build intentionally focuses on a small, usable pose → keyframe → playback workflow, not claims of complete feature parity.
+Prefer small, tested workflows over inflated feature counts. Keep legacy documents recoverable and project data independent of updates.

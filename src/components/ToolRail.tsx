@@ -1,4 +1,4 @@
-import { Bone, Circle, Hand, MousePointer2, PenLine, Settings2, Square, Upload } from 'lucide-react';
+import { Bone, Camera, Type, Circle, Hand, MousePointer2, PenLine, Settings2, Square, Upload } from 'lucide-react';
 import type { Tool } from '../engine/types';
 import { useEditor } from '../store/editor';
 const tools: { id: Tool; label: string; key: string; icon: typeof MousePointer2 }[] = [
@@ -7,6 +7,8 @@ const tools: { id: Tool; label: string; key: string; icon: typeof MousePointer2 
   { id: 'pen', label: 'Draw', key: 'B', icon: PenLine },
   { id: 'rectangle', label: 'Rectangle', key: 'R', icon: Square },
   { id: 'ellipse', label: 'Ellipse', key: 'O', icon: Circle },
+  { id: 'text', label: 'Text', key: 'T', icon: Type },
+  { id: 'camera', label: 'Camera', key: 'C', icon: Camera },
   { id: 'rig', label: 'Pose rig', key: 'G', icon: Bone },
 ];
 export function ToolRail({ onImport }: { onImport: () => void }) {

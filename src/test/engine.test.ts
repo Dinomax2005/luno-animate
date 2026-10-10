@@ -129,7 +129,7 @@ describe('project format and import boundaries', () => {
     const p = createProject(); const item = p.items.at(-1)!; p.keyframes[item.id] = createPreset(item, 'wave', p.duration);
     expect(parseProject(serializeProject(p))).toEqual(p);
   });
-  it('rejects unknown versions', () => { const p = { ...createProject(), version: 2 }; expect(() => parseProject(JSON.stringify(p))).toThrow('supported'); });
+  it('rejects unknown versions', () => { const p = { ...createProject(), version: 99 }; expect(() => parseProject(JSON.stringify(p))).toThrow('supported'); });
   it('rejects duplicate layer IDs', () => { const p = createProject(); p.items.push(p.items[0]); expect(() => parseProject(serializeProject(p))).toThrow('duplicate'); });
   it('rejects cyclic rigs', () => { const p = createProject(); p.items.at(-1)!.rig!.bones[0].parentId = 'head'; expect(() => parseProject(serializeProject(p))).toThrow('hierarchy'); });
   it('rejects missing bone parents', () => { const p = createProject(); p.items.at(-1)!.rig!.bones[0].parentId = 'missing'; expect(() => parseProject(serializeProject(p))).toThrow('hierarchy'); });

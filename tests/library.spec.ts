@@ -1,0 +1,43 @@
+import { test, expect } from '@playwright/test';
+import { createProject } from '../src/engine/project';
+import { encodeLam, decodeLam } from '../src/engine/lam';
+import { readFile } from 'node:fs/promises';
+
+test('fresh home is an empty real library, not a populated mock gallery', async ({ page }) => { const errors: string[] = []; page.on('pageerror', e => errors.push(e.message)); await page.goto('/'); await expect(page.getByRole('heading', { name: 'Good ideas live here.' })).toBeVisible(); await expect(page.getByRole('button', { name: 'New project', exact: true })).toBeEnabled(); await expect(page.locator('.home-project-card')).toHaveCount(0); await expect(page.getByRole('heading', { name: 'Your first story starts here.' })).toBeVisible(); await page.reload(); await expect(page.locator('.home-project-card')).toHaveCount(0); expect(errors).toEqual([]); });
+
+test('creates independent projects, persists thumbnails, renames, searches, stars, duplicates, and restores Trash', async ({ page }) => {
+  await page.goto('/'); await page.getByRole('button', { name: 'Make a little magic', exact: false }).click();
+  await expect(page.getByTestId('stage')).toBeVisible(); await page.getByLabel('Project name').fill('Vienna wave'); await page.getByLabel('Project name').press('Enter');
+  await page.getByRole('button', { name: 'Back to all projects' }).click(); await expect(page.locator('.home-project-card')).toHaveCount(1); await expect(page.getByAltText('Vienna wave preview')).toBeVisible();
+  await page.getByRole('button', { name: 'New project', exact: true }).click(); const dialog = page.getByRole('dialog', { name: 'Create a new project' }); await dialog.getByLabel('Project name').fill('A title'); await dialog.getByRole('button', { name: 'Animated title', exact: false }).click(); await dialog.getByRole('button', { name: 'Create project', exact: false }).click();
+  await expect(page.getByLabel('Project name')).toHaveValue('A title'); await expect(page.getByLabel('Text content')).toBeVisible(); await page.getByRole('button', { name: 'Back to all projects' }).click(); await expect(page.locator('.home-project-card')).toHaveCount(2);
+  await page.getByLabel('Favorite Vienna wave', { exact: true }).click(); await page.getByRole('button', { name: /^Favorites/ }).click(); await expect(page.locator('.home-project-card')).toHaveCount(1);
+  await page.getByRole('button', { name: /^All projects/ }).click(); await page.getByLabel('Vienna wave project actions').click(); await page.getByRole('button', { name: 'Rename', exact: true }).click(); const rename = page.getByRole('dialog', { name: 'Rename your project' }); await rename.getByLabel('Project name').fill('A Viennese hello'); await rename.getByRole('button', { name: 'Save name' }).click(); await expect(page.getByRole('heading', { name: 'A Viennese hello' })).toBeVisible();
+  await page.getByLabel('Search projects').fill('Viennese'); await expect(page.locator('.home-project-card')).toHaveCount(1); await page.getByLabel('Search projects').fill('');
+  await page.getByLabel('A Viennese hello project actions').click(); await page.getByRole('button', { name: 'Duplicate', exact: true }).click(); await expect(page.locator('.home-project-card')).toHaveCount(3);
+  await page.getByLabel('A Viennese hello project actions', { exact: true }).click(); await page.getByRole('button', { name: 'Move to Trash', exact: true }).click(); await expect(page.locator('.home-project-card')).toHaveCount(2);
+  await page.getByRole('button', { name: /^Trash/ }).click(); await expect(page.locator('.home-project-card')).toHaveCount(1); await page.getByLabel('A Viennese hello project actions').click(); await page.getByRole('button', { name: 'Restore project', exact: true }).click(); await expect(page.locator('.home-project-card')).toHaveCount(0);
+  await page.getByRole('button', { name: /^All projects/ }).click(); await page.reload(); await expect(page.locator('.home-project-card')).toHaveCount(3);
+  await page.locator('.project-open').filter({ has: page.getByRole('heading', { name: 'A Viennese hello', exact: true }) }).click(); await expect(page.getByLabel('Project name')).toHaveValue('A Viennese hello'); await expect(page.getByText('15 bones · character')).toBeVisible();
+});
+
+test('LAM import/export includes all scenes and importing the same ID never overwrites the existing project', async ({ page }) => {
+  const project = createProject('title'); project.name = 'Portable creation'; const bytes = Buffer.from(encodeLam(project)); await page.goto('/');
+  await page.getByLabel('Open Luno project file').setInputFiles({ name: 'creation.lam', mimeType: 'application/vnd.luno.lam', buffer: bytes }); await expect(page.getByLabel('Project name')).toHaveValue(project.name);
+  await page.getByLabel('Open Luno project file').setInputFiles({ name: 'creation.lam', mimeType: 'application/vnd.luno.lam', buffer: bytes }); await expect(page.getByLabel('Project name')).toHaveValue('Portable creation (imported)');
+  const promise = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await promise; expect(download.suggestedFilename()).toBe('Portable creation imported.lam'); const path = await download.path(); const imported = decodeLam(await readFile(path!)); expect(imported.id).not.toBe(project.id); expect(imported.items).toEqual(project.items);
+  await page.getByRole('button', { name: 'Back to all projects' }).click(); await expect(page.locator('.home-project-card')).toHaveCount(2);
+});
+
+test('scene switching and edited text survive closing the studio and reloading', async ({ page }) => {
+  await page.goto('/'); await page.getByRole('button', { name: 'A fresh canvas', exact: false }).click(); await expect(page.getByTestId('stage')).toBeVisible(); await page.getByRole('button', { name: 'Text tool', exact: true }).click(); const stage = await page.getByTestId('stage').boundingBox(); if (!stage) throw new Error('No stage'); await page.mouse.click(stage.x + stage.width / 2, stage.y + stage.height / 2); await page.getByLabel('Text content').fill('One real chapter'); await page.getByLabel('Text content').press('Tab');
+  await page.getByRole('button', { name: 'Add scene', exact: true }).click(); await expect(page.getByText('No layers yet')).toBeVisible(); await page.getByLabel('Active scene').selectOption({ index: 0 }); await page.locator('.layer-select').first().click(); await expect(page.getByLabel('Text content')).toBeVisible();
+  await page.getByRole('button', { name: 'Back to all projects' }).click(); await expect(page.locator('.home-project-card')).toHaveCount(1); await page.reload(); await page.locator('.project-open').first().click(); await page.locator('.layer-select').first().click(); await expect(page.getByLabel('Text content')).toHaveValue('One real chapter'); await expect(page.getByLabel('Active scene').locator('option')).toHaveCount(2);
+});
+
+test('frame-by-frame tools create real cels and support blank exposure/undo', async ({ page }) => {
+  await page.goto('/'); await page.getByRole('button', { name: 'A fresh canvas', exact: false }).click(); await page.getByRole('button', { name: 'Draw tool', exact: true }).click(); await page.getByLabel('Drawing mode').selectOption('cel'); const stage = await page.getByTestId('stage').boundingBox(); if (!stage) throw new Error('No stage'); await page.mouse.move(stage.x + 80, stage.y + 80); await page.mouse.down(); await page.mouse.move(stage.x + 180, stage.y + 180, { steps: 5 }); await page.mouse.up();
+  await expect(page.getByLabel('Layer name')).toHaveValue('Frame-by-frame drawing'); await expect(page.locator('.timeline-cel')).toHaveCount(1); await page.keyboard.press('ArrowRight'); await page.keyboard.press('F7'); await expect(page.locator('.timeline-cel')).toHaveCount(2); await page.getByRole('button', { name: 'Undo', exact: true }).click(); await expect(page.locator('.timeline-cel')).toHaveCount(1);
+});
+
+test('browser updates clearly distinguish installer downloads from an automatic update feed', async ({ page }) => { await page.goto('/'); await page.getByRole('button', { name: 'Updates & backups', exact: false }).click(); const modal = page.getByRole('dialog', { name: 'Updates and protected backups' }); await expect(modal).toContainText('browser studio'); await expect(modal).toContainText('failed save or backup blocks'); await expect(modal.getByRole('button', { name: 'Check GitHub' })).toBeDisabled(); });
