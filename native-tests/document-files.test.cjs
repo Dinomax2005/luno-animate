@@ -9,7 +9,7 @@ const { encodeLam, decodeLam } = require('../electron/lib/core.cjs');
 
 function project(name = 'Opened document', id = 'document-1') { return { version: 2, id, name, width: 960, height: 600, fps: 24, duration: 72, background: '#ffffff', items: [], keyframes: {}, sceneId: 'scene-1', sceneName: 'Scene 1', sceneOrder: ['scene-1'], scenes: [], camera: { x: 480, y: 300, zoom: 1, rotation: 0, keys: [] }, audio: [], workArea: { start: 0, end: 71 } }; }
 async function fixture(t, write) {
-  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'luno-document-files-'));
+  const folder = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'luno-document-files-'))); // macOS temp paths have a /private alias.
   t.after(() => fs.rm(folder, { recursive: true, force: true }));
   const profile = path.join(folder, 'profile'); await fs.mkdir(profile);
   const file = path.join(folder, 'Original.lam'), bytes = encodeLam(project()); await fs.writeFile(file, bytes);

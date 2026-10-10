@@ -48,7 +48,7 @@ test('hand-drawn creation, blank/duplicate frames, real playback, LAM export and
   await create.getByLabel('Project name').fill('Ink studies'); await create.getByRole('button', { name: 'Create project', exact: true }).click();
   await expect(page.getByTestId('stage')).toBeVisible(); await expect(page.getByLabel('Drawing mode')).toHaveValue('cel'); await expect(page.getByLabel('Workspace', { exact: true })).toHaveValue('Drawing'); await expect(page.getByRole('button', { name: 'Automatic keyframes' })).toHaveCount(0);
   const paths = page.getByTestId('stage').locator('.art-item path'); await ink(page); await expect(paths).toHaveCount(1);
-  await page.keyboard.press('F7'); await expect(page.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('aria-valuenow', '2'); await expect(paths).toHaveCount(0); await expect(page.getByTestId('onion-ghost')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Next blank frame from Properties', exact: true }).click(); await expect(page.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('aria-valuenow', '2'); await expect(paths).toHaveCount(0); await expect(page.getByTestId('onion-ghost')).toHaveCount(1);
   await ink(page, 20); await expect(paths).toHaveCount(1); await page.keyboard.press('F6'); await expect(page.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('aria-valuenow', '3'); await expect(paths).toHaveCount(1);
   await expect(page.locator('.timeline-cel')).toHaveCount(3); await expect(page.locator('.document-animation-mode')).toHaveText('DRAW');
   await page.getByRole('button', { name: 'Play animation', exact: true }).click();

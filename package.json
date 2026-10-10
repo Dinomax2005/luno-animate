@@ -23,7 +23,7 @@
     "desktop:linux": "npm run build && electron-builder --linux --publish never",
     "verify": "npm run typecheck && npm test && npm run build && npm run test:native",
     "test:desktop": "playwright test --config=playwright.desktop.config.ts",
-    "test:native": "node --test native-tests/*.test.cjs"
+    "test:native": "node scripts/test-native.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
