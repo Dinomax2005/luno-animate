@@ -1,0 +1,84 @@
+appId: studio.luno.animate
+productName: Luno Animate
+copyright: Copyright © 2026 Luno Animate contributors
+artifactName: Luno-Animate-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+  buildResources: assets
+files:
+  - dist/**/*
+  - electron/**/*
+  - assets/icon.png
+  - package.json
+  - '!node_modules/**/*'
+asar: true
+npmRebuild: false
+fileAssociations:
+  - ext: luno
+    name: Luno Animate Project
+    description: Editable Luno animation project
+    role: Editor
+    mimeType: application/x-luno-project
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Luno Animate
+  uninstallDisplayName: Luno Animate
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  installerSidebar: assets/installer-sidebar.bmp
+  uninstallerSidebar: assets/installer-sidebar.bmp
+  installerHeader: assets/installer-header.bmp
+  include: assets/installer.nsh
+mac:
+  icon: assets/icon.png
+  category: public.app-category.graphics-design
+  hardenedRuntime: true
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+dmg:
+  title: Luno Animate
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 145
+      y: 175
+      type: file
+    - x: 395
+      y: 175
+      type: link
+      path: /Applications
+linux:
+  icon: assets/icon.png
+  category: Graphics
+  synopsis: A little less complicated. A lot more animated.
+  description: A friendly, local-first 2D animation studio with drawing, character rigging, keyframes, and animation exports.
+  maintainer: Luno Animate contributors
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  desktop:
+    entry:
+      Name: Luno Animate
+      StartupWMClass: luno-animate
+      Keywords: Animation;Rigging;Drawing;2D;
+publish: null

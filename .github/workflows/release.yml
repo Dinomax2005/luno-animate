@@ -1,0 +1,42 @@
+name: Publish a desktop release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, matching package.json (for example v0.1.0)'
+        required: true
+        type: string
+      run_id:
+        description: 'Successful Build desktop installers run ID on this branch'
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release inputs
+        env:
+          TAG: ${{ inputs.tag }}
+          RUN_ID: ${{ inputs.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node -e 'const p=require("./package.json"); if(process.env.TAG !== `v${p.version}` || !/^\d+$/.test(process.env.RUN_ID)) process.exit(1);'
+          gh run view "$RUN_ID" --json conclusion,headSha,workflowName > /tmp/run.json
+          node -e 'const r=require("/tmp/run.json"); if(r.conclusion !== "success" || r.headSha !== process.env.GITHUB_SHA || r.workflowName !== "Build desktop installers") process.exit(1);'
+      - name: Download verified installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: gh run download "$RUN_ID" --dir installers
+      - name: Create draft release with checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          find installers -type f -print0 | sort -z | xargs -0 sha256sum > installers/SHA256SUMS.txt
+          gh release create "$TAG" --target "$GITHUB_SHA" --draft --prerelease --title "Luno Animate ${TAG}" --notes-file docs/release-notes.md
+          find installers -type f -print0 | xargs -0 gh release upload "$TAG" --clobber
