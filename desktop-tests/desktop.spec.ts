@@ -23,7 +23,7 @@ test('packaged app: safe bridge, native library, LAM association, backups, real 
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [`${folder}/Native file.lam`] })) as typeof dialog.showOpenDialog;
     }, directory);
     await page.getByRole('button', { name: 'I’ll explore on my own' }).click(); await expect(page.locator('.home-project-card')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Make a little magic', exact: false }).click(); await expect(page.getByTestId('stage')).toBeVisible();
+    await page.getByRole('button', { name: 'Make a little magic', exact: false }).click(); await expect(page.getByTestId('stage')).toBeVisible(); await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false');
     await page.getByLabel('Project name').fill('Native little creation'); await page.getByLabel('Project name').press('Enter');
     await page.getByRole('button', { name: 'File', exact: true }).click(); await page.getByRole('button', { name: 'Export .lam project…', exact: false }).click(); await expect(page.getByText('Your portable .lam project is saved', { exact: false })).toBeVisible();
     const lam = await readFile(join(directory, 'Native file.lam')); expect(decodeLam(lam).name).toBe('Native little creation'); expect(lam.subarray(0, 7).toString()).toBe('LUNOLAM');

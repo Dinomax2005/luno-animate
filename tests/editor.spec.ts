@@ -8,6 +8,7 @@ async function openStudio(page: Page) {
   if (await page.locator('.project-open').count()) await page.locator('.project-open').first().click();
   else await page.getByRole('button', { name: 'Make a little magic', exact: false }).click();
   await expect(page.getByTestId('stage')).toBeVisible();
+  await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false');
 }
 
 test('opens a working studio without runtime errors', async ({ page }) => {
@@ -123,6 +124,7 @@ test('opens valid project files and rejects corrupt ones without losing the canv
   const project = createProject('shapes'); project.name = 'Imported little bounce';
   await page.getByLabel('Open Luno project file').setInputFiles({ name: 'sample.luno', mimeType: 'application/json', buffer: Buffer.from(serializeProject(project)) });
   await expect(page.getByLabel('Project name')).toHaveValue(project.name);
+  await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false');
   await page.getByLabel('Open Luno project file').setInputFiles({ name: 'broken.luno', mimeType: 'application/json', buffer: Buffer.from('{"version":900}') });
   await expect(page.getByRole('alert')).toContainText('not a supported');
   await expect(page.getByLabel('Project name')).toHaveValue(project.name);
