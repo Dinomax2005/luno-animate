@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, Check, Download, FolderArchive, History, RefreshCw, ShieldCheck, Undo2, X } from 'lucide-react';
 import { APP_VERSION } from '../config/version';
+import { useDocumentFiles } from '../services/document-files';
 import { useEditor } from '../store/editor';
 import { flushProject, goHome, refreshLibrary } from '../services/library';
 import { Modal } from './Modal';
@@ -34,7 +35,7 @@ export function UpdatesDialog() {
     try {
       await goHome(); if (useEditor.getState().view !== 'home') throw new Error('Save your current project before restoring.');
       useEditor.getState().setBusy(true); useEditor.getState().setBlocked('Restoring your protected project library…');
-      if (await window.luno.library.restore(id)) { await refreshLibrary(); const settings = await window.luno.library.getSettings(); if (settings.preferences) useEditor.setState(s => ({ preferences: { ...s.preferences, ...settings.preferences } })); setBackups(await window.luno.library.backups()); useEditor.getState().notify('Library restored. A backup of the previous library was kept too.'); }
+      if (await window.luno.library.restore(id)) { useDocumentFiles.getState().reset(); await refreshLibrary(); const settings = await window.luno.library.getSettings(); if (settings.preferences) useEditor.setState(s => ({ preferences: { ...s.preferences, ...settings.preferences } })); setBackups(await window.luno.library.backups()); useEditor.getState().notify('Library restored. A backup of the previous library was kept too.'); }
     } catch (e) { setError(e instanceof Error ? e.message : 'The backup could not be restored.'); }
     finally { setBusy(false); useEditor.getState().setBusy(false); useEditor.getState().setBlocked(null); }
   };

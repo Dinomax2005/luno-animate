@@ -4,8 +4,8 @@ const { readFileSync } = require('node:fs');
 const yaml = require('js-yaml');
 const { version, name } = require('../package.json');
 const { newerStable } = require('../electron/update-policy.cjs');
-test('v0.3.4 is eligible for the previous installed updater and identity remains unchanged', () => {
-  assert.equal(version, '0.3.4'); assert(newerStable(version, '0.2.0')); assert(!newerStable(version, version));
+test('v0.3.5 is eligible for the previous installed updater and identity remains unchanged', () => {
+  assert.equal(version, '0.3.5'); assert(newerStable(version, '0.2.0')); assert(newerStable(version, '0.3.4')); assert(!newerStable(version, version));
   assert.equal(name, 'luno-animate');
   assert(readFileSync('electron/preload.cjs', 'utf8').includes(`version: '${version}'`));
   assert.equal(require('../src/config/desktop-build.json').version, version);

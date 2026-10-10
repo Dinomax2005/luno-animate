@@ -5,6 +5,7 @@ import { useEditor } from '../../store/editor';
 import { createProject } from '../../engine/project';
 import { createPreset } from '../../engine/animation';
 import { saveProject } from '../../engine/files';
+import { useDocumentFiles } from '../../services/document-files';
 import { changeRecord, duplicateProject, openDocument, openLibraryProject, recoverProject, refreshLibrary } from '../../services/library';
 import { repository } from '../../services/repository';
 import { Modal } from '../Modal';
@@ -76,6 +77,6 @@ export function ProjectHome({ onOpen }: { onOpen: () => void }) {
       </div>
     </main>
     {working && <div className="home-working" role="status"><RefreshCw className="spin" size={13} /> Document operation in progress</div>}
-    {modal && <Modal title={modal.kind === 'rename' ? 'Rename your project' : 'Permanently delete project'} className="home-action-modal" onClose={() => setModal(null)}><h1>{modal.kind === 'rename' ? 'Rename document' : 'Permanently delete document'}</h1>{modal.kind === 'rename' ? <label className="form-label">Project name<input autoFocus value={name} maxLength={100} onChange={e => setName(e.target.value)} /></label> : <p>“{modal.project.name}” and its local revision history will be permanently removed. This cannot be undone.</p>}<div className="dialog-footer"><button className="button secondary" onClick={() => setModal(null)}>Cancel</button><button className={`button ${modal.kind === 'delete' ? 'danger-button' : 'primary'}`} disabled={working || (modal.kind === 'rename' && !name.trim())} onClick={() => void run(async () => { if (modal.kind === 'rename') await changeRecord(modal.project.id, { name }); else { await repository().deleteForever(modal.project.id); await refreshLibrary(); } setModal(null); })}>{modal.kind === 'rename' ? 'Save name' : 'Delete permanently'}</button></div></Modal>}
+    {modal && <Modal title={modal.kind === 'rename' ? 'Rename your project' : 'Permanently delete project'} className="home-action-modal" onClose={() => setModal(null)}><h1>{modal.kind === 'rename' ? 'Rename document' : 'Permanently delete document'}</h1>{modal.kind === 'rename' ? <label className="form-label">Project name<input autoFocus value={name} maxLength={100} onChange={e => setName(e.target.value)} /></label> : <p>“{modal.project.name}” and its local revision history will be permanently removed. This cannot be undone.</p>}<div className="dialog-footer"><button className="button secondary" onClick={() => setModal(null)}>Cancel</button><button className={`button ${modal.kind === 'delete' ? 'danger-button' : 'primary'}`} disabled={working || (modal.kind === 'rename' && !name.trim())} onClick={() => void run(async () => { if (modal.kind === 'rename') await changeRecord(modal.project.id, { name }); else { await repository().deleteForever(modal.project.id); useDocumentFiles.getState().forget(modal.project.id); await refreshLibrary(); } setModal(null); })}>{modal.kind === 'rename' ? 'Save name' : 'Delete permanently'}</button></div></Modal>}
   </div>;
 }

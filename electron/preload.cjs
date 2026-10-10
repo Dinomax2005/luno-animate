@@ -4,7 +4,8 @@ const subscribe = (channel, callback) => {
   ipcRenderer.on(channel, handler); return () => ipcRenderer.removeListener(channel, handler);
 };
 contextBridge.exposeInMainWorld('luno', {
-  platform: process.platform, version: '0.3.4',
+  platform: process.platform, version: '0.3.5',
+  documents: { open: () => ipcRenderer.invoke('luno:document-open'), save: (token, data) => ipcRenderer.invoke('luno:document-save', token, data), saveAs: (data, name) => ipcRenderer.invoke('luno:document-save-as', data, name) },
   saveProject: (data, name) => ipcRenderer.invoke('luno:save-project', data, name),
   openProject: () => ipcRenderer.invoke('luno:open-project'),
   saveExport: (bytes, name, extension) => ipcRenderer.invoke('luno:save-export', bytes, name, extension),

@@ -1,3 +1,21 @@
+# Starting and saving documents
+
+**Start** is a compact production launcher: New document, Open, and up to five recent library documents. Choose Hand-drawn or Rig / motion to enter the technical New dialog. The startup checkbox is persistent; Help can reopen Start at any time. What’s New appears once per application version (including upgrades), before Start on a normal launch. Native file associations finish opening first and suppress Start; the optional setup wizard is not an automatic launch interruption.
+
+| Action | Shortcut | Behavior |
+| --- | --- | --- |
+| Save | Ctrl/⌘ S | Overwrites the opened, approved `.lam`; a new/unlinked document requests a destination. |
+| Save As… | Ctrl/⌘ Shift S | Chooses a new file; later Save uses it only after the write succeeds. |
+| Export .lam copy… | File menu | Writes/downloads a portable copy without changing the current Save destination. |
+| Open | Ctrl/⌘ O | Native picker or compatible browser handle; ordinary input fallback is read-only. |
+
+The document tab’s `*` indicates modified external-file content. The status bar names the linked file; **Saved locally** describes the library only. Save errors remain in a dismissible header banner with Save As, not merely a timed toast. Cancel leaves the destination unchanged. Changed/missing/read-only files are not silently recreated or clobbered; reopen or choose Save As. File permissions are session-only: library snapshots after a restart need Open/Save As to link an external file again. Important external files also deserve independent backups.
+
+## Animation document types
+
+- **Hand-drawn:** selected drawing layer, pen/cel drawing, onion skin on, automatic transform keys off, single-frame cels. Frame 1 starts blank; the initial two-frame scene grows as needed. **F7 / Blank frame** advances and creates an empty cel; **F6 / Duplicate frame** advances with an independent copy. An existing destination cel is kept. Empty/uncreated frames render blank during playback/export. Frame arrows and the timeline can also select a frame directly for drawing. Drawing workspaces and defaults are restored when reopening this type.
+- **Rig / motion:** vector selection, characters/cutouts, drag/pose editing, manual or automatic keyframes, interpolation, and FK/IK. Existing documents without a stored type default to this workflow. Legacy cel tools in this type keep their original current-frame insertion/held-exposure semantics.
+
 # Production workspace
 
 Luno Animate uses a dense, desktop-oriented 2D animation workbench: application menus, a document toolbar, Layers/Library, a stage, a frame timeline, Properties, and a live status bar. The interface borrows familiar animation-software conventions, not Adobe branding or assets. This is not Adobe Animate feature parity.
@@ -56,7 +74,7 @@ The timeline contains object tracks, drawing exposures, a scene-camera track, an
 
 ## Document safety and delivery
 
-The document manager defaults to a list; Templates are an explicit section. File → New opens compact document source, width/height, and FPS fields and defaults to an empty white stage. Motion presets are collapsed under the Motion tab, not shown as object-property cards. Workspace setup is a configuration form without a mascot or pose tutorial.
+The document manager defaults to a list; Templates are an explicit section. File → New opens compact document source, width/height, and FPS fields and defaults to an empty white stage for Rig / motion or a blank drawing layer for Hand-drawn. Motion presets are collapsed under the Motion tab, not shown as object-property cards. Workspace setup is a configuration form without a mascot or pose tutorial.
 
 The document manager remains a persistent local library—not example/mock projects. Returning home durably saves before navigation. Autosave status distinguishes saving, saved, and errors. Export `.lam` for portable editable copies, and use the export dialog for MP4, GIF, PNG, SVG, or sprite atlases.
 

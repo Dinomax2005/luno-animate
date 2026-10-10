@@ -2,6 +2,8 @@ import { useEditor, STORAGE_KEY, PREFS_KEY } from '../store/editor';
 import { uid, activateScene } from '../engine/project';
 import type { Project } from '../engine/types';
 import { repository, type RecordPatch } from './repository';
+import { useDocumentFiles } from './document-files';
+import { useWorkspace } from '../store/workspace';
 
 let boot: Promise<void> | null = null;
 let saveQueue: Promise<unknown> = Promise.resolve();
@@ -62,18 +64,18 @@ export async function openLibraryProject(id: string) {
   useEditor.getState().setBlocked('Opening document…');
   try {
   await flushProject(true); const project = await repository().load(id);
-  useEditor.getState().replaceProject(project, false); lastSaved = project; useEditor.getState().markSaved();
+  useEditor.getState().replaceProject(project, false); if (project.animationMode === 'frame-by-frame') useWorkspace.getState().preset('Drawing'); lastSaved = project; useEditor.getState().markSaved();
   await repository().saveSettings({ lastProjectId: id, preferences: useEditor.getState().preferences });
   } finally { useEditor.getState().setBlocked(null); }
 }
-export async function openDocument(project: Project, imported = false) {
+export async function openDocument(project: Project, imported = false, preserveName = false) {
   (document.activeElement as HTMLElement | null)?.blur?.();
   useEditor.getState().setBlocked('Giving your next idea a safe home…');
   try {
   await flushProject(true);
   const records = await repository().list();
-  if (imported && records.some(r => r.id === project.id)) project = { ...project, id: uid(), name: `${project.name} (imported)`.slice(0, 100) };
-  await repository().save(project); useEditor.getState().replaceProject(project, false); lastSaved = project; useEditor.getState().markSaved();
+  if (imported && records.some(r => r.id === project.id)) project = { ...project, id: uid(), name: preserveName ? project.name : `${project.name} (imported)`.slice(0, 100) };
+  await repository().save(project); useEditor.getState().replaceProject(project, false); if (project.animationMode === 'frame-by-frame') useWorkspace.getState().preset('Drawing'); lastSaved = project; useEditor.getState().markSaved();
   await repository().saveSettings({ lastProjectId: project.id, preferences: useEditor.getState().preferences });
   } finally { useEditor.getState().setBlocked(null); }
 }
@@ -83,4 +85,4 @@ export async function duplicateProject(id: string) {
   const originalRecord = useEditor.getState().projects.find(r => r.id === id);
   await repository().save(project, originalRecord?.thumbnail); await refreshLibrary(); useEditor.getState().notify('A separate project copy is ready.');
 }
-export async function recoverProject(id: string) { const p = await repository().recover(id); await refreshLibrary(); useEditor.getState().replaceProject(p, false); lastSaved = p; useEditor.getState().markSaved(); useEditor.getState().notify('Recovered a prior save. Your other projects are unchanged.'); }
+export async function recoverProject(id: string) { useDocumentFiles.getState().forget(id); const p = await repository().recover(id); await refreshLibrary(); useEditor.getState().replaceProject(p, false); lastSaved = p; useEditor.getState().markSaved(); useEditor.getState().notify('Recovered a prior save. Your other projects are unchanged.'); }

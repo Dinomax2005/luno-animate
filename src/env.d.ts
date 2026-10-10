@@ -1,13 +1,20 @@
 /// <reference types="vite/client" />
 interface Window {
+  showOpenFilePicker?: (options: { multiple: boolean; types: { description: string; accept: Record<string, string[]> }[] }) => Promise<import('./services/document-files').WritableFileHandle[]>;
+  showSaveFilePicker?: (options: { suggestedName: string; types: { description: string; accept: Record<string, string[]> }[] }) => Promise<import('./services/document-files').WritableFileHandle>;
   luno?: {
     platform: string; version: string;
+    documents?: {
+      open: () => Promise<import('./services/document-files').NativeOpenedFile | null>;
+      save: (token: string, data: Uint8Array) => Promise<import('./services/document-files').NativeFileTarget>;
+      saveAs: (data: Uint8Array, name: string) => Promise<import('./services/document-files').NativeFileTarget | null>;
+    };
     saveProject: (data: Uint8Array, name: string) => Promise<boolean>;
     openProject: () => Promise<Uint8Array | null>;
     saveExport: (data: Uint8Array, name: string, extension: string) => Promise<boolean>;
     chooseFolder: () => Promise<string | null>; getWorkspace: () => Promise<string | null>;
     onCommand: (handler: (command: string) => void) => () => void;
-    onProjectFile: (handler: (raw: Uint8Array) => void) => () => void; ready: () => Promise<void>;
+    onProjectFile: (handler: (raw: Uint8Array | import('./services/document-files').NativeOpenedFile) => void) => () => void; ready: () => Promise<{ openedFile: boolean } | void>;
     library: {
       list: () => Promise<import('./engine/types').ProjectRecord[]>;
       save: (bytes: Uint8Array, thumbnail?: string | null) => Promise<import('./engine/types').ProjectRecord>;

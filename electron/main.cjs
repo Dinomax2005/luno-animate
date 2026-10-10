@@ -3,12 +3,12 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL, fileURLToPath } = require('node:url');
 const { randomUUID } = require('node:crypto');
-const { decodeLam, readProjectData, MAX_LAM_BYTES } = require('./lib/core.cjs');
-const { ProjectVault, atomicWrite, boundedRead } = require('./vault.cjs');
+const { ProjectVault, atomicWrite } = require('./vault.cjs');
+const { DocumentFiles } = require('./document-files.cjs');
 const { SafeUpdater } = require('./lib/updater.cjs');
 // A separate profile keeps packaged CI smoke tests away from real creator data.
 if (process.env.LUNO_TEST_USER_DATA && process.env.LUNO_DISABLE_UPDATES === '1') app.setPath('userData', path.resolve(process.env.LUNO_TEST_USER_DATA));
-let vault; let updater; let allowQuit = false; let closing = false;
+let vault; let documents; let updater; let allowQuit = false; let closing = false;
 const preparations = new Map();
 async function prepare(reason) {
   if (!window || !rendererReady) throw new Error('The editor has not finished opening. Please try again.');
@@ -57,16 +57,11 @@ async function getWorkspace() {
   catch { workspace = null; }
   return workspace;
 }
-async function readProject(file) {
-  const bytes = await boundedRead(file, MAX_LAM_BYTES);
-  readProjectData(bytes); // Validate before crossing the process boundary; do not modify the source.
-  return bytes;
-}
 async function deliverPendingFile() {
-  if (!pendingFile || !rendererReady || !window) return;
+  if (!pendingFile || !rendererReady || !window) return false;
   const file = pendingFile; pendingFile = undefined;
-  try { window.webContents.send('luno:project-file', await readProject(file)); }
-  catch (error) { await dialog.showMessageBox(window, { type: 'error', title: 'Open document failed', message: error.message }); }
+  try { window.webContents.send('luno:project-file', await documents.open(file)); return true; }
+  catch (error) { await dialog.showMessageBox(window, { type: 'error', title: 'Open document failed', message: error.message }); return false; }
 }
 function command(name) { window?.webContents.send('luno:command', name); }
 function installMenu() {
@@ -76,7 +71,9 @@ function installMenu() {
     { label: 'File', submenu: [
       { label: 'New project', accelerator: 'CmdOrCtrl+N', click: () => command('new') },
       { label: 'Open project…', accelerator: 'CmdOrCtrl+O', click: () => command('open') },
-      { label: 'Save a copy…', accelerator: 'CmdOrCtrl+S', click: () => command('save') },
+      { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => command('save') },
+      { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => command('save-as') },
+      { label: 'Export .lam copy…', click: () => command('save-copy') },
       { label: 'Export…', accelerator: 'CmdOrCtrl+E', click: () => command('export') },
       { type: 'separator' }, isMac ? { role: 'close' } : { role: 'quit' },
     ] },
@@ -86,12 +83,13 @@ function installMenu() {
       { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
     ] },
     { label: 'View', submenu: [{ role: 'togglefullscreen' }, ...(!app.isPackaged ? [{ role: 'reload' }, { role: 'toggleDevTools' }] : [])] },
-    { label: 'Help', submenu: [{ label: 'Check for updates…', click: () => command('updates') }, { label: 'Workspace configuration', click: () => command('setup') }, { label: 'Reference', click: () => command('help') }] },
+    { label: 'Help', submenu: [{ label: "What's New…", click: () => command('whats-new') }, { label: 'Start window…', click: () => command('start') }, { label: 'Check for updates…', click: () => command('updates') }, { label: 'Workspace configuration', click: () => command('setup') }, { label: 'Reference', click: () => command('help') }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 function createWindow() {
   rendererReady = false;
+  documents.reset();
   window = new BrowserWindow({
     width: 1440, height: 950, minWidth: 1024, minHeight: 720,
     title: 'Luno Animate', show: false, backgroundColor: '#242424',
@@ -113,6 +111,8 @@ function createWindow() {
     } catch { /* Invalid external URLs stay closed. */ }
     return { action: 'deny' };
   });
+  window.webContents.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => { if (mainFrame && !inPlace) { rendererReady = false; documents.reset(); } });
+  window.webContents.on('render-process-gone', () => { rendererReady = false; documents.reset(); });
   window.webContents.on('will-navigate', (event, url) => {
     if (url !== trustedFile && !(devUrl && !app.isPackaged && url.startsWith(`${new URL(devUrl).origin}/`))) event.preventDefault();
   });
@@ -147,26 +147,36 @@ else {
   });
   app.on('open-file', (event, file) => { event.preventDefault(); pendingFile = file; void deliverPendingFile(); });
   app.whenReady().then(() => {
-    ipcMain.handle('luno:save-project', async (event, data, name) => {
-      assertTrusted(event);
-      if (!(data instanceof Uint8Array) || data.byteLength > MAX_LAM_BYTES) throw new Error('The project must be smaller than 64 MB.');
-      decodeLam(data);
-      const result = await dialog.showSaveDialog(window, { title: 'Save Luno document', defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.lam`), filters: [{ name: 'Luno Animate project', extensions: ['lam'] }] });
-      if (result.canceled || !result.filePath) return false;
-      await atomicWrite(result.filePath, data); return true;
-    });
-    ipcMain.handle('luno:open-project', async event => {
-      assertTrusted(event);
+    documents = new DocumentFiles(app.getPath('userData'));
+    const pickOpen = async () => {
       const result = await dialog.showOpenDialog(window, { title: 'Open Luno document', defaultPath: await getWorkspace() || app.getPath('documents'), properties: ['openFile'], filters: [{ name: 'Luno Animate project', extensions: ['lam', 'luno'] }] });
-      if (result.canceled || !result.filePaths[0]) return null;
-      return readProject(result.filePaths[0]);
-    });
+      return result.canceled || !result.filePaths[0] ? null : documents.open(result.filePaths[0]);
+    };
+    const pickSaveAs = async (data, name, title = 'Save Luno document as') => {
+      documents.validate(data);
+      const result = await dialog.showSaveDialog(window, { title, defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.lam`), filters: [{ name: 'Luno Animate project', extensions: ['lam'] }] });
+      if (result.canceled || !result.filePath) return null;
+      const destination = path.extname(result.filePath) ? result.filePath : `${result.filePath}.lam`;
+      return documents.saveAs(destination, data);
+    };
+    ipcMain.handle('luno:document-open', async event => { assertTrusted(event); return pickOpen(); });
+    ipcMain.handle('luno:document-save', async (event, token, data) => { assertTrusted(event); return documents.save(token, data); });
+    ipcMain.handle('luno:document-save-as', async (event, data, name) => { assertTrusted(event); return pickSaveAs(data, name); });
+    // Copy export stays separate from the document's linked Save destination.
+    ipcMain.handle('luno:save-project', async (event, data, name) => { assertTrusted(event); return Boolean(await pickSaveAs(data, name, 'Export Luno document copy')); });
+    ipcMain.handle('luno:open-project', async event => { assertTrusted(event); return (await pickOpen())?.data ?? null; });
     ipcMain.handle('luno:save-export', async (event, bytes, name, extension) => {
       assertTrusted(event);
       if (!allowedExportTypes.has(extension) || !(bytes instanceof Uint8Array) || bytes.byteLength > 150_000_000) throw new Error('Invalid export data.');
       const result = await dialog.showSaveDialog(window, { title: 'Export media', defaultPath: path.join(await getWorkspace() || app.getPath('documents'), `${safeName(name)}.${extension}`), filters: [{ name: `${extension.toUpperCase()} file`, extensions: [extension] }] });
       if (result.canceled || !result.filePath) return false;
-      await atomicWrite(result.filePath, Buffer.from(bytes)); return true;
+      const file = await documents.canonical(path.extname(result.filePath) ? result.filePath : `${result.filePath}.${extension}`);
+      if (path.extname(file).toLowerCase() !== `.${extension}`) throw new Error(`Choose a .${extension} filename for this export.`);
+      const guard = async () => {
+        if (await documents.canonical(file) !== file || await documents.isProtected(file)) throw new Error('Exports cannot replace internal application data or a changed file location.');
+        try { if (!(await fs.lstat(file)).isFile()) throw new Error('Exports cannot replace a symbolic link or special file.'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      };
+      await guard(); await atomicWrite(file, Buffer.from(bytes), guard); return true;
     });
     ipcMain.handle('luno:choose-folder', async event => {
       assertTrusted(event);
@@ -175,7 +185,7 @@ else {
       workspace = result.filePaths[0]; await atomicWrite(path.join(app.getPath('userData'), 'workspace.json'), JSON.stringify({ folder: workspace })); return workspace;
     });
     ipcMain.handle('luno:get-workspace', async event => { assertTrusted(event); return getWorkspace(); });
-    ipcMain.handle('luno:ready', async event => { assertTrusted(event); rendererReady = true; await deliverPendingFile(); });
+    ipcMain.handle('luno:ready', async event => { assertTrusted(event); rendererReady = true; return { openedFile: await deliverPendingFile() }; });
     vault = new ProjectVault(app.getPath('userData'), app.getVersion());
     const handle = (name, callback) => ipcMain.handle(`luno:${name}`, async (event, ...args) => { assertTrusted(event); return callback(...args); });
     handle('library-list', () => vault.list()); handle('library-save', (bytes, thumb) => vault.save(bytes, thumb)); handle('library-load', id => vault.load(id));

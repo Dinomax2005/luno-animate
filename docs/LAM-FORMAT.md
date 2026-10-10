@@ -28,3 +28,9 @@ Future readers should reject unknown container/schema versions with an explanato
 ## Compatibility limits
 
 32 scenes, 500 layers/scene, 200 bones/rig, 1800 frames/scene, 64–4096 px canvases, 1–60 FPS, 32 audio clips/scene, and bounded embedded/stroke/text data. Audio import/export decoding has a stricter five-minute limit. Full-format validation lives in `src/engine/project.ts`; the codec in `src/engine/lam.ts` is shared with native validation.
+
+## Animation document type (v0.3.5)
+
+Schema 2 now includes `animationMode: "rigged" | "frame-by-frame"`. The container version, schema number, magic, bounds, and checksum format are unchanged. Older schema-2 files that omit the field default to `rigged`; legacy JSON migration remains supported. Hand-drawn documents start with `holdCels: false`, exact-frame cels, and no generated in-between drawings. Their type and all cels survive portable saving, library autosave/recovery, and scene switching.
+
+External filenames, permission tokens, and browser handles are **not embedded** in `.lam` payloads or portable copies. The renderer keeps session destinations by the actual library ID, while a collision-cloned library document preserves the external document’s original ID when saving back to its source. Save As creates a new external identity from the library document. Copy export never retargets Save.

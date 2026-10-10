@@ -3,9 +3,10 @@ import type { LucideIcon } from 'lucide-react';
 import { useEditor } from '../../store/editor';
 import { useWorkspace, type WorkspaceName } from '../../store/workspace';
 import { isLayerLocked } from '../../engine/geometry';
+import { useLaunch } from '../../services/launch';
 import { goHome } from '../../services/library';
 
-export interface AppActions { onOpen: () => void; onSave: () => void; onImport: () => void; onImportAudio: () => void }
+export interface AppActions { onOpen: () => void; onSave: () => void; onSaveAs?: () => void; onSaveCopy?: () => void; onImport: () => void; onImportAudio: () => void }
 export type MenuName = 'File' | 'Edit' | 'Insert' | 'Object' | 'Animation' | 'View' | 'Window' | 'Help';
 export const menuNames: MenuName[] = ['File', 'Edit', 'Insert', 'Object', 'Animation', 'View', 'Window', 'Help'];
 export interface AppCommand {
@@ -30,7 +31,9 @@ export function appCommands(actions: AppActions): AppCommand[] {
     { id: 'file.new', menu: 'File', label: 'New project', icon: Plus, shortcut: 'Ctrl+N', run: dialog('new') },
     { id: 'file.open', menu: 'File', label: 'Open project…', icon: FolderOpen, shortcut: 'Ctrl+O', run: actions.onOpen },
     { id: 'file.home', menu: 'File', label: 'All projects', icon: Home, shortcut: 'Ctrl+Home', run: goHome, enabled: editing },
-    { id: 'file.save', menu: 'File', label: 'Export .lam project…', icon: Save, shortcut: 'Ctrl+S', description: 'Portable editable document, including all scenes and media', separator: true, run: actions.onSave, enabled: editing },
+    { id: 'file.save', menu: 'File', label: 'Save', icon: Save, shortcut: 'Ctrl+S', description: 'Update the opened .lam file, or choose a destination for a new document', separator: true, run: actions.onSave, enabled: editing },
+    { id: 'file.save-as', menu: 'File', label: 'Save As…', icon: Save, shortcut: 'Ctrl+Shift+S', description: 'Choose a .lam file and make it the new Save destination', run: () => actions.onSaveAs?.(), enabled: () => editing() && !!actions.onSaveAs },
+    { id: 'file.save-copy', menu: 'File', label: 'Export .lam copy…', icon: Copy, description: 'Portable editable copy; do not change the linked Save destination', run: () => actions.onSaveCopy?.(), enabled: () => editing() && !!actions.onSaveCopy },
     { id: 'file.export', menu: 'File', label: 'Export animation…', icon: Download, shortcut: 'Ctrl+E', description: 'MP4, GIF, PNG, SVG, or sprite atlas', run: dialog('export'), enabled: editing },
     { id: 'file.settings', menu: 'File', label: 'Document settings…', icon: Settings2, separator: true, run: dialog('settings'), enabled: editing },
     { id: 'file.updates', menu: 'File', label: 'Updates & backups', icon: RefreshCw, run: dialog('updates') },
@@ -55,9 +58,9 @@ export function appCommands(actions: AppActions): AppCommand[] {
     { id: 'object.back', menu: 'Object', label: 'Send backward', icon: Layers2, shortcut: 'Ctrl+[', run: () => { if (s().selectedId) s().moveLayer(s().selectedId!, 'down'); }, enabled: selection },
     { id: 'animation.play', menu: 'Animation', label: s().playing ? 'Stop playback' : 'Play work area', icon: s().playing ? Pause : Play, shortcut: 'Space', run: () => s().setPlaying(!s().playing), enabled: editing },
     { id: 'animation.key', menu: 'Animation', label: 'Insert keyframe', icon: DiamondPlus, shortcut: 'K', separator: true, run: () => s().addKeyframe(), enabled: () => selection() || editing() && s().selectedCamera },
-    { id: 'animation.cel', menu: 'Animation', label: 'Insert drawing exposure', icon: Brush, shortcut: 'F6', run: () => s().duplicateCel(), enabled: () => editing() && s().project.items.some(i => i.id === s().selectedId && i.type === 'drawing' && !isLayerLocked(s().project.items, i.id)) },
-    { id: 'animation.blank', menu: 'Animation', label: 'Insert blank cel', icon: Film, shortcut: 'F7', run: () => s().blankCel(), enabled: () => editing() && s().project.items.some(i => i.id === s().selectedId && i.type === 'drawing' && !isLayerLocked(s().project.items, i.id)) },
-    { id: 'animation.autokey', menu: 'Animation', label: 'Auto-key transforms', icon: DiamondPlus, checked: p.autoKey, separator: true, run: () => s().setPreference('autoKey', !s().preferences.autoKey), enabled: editing },
+    { id: 'animation.cel', menu: 'Animation', label: s().project.animationMode === 'frame-by-frame' ? 'Duplicate to next frame' : 'Insert drawing exposure', icon: Brush, shortcut: 'F6', run: () => s().project.animationMode === 'frame-by-frame' ? s().nextDrawingFrame('duplicate') : s().duplicateCel(), enabled: () => editing() && s().project.items.some(i => i.id === s().selectedId && i.type === 'drawing' && !isLayerLocked(s().project.items, i.id)) },
+    { id: 'animation.blank', menu: 'Animation', label: s().project.animationMode === 'frame-by-frame' ? 'New blank frame' : 'Insert blank cel', icon: Film, shortcut: 'F7', run: () => s().project.animationMode === 'frame-by-frame' ? s().nextDrawingFrame('blank') : s().blankCel(), enabled: () => editing() && s().project.items.some(i => i.id === s().selectedId && i.type === 'drawing' && !isLayerLocked(s().project.items, i.id)) },
+    { id: 'animation.autokey', menu: 'Animation', label: 'Auto-key transforms', icon: DiamondPlus, checked: p.autoKey, separator: true, run: () => s().setPreference('autoKey', !s().preferences.autoKey), enabled: () => editing() && s().project.animationMode !== 'frame-by-frame' },
     { id: 'animation.loop', menu: 'Animation', label: 'Loop playback', icon: Repeat2, checked: p.loop, run: () => s().setPreference('loop', !s().preferences.loop), enabled: editing },
     { id: 'view.fit', menu: 'View', label: 'Fit stage in window', icon: Expand, shortcut: 'Ctrl+0', run: () => { s().setZoom(100); s().setPan({ x: 0, y: 0 }); }, enabled: editing },
     { id: 'view.zoom.in', menu: 'View', label: 'Zoom in', icon: Plus, shortcut: 'Ctrl++', run: () => s().setZoom(s().zoom * 1.25), enabled: editing },
@@ -75,6 +78,8 @@ export function appCommands(actions: AppActions): AppCommand[] {
     { id: 'window.focus', menu: 'Window', label: 'Focus stage', icon: Expand, shortcut: 'Tab', checked: w().focused, separator: true, run: () => w().toggleFocus(), enabled: editing },
     ...(['Animation', 'Drawing', 'Rigging'] as const).map(name => ({ id: `window.workspace.${name.toLowerCase()}`, menu: 'Window' as const, label: `${name} workspace`, icon: name === 'Rigging' ? Bone : name === 'Drawing' ? Brush : Film, checked: w().workspace === name, run: () => applyWorkspace(name), enabled: editing })),
     { id: 'window.reset', menu: 'Window', label: 'Reset workspace layout', icon: RefreshCw, run: () => w().reset(), enabled: editing },
+    { id: 'help.start', menu: 'Help', label: 'Start window…', icon: Home, run: dialog('start') },
+    { id: 'help.news', menu: 'Help', label: 'What’s New…', icon: Film, run: () => useLaunch.getState().openNews() },
     { id: 'help.commands', menu: 'Help', label: 'Command search…', icon: Search, shortcut: 'Ctrl+Shift+P', run: dialog('commands') },
     { id: 'help.reference', menu: 'Help', label: 'Tools & keyboard reference', icon: Check, shortcut: 'F1', run: dialog('help') },
     { id: 'help.setup', menu: 'Help', label: 'Workspace setup', icon: Settings2, run: dialog('setup') },

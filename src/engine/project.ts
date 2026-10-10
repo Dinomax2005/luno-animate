@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createMiloRig } from './rig';
-import type { Project, Scene, SceneContent, SceneItem, ShapeKind, Template } from './types';
+import type { AnimationMode, Project, Scene, SceneContent, SceneItem, ShapeKind, Template } from './types';
 
 export const uid = () => globalThis.crypto?.randomUUID?.() ?? `luno-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export const MAX_PROJECT_BYTES = 64_000_000;
@@ -39,10 +39,14 @@ export function activateScene(p: Project, id: string): Project {
     scenes: [...p.scenes.filter(s => s.id !== id), activeScene(p)] };
 }
 export const totalFrames = (p: Project) => getScenes(p).reduce((sum, s) => sum + s.duration, 0);
-export function createProject(template: Template = 'character'): Project {
+export function createDrawingLayer(width: number, height: number, name = 'Drawing 1'): SceneItem {
+  return createItem('drawing', { name, x: width / 2, y: height / 2, width, height, cels: [{ frame: 0, strokes: [] }], holdCels: false });
+}
+export function createProject(template: Template = 'character', animationMode: AnimationMode = 'rigged'): Project {
   const scene = createScene(960, 600);
-  const project: Project = { ...scene, version: 2, id: uid(), name: template === 'title' ? 'Typography-1' : template === 'cutout' ? 'Cutout-1' : template === 'character' ? 'Character-1' : template === 'shapes' ? 'Motion-1' : 'Untitled-1',
+  const project: Project = { ...scene, version: 2, animationMode, id: uid(), name: template === 'title' ? 'Typography-1' : template === 'cutout' ? 'Cutout-1' : template === 'character' ? 'Character-1' : template === 'shapes' ? 'Motion-1' : 'Untitled-1',
     width: 960, height: 600, fps: 24, sceneId: scene.id, sceneName: scene.name, sceneOrder: [scene.id], scenes: [] };
+  if (animationMode === 'frame-by-frame') { project.duration = 2; project.workArea = { start: 0, end: 1 }; project.name = 'Untitled-1'; project.items = [createDrawingLayer(project.width, project.height)]; return project; }
   if (template === 'character') {
     const ground = createShape('ground', 480, 493); Object.assign(ground, { name: 'Ground', width: 210, height: 26, locked: true });
     const orbit = createShape('ellipse', 695, 203); Object.assign(orbit, { name: 'Accent circle', width: 46, height: 46, fill: '#f0b793' });
@@ -86,7 +90,7 @@ const itemSchema = z.object({
 const audioSchema = z.object({ id, name: z.string().min(1).max(100), data: z.string().max(40_000_000).regex(/^data:audio\/(mpeg|mp3|wav|x-wav|wave|ogg|mp4|aac|flac|webm);base64,[a-zA-Z0-9+/=]+$/), duration: finite.min(0.01).max(7200), startFrame: frame, trimStart: finite.min(0).max(7200), volume: finite.min(0).max(2), muted: z.boolean(), waveform: z.array(finite.min(0).max(1)).max(512) });
 const sceneFields = { duration: z.number().int().min(2).max(1800), background: color, items: z.array(itemSchema).max(500), keyframes: z.record(id, z.array(keyframe).max(1800)),
   camera: z.object({ x: point.shape.x, y: point.shape.y, zoom: finite.min(0.05).max(20), rotation: finite, keys: z.array(keyframe).max(1800) }), audio: z.array(audioSchema).max(32), workArea: z.object({ start: frame, end: frame }) };
-export const projectSchema = z.object({ version: z.literal(2), id, name: z.string().min(1).max(100), width: z.number().int().min(64).max(4096), height: z.number().int().min(64).max(4096), fps: z.number().int().min(1).max(60),
+export const projectSchema = z.object({ version: z.literal(2), animationMode: z.enum(['rigged', 'frame-by-frame']).default('rigged'), id, name: z.string().min(1).max(100), width: z.number().int().min(64).max(4096), height: z.number().int().min(64).max(4096), fps: z.number().int().min(1).max(60),
   sceneId: id, sceneName: z.string().min(1).max(100), sceneOrder: z.array(id).min(1).max(32), scenes: z.array(z.object({ id, name: z.string().min(1).max(100), ...sceneFields })).max(31), ...sceneFields });
 
 function validateScene(scene: SceneContent) {

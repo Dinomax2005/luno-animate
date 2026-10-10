@@ -15,7 +15,14 @@ Clean Windows/macOS runtime/install testing, signing/notarization, and a real pu
 - Public stable release packaging with unchanged application/storage identity, exact checksums, and all three updater feeds.
 - Configuration forms replace beginner mascot/tour screens; motion presets are optional collapsed controls.
 
-## Future features (not claimed in v0.3.4)
+## v0.3.5: implemented
+
+- Explicit Save overwrite, Save As rebinding, separate copy export, visible failure/cancel status, and source-file capability/conflict protections.
+- Backward-compatible hand-drawn versus rig/motion document types, preserved cels, manual next-frame workflow, and timeline growth.
+- Compact Start/New/Open/Recent launcher and acknowledged once-per-version What’s New with manual Help access.
+- Native disk-failure tests, browser file-handle/launch/mode acceptance, and packaged repeated-save/Save As/conflict smoke.
+
+## Future features (not claimed in v0.3.5)
 
 - Reusable symbols and nested timelines.
 - Vector shape morphing, masks/clipping, richer paths/brushes.

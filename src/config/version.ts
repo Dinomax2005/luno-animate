@@ -1,4 +1,4 @@
-import metadata from '../../package.json';
+import metadata from '../../package.json' with { type: 'json' };
 
 /** Application identity/version is separate from download build metadata. */
 export const APP_VERSION = metadata.version;

@@ -7,6 +7,7 @@ import { Stage } from '../Stage';
 import { Timeline } from '../Timeline';
 import { ToolRail } from '../ToolRail';
 import { useWorkspace, type WorkspaceLayout } from '../../store/workspace';
+import { useDocumentFiles, fileIsDirty } from '../../services/document-files';
 import { useEditor } from '../../store/editor';
 
 function ResizeHandle({ side }: { side: 'layers' | 'properties' | 'timeline' }) {
@@ -50,6 +51,8 @@ export function StudioWorkspace({ onImport, onImportAudio }: { onImport: () => v
 }
 export function StudioStatus() {
   const project = useEditor(s => s.project), selectedIds = useEditor(s => s.selectedIds), tool = useEditor(s => s.tool), frame = useEditor(s => s.frame), save = useEditor(s => s.saveStatus), playing = useEditor(s => s.playing);
+  const fileLink = useDocumentFiles(s => s.links[project.id]);
+  const fileDirty = fileIsDirty(project, fileLink);
   const protectedOperation = useEditor(s => s.busy || !!s.blockReason || s.interacting);
   const cursor = useWorkspace(s => s.cursor), focused = useWorkspace(s => s.focused);
   const toolNames = { select: 'Selection', hand: 'Hand', pen: 'Brush', rectangle: 'Rectangle', ellipse: 'Ellipse', text: 'Text', camera: 'Camera', rig: 'Bone / IK' };
@@ -57,7 +60,7 @@ export function StudioStatus() {
     <span className="status-tool"><MousePointer2 size={11} />{toolNames[tool]}<span className="status-divider" />{selectedIds.length ? `${selectedIds.length} selected` : 'No selection'}</span>
     <span className="status-coordinate"><Crosshair size={10} /> X <strong>{cursor?.x ?? '—'}</strong> Y <strong>{cursor?.y ?? '—'}</strong></span>
     <span className="status-document">{project.width} × {project.height} px<span className="status-divider" />{project.fps} fps<span className="status-divider" />Frame {String(frame + 1).padStart(3, '0')} / {project.duration}</span>
-    <span className={`status-storage ${save}`}>{playing ? <Play size={10} /> : save === 'saved' ? <FileCheck2 size={11} /> : <Circle size={10} />}{playing ? 'Playing' : save === 'saved' ? 'Local save complete' : save === 'error' ? 'Save failed — export a copy' : 'Saving'}</span>
+    <span className={`status-file ${fileDirty ? 'dirty' : ''}`} title={fileLink?.kind === 'native' ? fileLink.target.displayPath : fileLink?.target.name ?? 'Not linked to an external file. Library autosave is separate.'}>{fileLink ? `${fileDirty ? 'Modified · ' : 'File · '}${fileLink.target.name}` : 'Library document · Save As for .lam'}</span><span className={`status-storage ${save}`}>{playing ? <Play size={10} /> : save === 'saved' ? <FileCheck2 size={11} /> : <Circle size={10} />}{playing ? 'Playing' : save === 'saved' ? 'Local save complete' : save === 'error' ? 'Save failed — export a copy' : 'Saving'}</span>
     <button className="status-dock-button layers" aria-label="Toggle Layers panel" title="Layers / Library" onClick={() => useWorkspace.getState().togglePanel('layers')}><PanelLeft size={12} /></button><button className="status-dock-button properties" aria-label="Toggle Properties panel" title="Properties" onClick={() => useWorkspace.getState().togglePanel('properties')}><PanelRight size={12} /></button><button className="status-panel-button" aria-label="Toggle workspace panels" title="Toggle panels · Tab" onClick={() => useWorkspace.getState().toggleFocus()}>{focused ? <PanelRight size={12} /> : <PanelLeft size={12} />}</button>
     <button className="status-reference" aria-label="Open command search" onClick={() => useEditor.getState().setDialog('commands')} title="Command search · Ctrl/⌘ Shift P"><Command size={11} /><Check size={10} /></button>
   </footer>;

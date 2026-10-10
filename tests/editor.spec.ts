@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures/editor';
 import { createProject, serializeProject } from '../src/engine/project';
 import { createPreset } from '../src/engine/animation';
 import { decodeLam } from '../src/engine/lam';
@@ -179,16 +179,6 @@ test('completes the four-step setup wizard and creates a blank project', async (
   await expect(page.getByText('No layers yet')).toBeVisible();
   await page.getByRole('menuitem', { name: 'Insert', exact: true }).click(); await page.getByRole('menuitem', { name: 'Rigged character', exact: true }).click();
   await expect(page.getByLabel('Layer name')).toHaveValue('Milo');
-});
-
-test('automatically shows first-run setup in desktop mode', async ({ page }) => {
-  await page.addInitScript(() => {
-    window.luno = { platform: 'win32', version: '0.3.4', saveProject: async () => true, openProject: async () => null, saveExport: async () => true, chooseFolder: async () => 'C:\\Animations', getWorkspace: async () => null, onCommand: () => () => {}, onProjectFile: () => () => {}, ready: async () => {}, library: { list: async () => [], save: async () => { throw new Error('Mock has no projects'); }, load: async () => { throw new Error('No projects'); }, patch: async () => {}, deleteForever: async () => {}, recover: async () => { throw new Error('No revisions'); }, getSettings: async () => ({ lastProjectId: null }), saveSettings: async () => {}, backups: async () => [], backup: async () => ({ id: 'test', createdAt: 0, reason: 'manual', version: '0.3.4', projects: 0 }), restore: async () => false }, updater: { state: async () => ({ phase: 'disabled', version: null, progress: 0, message: 'Test bridge', checkedAt: null, countdown: null, automatic: true, backupId: null }), check: async () => {}, install: async () => {}, defer: async () => {}, setAutomatic: async () => {}, activity: () => {}, onState: () => () => {} }, onPrepare: () => () => {}, preparationResult: () => {}, onResume: () => () => {} };
-  });
-  await page.goto('/');
-  await expect(page.getByRole('dialog', { name: 'Workspace configuration' })).toBeVisible();
-  await page.getByRole('button', { name: 'Skip setup' }).click();
-  await page.reload(); await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('applies canvas settings and workspace preferences', async ({ page }) => {

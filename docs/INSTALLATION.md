@@ -1,8 +1,8 @@
 # Installers, protected updates, and releases
 
-## Install v0.3.4
+## Install v0.3.5
 
-Download the platform assets from the [official v0.3.4 release](https://github.com/Dinomax2005/luno-animate/releases/tag/v0.3.4). Public release downloads do not need a GitHub account or artifact ZIP extraction.
+Download the platform assets from the [official v0.3.5 release](https://github.com/Dinomax2005/luno-animate/releases/tag/v0.3.5). Public release downloads do not need a GitHub account or artifact ZIP extraction.
 
 - Windows x64: run the `.exe` setup.
 - macOS: use the appropriate Intel/Apple silicon `.dmg`; these development builds are unsigned, not notarized.
@@ -12,7 +12,7 @@ The separate first-run configuration chooses panel layout, theme, document sourc
 
 ### Update an existing installation
 
-If you already use an updater-enabled v0.2 Windows build or Linux AppImage, **do not uninstall or reinstall**. Open **Updates & backups → Check GitHub**, download v0.3.4, then choose **Save, back up & restart**, or leave automatic updates enabled. The public stable release and its update manifests—not Actions artifacts—provide the update.
+If you already use an updater-enabled v0.2/v0.3.4 Windows build or Linux AppImage, **do not uninstall or reinstall**. Open **Updates & backups → Check GitHub**, download v0.3.5, then choose **Save, back up & restart**, or leave automatic updates enabled. The public stable release and its update manifests—not Actions artifacts—provide the update.
 
 Unsigned macOS and DEB installations still require manual replacement/package-manager updates. This preserves your native library; do not delete the application data directory. v0.1 has no updater and needs one initial manual upgrade.
 
@@ -38,7 +38,7 @@ The guarded install path flushes/acknowledges the renderer's latest work/setting
 | Linux AppImage | Protected AppImage replacement/restart |
 | DEB/system-managed Linux | Package-manager/manual update |
 
-Only published stable versions are discoverable. A draft is deliberately invisible to installed applications. The app remains usable offline if checking fails. v0.3.4 preserves application identity, user-data location, native storage, and document schema. Future schema changes need non-destructive migrations.
+Only published stable versions are discoverable. A draft is deliberately invisible to installed applications. The app remains usable offline if checking fails. v0.3.5 preserves application identity, user-data location, native storage, and document schema. Future schema changes need non-destructive migrations.
 
 ## Where your work lives
 
@@ -74,7 +74,7 @@ An installer push marked `[prepare-release]` stages a draft only after all matri
 
 After all installers/tests pass for the same source:
 
-1. Use the verified draft produced by the `[prepare-release]` installer build, run the draft workflow with `v0.3.4` (matching `package.json`) and that successful installer run ID, or download the artifacts and run `node scripts/prepare-release.mjs installers release-assets`.
+1. Use the verified draft produced by the `[prepare-release]` installer build, run the draft workflow with `v0.3.5` (matching `package.json`) and that successful installer run ID, or download the artifacts and run `node scripts/prepare-release.mjs installers release-assets`.
 2. Upload the **flat** assets: Windows EXE + block map, macOS Intel/ARM ZIPs + DMGs + block maps, Linux AppImage/DEB, `latest.yml`, `latest-mac*.yml`, `latest-linux*.yml`, and `SHA256SUMS.txt`. Do not rename installers after generating manifests.
 3. Review notes and OS/signing checks. The script validates manifest version, referenced files, and exact SHA-512; SHA-256 sums use flat names matching GitHub downloads (`sha256sum -c SHA256SUMS.txt`).
 4. Publish the draft as a **stable, non-prerelease** only after review. Drafts and prereleases are deliberately excluded from the updater. Do not overwrite an existing version's assets—ship a newer version.
@@ -104,3 +104,9 @@ Missing/empty secrets are omitted, not interpreted as certificate paths. Public 
 - [ ] Actual previous-to-newer update tested, including save/backup failure and restart recovery.
 - [ ] Portable import/export with embedded image/audio and multiple scenes verified.
 - [ ] Flat checksum/manifest assets validated; publish only after owner review.
+
+## Launch and file-save changes in v0.3.5
+
+After updating, the current What’s New notes appear once. A normal launch then shows Start with New/Open/Recent and the two animation types; disable it with its startup checkbox. Opening an associated `.lam` does not interrupt the canvas with Start. Workspace configuration remains under Help.
+
+Open the external `.lam` through the native picker or file association to authorize in-place Save. Save As explicitly chooses a new destination. Autosave/revisions/backups do not automatically write external files. Capabilities expire on a new renderer session, so a recent library snapshot after restarting needs Open/Save As to link an external destination. Desktop Save refuses externally changed, missing, read-only, symbolic-link, and internal-vault targets; failed/cancelled writes do not silently change the destination.

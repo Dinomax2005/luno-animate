@@ -18,11 +18,11 @@ function validateSettings(settings) {
   }
   return { lastProjectId: settings.lastProjectId, ...(p ? { preferences: p } : {}) };
 }
-async function atomicWrite(file, data) {
+async function atomicWrite(file, data, beforeCommit, mode = 0o600) {
   const temp = `${file}.${randomUUID()}.tmp`; let handle;
   try {
-    await fs.mkdir(path.dirname(file), { recursive: true }); handle = await fs.open(temp, 'wx', 0o600);
-    await handle.writeFile(data); await handle.sync(); await handle.close(); handle = null; await fs.rename(temp, file);
+    await fs.mkdir(path.dirname(file), { recursive: true }); handle = await fs.open(temp, 'wx', mode);
+    await handle.writeFile(data); await handle.chmod(mode); await handle.sync(); await handle.close(); handle = null; await beforeCommit?.(); await fs.rename(temp, file);
     // Sync directory entries on systems that support it (Windows does not).
     let directory; try { directory = await fs.open(path.dirname(file), 'r'); await directory.sync(); } catch (e) { if (!['EINVAL', 'EPERM', 'EISDIR', 'ENOTSUP', 'EBADF', 'EACCES'].includes(e.code)) throw e; } finally { await directory?.close(); }
   } finally { await handle?.close().catch(() => {}); await fs.rm(temp, { force: true }).catch(() => {}); }

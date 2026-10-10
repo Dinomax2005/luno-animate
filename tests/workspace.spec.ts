@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures/editor';
 import { createProject, createShape } from '../src/engine/project';
 import { encodeLam } from '../src/engine/lam';
 

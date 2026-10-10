@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { capturePose, createPreset, sampleCamera, sampleCel, sampleItem } from '../engine/animation';
-import { createCharacter, createProject, createShape, createItem, createScene, activeScene, activateScene, createText, parseProject, uid } from '../engine/project';
+import { createCharacter, createProject, createDrawingLayer, createShape, createItem, createScene, activeScene, activateScene, createText, parseProject, uid } from '../engine/project';
 import { sceneNodes, transformPoint, inverse, parentOf, isLayerLocked, multiply as multiplyForUngroup } from '../engine/geometry';
 import { clamp, createMiloRig } from '../engine/rig';
 import type { AudioClip, Camera, Dialog, Keyframe, KeyRef, Point, Preferences, Preset, Project, ProjectRecord, Scene, SceneItem, ShapeKind, Tool, View } from '../engine/types';
@@ -47,7 +47,7 @@ export interface EditorStore {
   addText: () => void; addBlankRig: () => void; editBoneProperties: (itemId: string, boneId: string, patch: Partial<import('../engine/types').Bone>) => void;
   bindToBone: (itemId: string, characterId: string | null, boneId?: string) => void;
   groupSelected: () => void; ungroupSelected: () => void; alignSelected: (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void;
-  addCelStroke: (points: Point[]) => void; blankCel: () => void; duplicateCel: () => void; removeCel: (id: string, frame: number) => void; moveCel: (id: string, from: number, to: number) => void;
+  addCelStroke: (points: Point[]) => void; blankCel: () => void; duplicateCel: () => void; nextDrawingFrame: (kind: 'blank' | 'duplicate') => void; removeCel: (id: string, frame: number) => void; moveCel: (id: string, from: number, to: number) => void;
   editCamera: (patch: Partial<Pick<Camera, 'x' | 'y' | 'zoom' | 'rotation'>>, record?: boolean) => void; resetCamera: () => void;
   addAudio: (clip: AudioClip) => void; editAudio: (id: string, patch: Partial<Pick<AudioClip, 'name' | 'startFrame' | 'trimStart' | 'volume' | 'muted'>>, record?: boolean) => void; removeAudio: (id: string) => void;
   setWorkArea: (start: number, end: number) => void;
@@ -110,7 +110,7 @@ export interface EditorStore {
 function writeKeyframe(project: Project, item: SceneItem, frame: number) {
   const keys = project.keyframes[item.id] ?? [];
   const existing = keys.find(k => k.frame === frame);
-  const key: Keyframe = { id: existing?.id ?? uid(), frame, easing: existing?.easing ?? 'ease-in-out', ...(existing?.bezier ? { bezier: existing.bezier } : {}), values: capturePose(item) };
+  const key: Keyframe = { id: existing?.id ?? uid(), frame, easing: existing?.easing ?? (project.animationMode === 'frame-by-frame' ? 'hold' : 'ease-in-out'), ...(existing?.bezier ? { bezier: existing.bezier } : {}), values: capturePose(item) };
   project.keyframes[item.id] = [...keys.filter(k => k.frame !== frame), key].sort((a, b) => a.frame - b.frame);
 }
 
@@ -127,15 +127,16 @@ export const useEditor = create<EditorStore>((set, get) => ({
   selectedBone: null,
   frame: 0, playing: false, tool: 'select', zoom: 100, pan: { x: 0, y: 0 },
   preferences: initialPreferences(),
-  dialog: window.luno && !initialPreferences().onboardingComplete ? 'setup' : null,
+  dialog: null,
   leftTab: 'layers', history: [], future: [],
   toast: recoveryMessage ? { id: uid(), message: recoveryMessage, tone: 'error' } : null,
   savedAt: Date.now(), saveStatus: 'saving',
   checkpoint: () => set(s => ({ history: [...s.history.slice(-39), clone(s.project)], future: [] })),
   replaceProject: (project, keepHistory = true) => {
     if (keepHistory) get().checkpoint();
-    const primary = project.items.find(i => i.type === 'character')?.id ?? project.items.at(-1)?.id ?? null;
-    set({ project, view: 'editor', selectedIds: primary ? [primary] : [], selectedCamera: false, selectedAudio: null, keySelection: [], selectedId: primary, selectedBone: null, frame: 0, playing: false, zoom: 100, pan: { x: 0, y: 0 }, ...(!keepHistory ? { history: [], future: [] } : {}) });
+    const manual = project.animationMode === 'frame-by-frame';
+    const primary = (manual ? project.items.find(i => i.type === 'drawing')?.id : project.items.find(i => i.type === 'character')?.id) ?? project.items.at(-1)?.id ?? null;
+    set({ project, view: 'editor', ...(!keepHistory || project.id !== get().project.id || project.animationMode !== get().project.animationMode ? { preferences: { ...get().preferences, drawingMode: manual ? 'cel' : 'vector', autoKey: manual ? false : get().project.animationMode === 'frame-by-frame' ? true : get().preferences.autoKey, onionSkin: manual, showBones: !manual }, tool: manual ? 'pen' as const : 'select' as const } : {}), selectedIds: primary ? [primary] : [], selectedCamera: false, selectedAudio: null, keySelection: [], selectedId: primary, selectedBone: null, frame: 0, playing: false, zoom: 100, pan: { x: 0, y: 0 }, ...(!keepHistory ? { history: [], future: [] } : {}) });
   },
   setName: name => { if (!name.trim()) return; get().checkpoint(); set(s => ({ project: { ...s.project, name: name.trim().slice(0, 100) } })); },
   select: id => set({ selectedId: id, selectedIds: id ? [id] : [], selectedBone: null, selectedCamera: false, selectedAudio: null, keySelection: [] }),
@@ -157,7 +158,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const index = project.items.findIndex(i => i.id === id);
     const animatedKeys = ['x', 'y', 'scaleX', 'scaleY', 'rotation', 'opacity'];
     const transforms = Object.keys(patch).some(k => animatedKeys.includes(k));
-    if (transforms && state.preferences.autoKey && (state.frame > 0 || project.keyframes[id]?.length)) {
+    if (transforms && state.project.animationMode !== 'frame-by-frame' && state.preferences.autoKey && (state.frame > 0 || project.keyframes[id]?.length)) {
       const sampled = sampleItem(item, project.keyframes[id] ?? [], state.frame);
       if (state.frame > 0 && !project.keyframes[id]?.length) writeKeyframe(project, item, 0);
       writeKeyframe(project, { ...sampled, ...patch }, state.frame);
@@ -178,7 +179,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const sampled = sampleItem(item, project.keyframes[id] ?? [], state.frame);
     const rig = sampled.rig!;
     rig.bones = rig.bones.map(b => ({ ...b, angle: b.locked ? b.angle : clamp(angles[b.id] ?? b.angle, b.minAngle ?? -100000, b.maxAngle ?? 100000) }));
-    if (state.preferences.autoKey && (state.frame > 0 || project.keyframes[id]?.length)) {
+    if (state.project.animationMode !== 'frame-by-frame' && state.preferences.autoKey && (state.frame > 0 || project.keyframes[id]?.length)) {
       if (state.frame > 0 && !project.keyframes[id]?.length) writeKeyframe(project, item, 0);
       writeKeyframe(project, { ...sampled, rig }, state.frame);
     } else {
@@ -303,14 +304,17 @@ export const useEditor = create<EditorStore>((set, get) => ({
   addScene: () => {
     const s = get(); if (s.project.sceneOrder.length >= 32) { s.notify('A project supports up to 32 scenes.', 'info'); return; }
     s.checkpoint(); const scene = createScene(s.project.width, s.project.height, `Scene ${String(s.project.sceneOrder.length + 1).padStart(2, '0')}`);
+    if (s.project.animationMode === 'frame-by-frame') { scene.items = [createDrawingLayer(s.project.width, s.project.height)]; scene.duration = 2; scene.workArea = { start: 0, end: 1 }; }
     const project = activateScene({ ...s.project, scenes: [...s.project.scenes, scene], sceneOrder: [...s.project.sceneOrder, scene.id] }, scene.id);
-    set({ project, frame: 0, playing: false, selectedId: null, selectedIds: [], selectedBone: null, selectedCamera: false, selectedAudio: null, keySelection: [] });
+    const drawingId = project.animationMode === 'frame-by-frame' ? project.items.find(i => i.type === 'drawing')?.id ?? null : null;
+    set({ project, frame: 0, playing: false, selectedId: drawingId, selectedIds: drawingId ? [drawingId] : [], selectedBone: null, selectedCamera: false, selectedAudio: null, keySelection: [] });
   },
-  switchScene: id => { const s = get(); if (id === s.project.sceneId) return; set({ project: activateScene(s.project, id), frame: 0, playing: false, selectedId: null, selectedIds: [], selectedBone: null, selectedCamera: false, selectedAudio: null, keySelection: [] }); },
+  switchScene: id => { const s = get(); if (id === s.project.sceneId) return; const project = activateScene(s.project, id), drawingId = project.animationMode === 'frame-by-frame' ? project.items.find(i => i.type === 'drawing')?.id ?? null : null; set({ project, frame: 0, playing: false, selectedId: drawingId, selectedIds: drawingId ? [drawingId] : [], selectedBone: null, selectedCamera: false, selectedAudio: null, keySelection: [] }); },
   duplicateScene: () => {
     const s = get(); if (s.project.sceneOrder.length >= 32) return; s.checkpoint();
     const scene = duplicateSceneDocument(activeScene(s.project));
-    set({ project: activateScene({ ...s.project, scenes: [...s.project.scenes, scene], sceneOrder: [...s.project.sceneOrder, scene.id] }, scene.id), frame: 0, playing: false, selectedId: null, selectedIds: [], selectedBone: null, keySelection: [] });
+    const project = activateScene({ ...s.project, scenes: [...s.project.scenes, scene], sceneOrder: [...s.project.sceneOrder, scene.id] }, scene.id), drawingId = project.animationMode === 'frame-by-frame' ? project.items.find(i => i.type === 'drawing')?.id ?? null : null;
+    set({ project, frame: 0, playing: false, selectedId: drawingId, selectedIds: drawingId ? [drawingId] : [], selectedBone: null, keySelection: [] });
   },
   renameScene: (id, name) => { const s = get(); if (!name.trim()) return; s.checkpoint(); const trimmed = name.trim().slice(0, 100); set({ project: id === s.project.sceneId ? { ...s.project, sceneName: trimmed } : { ...s.project, scenes: s.project.scenes.map(scene => scene.id === id ? { ...scene, name: trimmed } : scene) } }); },
   deleteScene: id => {
@@ -386,7 +390,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
   addCelStroke: points => {
     const s = get(); let item = s.project.items.find(i => i.id === s.selectedId && i.type === 'drawing') ?? [...s.project.items].reverse().find(i => i.type === 'drawing' && !isLayerLocked(s.project.items, i.id));
     if (item && isLayerLocked(s.project.items, item.id)) return; if (!item && s.project.items.length >= 500) return; s.checkpoint(); const project = clone(s.project);
-    if (!item) { item = { ...createItem('drawing'), type: 'drawing', name: 'Frame-by-frame drawing', x: project.width / 2, y: project.height / 2, width: project.width, height: project.height, cels: [], holdCels: true }; project.items.push(item); }
+    if (!item) { item = { ...createItem('drawing'), type: 'drawing', name: 'Frame-by-frame drawing', x: project.width / 2, y: project.height / 2, width: project.width, height: project.height, cels: [], holdCels: project.animationMode !== 'frame-by-frame' }; project.items.push(item); }
     const target = project.items.find(i => i.id === item!.id)!; const sampledNode = sceneNodes(project, s.frame).find(n => n.item.id === item!.id)!;
     const local = points.map(p => transformPoint(inverse(sampledNode.matrix), p)); const cels = [...(target.cels ?? [])]; let cel = cels.find(c => c.frame === s.frame);
     if (!cel) { cel = { frame: s.frame, strokes: [] }; cels.push(cel); }
@@ -396,11 +400,22 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
   blankCel: () => { const s = get(), item = s.project.items.find(i => i.id === s.selectedId && i.type === 'drawing'); if (!item || isLayerLocked(s.project.items, item.id)) { s.notify('Select a frame-by-frame drawing first.', 'info'); return; } s.editItem(item.id, { cels: [...(item.cels ?? []).filter(c => c.frame !== s.frame), { frame: s.frame, strokes: [] }].sort((a, b) => a.frame - b.frame) }); },
   duplicateCel: () => { const s = get(), item = s.project.items.find(i => i.id === s.selectedId && i.type === 'drawing'); if (!item || isLayerLocked(s.project.items, item.id)) return; const previous = sampleCel(item, Math.max(0, s.frame - 1)); s.editItem(item.id, { cels: [...(item.cels ?? []).filter(c => c.frame !== s.frame), { frame: s.frame, strokes: clone(previous?.strokes ?? []) }].sort((a, b) => a.frame - b.frame) }); },
+  nextDrawingFrame: kind => {
+    const s = get(), item = s.project.items.find(i => i.id === s.selectedId && i.type === 'drawing');
+    if (!item || isLayerLocked(s.project.items, item.id)) { s.notify('Select an unlocked drawing layer first.', 'info'); return; }
+    const next = s.frame + 1;
+    if (next >= 1800) { s.notify('A scene supports at most 1800 frames.', 'info'); return; }
+    if (item.cels?.some(c => c.frame === next)) { set({ frame: next, playing: false }); s.notify(`Frame ${next + 1} already has a cel. Its drawing was kept.`, 'info'); return; }
+    s.checkpoint(); const project = clone(s.project), drawing = project.items.find(i => i.id === item.id)!;
+    drawing.cels = [...(drawing.cels ?? []), { frame: next, strokes: kind === 'duplicate' ? clone(sampleCel(item, s.frame)?.strokes ?? []) : [] }].sort((a, b) => a.frame - b.frame);
+    if (next >= project.duration) { if (project.workArea.end === project.duration - 1) project.workArea.end = next; project.duration = next + 1; }
+    set({ project, frame: next, playing: false });
+  },
   removeCel: (id, frame) => { const s = get(), item = s.project.items.find(i => i.id === id); if (!item || isLayerLocked(s.project.items, item.id)) return; s.editItem(id, { cels: (item.cels ?? []).filter(c => c.frame !== frame) }); },
   moveCel: (id, from, to) => { const s = get(), item = s.project.items.find(i => i.id === id), cel = item?.cels?.find(c => c.frame === from); if (!item || isLayerLocked(s.project.items, item.id) || !cel || from === to) return; const frame = clamp(to, 0, s.project.duration - 1); s.editItem(id, { cels: [...(item.cels ?? []).filter(c => c.frame !== from && c.frame !== frame), { ...cel, frame }].sort((a, b) => a.frame - b.frame) }); },
   editCamera: (patch, record = true) => {
     const s = get(); if (record) s.checkpoint(); const camera = clone(s.project.camera);
-    if (s.preferences.autoKey && (s.frame > 0 || camera.keys.length)) {
+    if (s.project.animationMode !== 'frame-by-frame' && s.preferences.autoKey && (s.frame > 0 || camera.keys.length)) {
       const sampled = { ...sampleCamera(camera, s.frame), ...patch };
       if (s.frame > 0 && !camera.keys.length) camera.keys.push({ id: uid(), frame: 0, easing: 'ease-in-out', values: { x: camera.x, y: camera.y, scaleX: camera.zoom, rotation: camera.rotation } });
       const original = camera.keys.find(k => k.frame === s.frame); camera.keys = [...camera.keys.filter(k => k.frame !== s.frame), { id: original?.id ?? uid(), frame: s.frame, easing: original?.easing ?? 'ease-in-out', ...(original?.bezier ? { bezier: original.bezier } : {}), values: { x: sampled.x, y: sampled.y, scaleX: sampled.zoom, rotation: sampled.rotation } }].sort((a, b) => a.frame - b.frame);

@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, CloudOff, Download, FolderOpen, Home, LoaderCircle, PanelTop, RotateCcw, Search, Undo2, Redo2, X } from 'lucide-react';
+import { Check, ChevronDown, CloudOff, Download, FolderOpen, Home, LoaderCircle, PanelTop, RotateCcw, Search, Save, Undo2, Redo2, X } from 'lucide-react';
 import { APP_VERSION } from '../config/version';
 import { useEditor } from '../store/editor';
 import { useWorkspace } from '../store/workspace';
+import { useDocumentFiles, fileIsDirty } from '../services/document-files';
 import { goHome } from '../services/library';
 import { appCommands, applyWorkspace, executeCommand, menuNames, shortcutLabel, type AppActions, type MenuName } from './studio/commands';
 
 export type FileActions = AppActions;
 export function Header(actions: FileActions) {
   const project = useEditor(s => s.project), preferences = useEditor(s => s.preferences), saveStatus = useEditor(s => s.saveStatus), busy = useEditor(s => s.busy);
+  const link = useDocumentFiles(s => s.links[project.id]), fileError = useDocumentFiles(s => s.errors[project.id]);
+  const fileDirty = fileIsDirty(project, link), fileSaving = useDocumentFiles(s => s.savingId === project.id);
   const workspace = useWorkspace(s => s.workspace);
   // Menus need selection/history updates, not the animation's frame-by-frame render loop.
   useEditor(s => s.selectedIds); useEditor(s => s.keySelection); useEditor(s => s.history.length); useEditor(s => s.future.length); useEditor(s => s.keyClipboard.length);
@@ -52,15 +55,16 @@ export function Header(actions: FileActions) {
     </div>
     <div className="document-toolbar">
       <button className="icon-button document-home" aria-label="Back to all projects" title="All projects · Ctrl/⌘ Home" onClick={() => void goHome()}><Home size={15} /></button>
-      <div className="document-tab" title="Rename this document"><span className="document-type">LAM</span><input aria-label="Project name" value={name} onChange={e => setName(e.target.value)} onBlur={commitName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setName(project.name); e.currentTarget.blur(); } }} maxLength={100} style={{ width: `${Math.min(27, Math.max(12, name.length + 2))}ch` }} /><span className={`document-save-dot ${saveStatus}`} title={saveStatus === 'saved' ? 'Document saved locally' : saveStatus === 'error' ? 'Local save failed' : 'Saving changes'} /></div>
-      <button className={`saved-indicator ${saveStatus}`} onClick={actions.onSave} title="Export an editable .lam copy · Ctrl/⌘ S">{saveStatus === 'saving' ? <LoaderCircle size={12} className="spin" /> : saveStatus === 'error' ? <CloudOff size={12} /> : <Check size={12} />}{saveStatus === 'saving' ? 'Saving locally…' : saveStatus === 'error' ? 'Save a copy' : 'Saved locally'}</button>
+      <div className="document-tab" title={link?.kind === 'native' ? link.target.displayPath : link?.target.name ?? 'Library document · choose Save As for an external .lam file'}><span className="document-type">LAM</span><input aria-label="Project name" value={name} onChange={e => setName(e.target.value)} onBlur={commitName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setName(project.name); e.currentTarget.blur(); } }} maxLength={100} style={{ width: `${Math.min(27, Math.max(12, name.length + 2))}ch` }} /><span className="document-file-marker" aria-label={fileDirty ? 'Unsaved file changes' : 'File state'}>{fileDirty ? '*' : ''}</span><span className="document-animation-mode" title="Document animation type">{project.animationMode === 'frame-by-frame' ? 'DRAW' : 'RIG'}</span><span className={`document-save-dot ${saveStatus}`} title={saveStatus === 'saved' ? 'Document saved locally' : saveStatus === 'error' ? 'Local save failed' : 'Saving changes'} /></div>
+      <span className={`saved-indicator ${saveStatus}`} title="Local library autosave is separate from saving the external .lam file">{saveStatus === 'saving' ? <LoaderCircle size={12} className="spin" /> : saveStatus === 'error' ? <CloudOff size={12} /> : <Check size={12} />}{saveStatus === 'saving' ? 'Saving locally…' : saveStatus === 'error' ? 'Local save failed' : 'Saved locally'}</span>
       <span className="control-divider" /><button className="icon-button document-undo" aria-label="Undo" title="Undo · Ctrl/⌘ Z" disabled={!useEditor.getState().history.length} onClick={() => useEditor.getState().undo()}><Undo2 size={14} /></button><button className="icon-button document-redo" aria-label="Redo" title="Redo · Ctrl/⌘ Shift Z" disabled={!useEditor.getState().future.length} onClick={() => useEditor.getState().redo()}><Redo2 size={14} /></button><div className="document-toolbar-spacer" />
-      <button className="icon-button document-open" aria-label="Open project file" title="Open project · Ctrl/⌘ O" onClick={actions.onOpen}><FolderOpen size={15} /></button>
+      <button className="icon-button document-file-save" aria-label="Save project file" title={link ? `Save ${link.target.name} · Ctrl/⌘ S` : 'Save .lam file · Ctrl/⌘ S'} onClick={actions.onSave}>{fileSaving ? <LoaderCircle size={15} className="spin" /> : <Save size={15} />}</button><button className="icon-button document-open" aria-label="Open project file" title="Open project · Ctrl/⌘ O" onClick={actions.onOpen}><FolderOpen size={15} /></button>
       <div className="workspace-control"><PanelTop size={13} /><select aria-label="Workspace" value={workspace} onChange={e => applyWorkspace(e.target.value as typeof workspace)}><option>Animation</option><option>Drawing</option><option>Rigging</option></select><ChevronDown size={11} /></div>
       <button className="icon-button reset-workspace" aria-label="Reset workspace" title="Reset panel layout" onClick={() => useWorkspace.getState().reset()}><RotateCcw size={13} /></button>
       <button className="button primary export-button" onClick={() => useEditor.getState().setDialog('export')}>Export <Download size={13} /></button>
       <span className="toolbar-theme-marker" data-theme={preferences.theme} />
     </div>
+    {fileError && <div className="document-save-error" role="alert"><span>File save failed: {fileError}</span><button onClick={actions.onSaveAs}>Save As…</button><button aria-label="Dismiss file save error" onClick={() => useDocumentFiles.getState().setError(project.id, null)}><X size={12} /></button></div>}
   </header>;
 }
 export function Toast() {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/editor';
 import { readFile } from 'node:fs/promises';
 import { movie, sound } from './fixtures/media';
 import { encodeLam } from '../src/engine/lam';

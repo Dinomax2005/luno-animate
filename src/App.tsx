@@ -12,6 +12,8 @@ import { readProjectData, MAX_LAM_BYTES } from './engine/lam';
 import { imageFromFile, saveProject } from './engine/files';
 import { flushProject, goHome, hasUnsavedProject, initializeLibrary, openDocument } from './services/library';
 import { AudioPlayback, audioFromFile } from './services/audio';
+import { browserCanOpenFiles, openBrowserFile, saveDocument, useDocumentFiles, fileIsDirty, type FileSource, type NativeOpenedFile } from './services/document-files';
+import { presentLaunch, useLaunch } from './services/launch';
 import type { Tool } from './engine/types';
 const Dialogs = lazy(() => import('./components/Dialogs').then(module => ({ default: module.Dialogs })));
 
@@ -21,26 +23,59 @@ export default function App() {
   const dialog = useEditor(s => s.dialog), view = useEditor(s => s.view), ready = useEditor(s => s.libraryReady), blocked = useEditor(s => s.blockReason);
   const inputProject = useRef<HTMLInputElement>(null), inputImage = useRef<HTMLInputElement>(null), inputAudio = useRef<HTMLInputElement>(null);
   const lastActivity = useRef(Date.now());
-  const onSave = useCallback(async () => {
-    (document.activeElement as HTMLElement | null)?.blur?.();
-    const s = useEditor.getState(); s.setBusy(true);
-    try { await flushProject(); if (await saveProject(useEditor.getState().project)) s.notify('Your portable .lam project is saved, including every scene, rig, drawing, and sound.'); }
-    catch (error) { s.notify(error instanceof Error ? error.message : 'Could not save the project.', 'error'); }
-    finally { s.setBusy(false); }
+  const associationTask = useRef<Promise<boolean> | null>(null), associationSeen = useRef(false);
+  const performSave = useCallback(async (kind: 'save' | 'save-as' | 'copy') => {
+    const s = useEditor.getState(); if (s.view !== 'editor' || s.busy || s.blockReason || s.interacting) return;
+    (document.activeElement as HTMLElement | null)?.blur?.(); s.setBusy(true);
+    const snapshot = useEditor.getState().project; useDocumentFiles.getState().setSaving(snapshot.id); s.clearToast();
+    try {
+      if (kind === 'copy') {
+        s.notify(await saveProject(snapshot) ? 'Exported a .lam copy. Your linked Save destination is unchanged.' : 'Copy export cancelled. Your original file is unchanged.', 'info');
+      } else {
+        // An unavailable autosave store must not prevent an explicit portable save of the canvas.
+        let localError: unknown; try { await flushProject(); } catch (error) { localError = error; }
+        const result = await saveDocument(snapshot, kind === 'save-as');
+        if (result.kind === 'saved') s.notify(localError ? `Saved ${result.name}, but library autosave failed. Keep this .lam file and check available storage.` : `Saved ${result.name}.`, localError ? 'error' : 'success');
+        else if (result.kind === 'cancelled') s.notify('Save cancelled. The original file is unchanged; your edits remain in the local library.', 'info');
+        else s.notify('Downloaded a .lam copy. This browser cannot overwrite the original; use the desktop app or a browser with file-system access.', 'info');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save the project.';
+      useDocumentFiles.getState().setError(snapshot.id, message); s.notify(message, 'error');
+    } finally { useDocumentFiles.getState().setSaving(null); s.setBusy(false); }
   }, []);
-  const loadProject = useCallback(async (raw: string | Uint8Array | ArrayBuffer, ownsBusyOperation = false) => {
-    const state = useEditor.getState(); if (state.blockReason || state.interacting || state.busy && !ownsBusyOperation) { state.notify('Finish the current operation before opening another project. Your file is unchanged.', 'info'); return; }
-    try { const parsed = readProjectData(raw); await openDocument(parsed, true); useEditor.getState().notify(`“${parsed.name}” is in your project library. The original file is unchanged.`); }
-    catch (error) { useEditor.getState().notify(error instanceof Error ? error.message : 'Could not read this project.', 'error'); }
+  const onSave = useCallback(() => performSave('save'), [performSave]);
+  const onSaveAs = useCallback(() => performSave('save-as'), [performSave]);
+  const onSaveCopy = useCallback(() => performSave('copy'), [performSave]);
+  const loadProject = useCallback(async (raw: string | Uint8Array | ArrayBuffer, ownsBusyOperation = false, source?: FileSource): Promise<boolean> => {
+    const state = useEditor.getState();
+    if (state.blockReason || state.interacting || state.busy && !ownsBusyOperation || state.dialog && !['start', 'whats-new'].includes(state.dialog)) { state.notify('Finish the current operation before opening another project. Your file is unchanged.', 'info'); return false; }
+    try {
+      const parsed = readProjectData(raw); await openDocument(parsed, true, !!source);
+      if (source) useDocumentFiles.getState().bind(useEditor.getState().project, source);
+      useLaunch.setState({ pendingStart: false }); state.setDialog(null);
+      state.notify(source ? `Opened ${source.target.name}. Save will update this file.` : `“${parsed.name}” is in your library. Use Save As to choose a writable .lam file.`);
+      return true;
+    } catch (error) { state.notify(error instanceof Error ? error.message : 'Could not read this project.', 'error'); return false; }
   }, []);
+  const loadNativeFile = useCallback((file: NativeOpenedFile | Uint8Array, ownsBusyOperation = false) => file instanceof Uint8Array
+    ? loadProject(file, ownsBusyOperation)
+    : loadProject(file.data, ownsBusyOperation, file.target ? { kind: 'native', target: file.target } : undefined), [loadProject]);
   const onOpen = useCallback(async () => {
-    if (window.luno) {
-      const s = useEditor.getState(); s.setBusy(true);
-      try { const raw = await window.luno.openProject(); if (raw) await loadProject(raw, true); }
-      catch (error) { s.notify(error instanceof Error ? error.message : 'Could not open the project file.', 'error'); }
-      finally { s.setBusy(false); }
-    } else inputProject.current?.click();
-  }, [loadProject]);
+    const s = useEditor.getState(); if (s.busy || s.blockReason || s.interacting) return;
+    if (!window.luno && !browserCanOpenFiles()) { inputProject.current?.click(); return; }
+    s.setBusy(true);
+    try {
+      if (window.luno) {
+        const file = await (window.luno.documents ? window.luno.documents.open() : window.luno.openProject());
+        if (file) await loadNativeFile(file, true);
+      } else {
+        const file = await openBrowserFile();
+        if (file) await loadProject(file.data, true, file.browserTarget ? { kind: 'browser', target: file.browserTarget } : undefined);
+      }
+    } catch (error) { s.notify(error instanceof Error ? error.message : 'Could not open the project file.', 'error'); }
+    finally { s.setBusy(false); }
+  }, [loadProject, loadNativeFile]);
   const onImport = useCallback(() => inputImage.current?.click(), []), onImportAudio = useCallback(() => inputAudio.current?.click(), []);
   const importFile = useCallback(async (file: File) => {
     const s = useEditor.getState();
@@ -64,7 +99,16 @@ export default function App() {
     finally { s.setBusy(false); }
   }, [loadProject]);
 
-  useEffect(() => { void initializeLibrary().catch(() => {}); }, []);
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      await initializeLibrary(); if (!mounted) return;
+      const result = await window.luno?.ready(); if (!mounted) return;
+      if (associationTask.current) await associationTask.current;
+      if (mounted) presentLaunch(associationSeen.current || !!result?.openedFile);
+    })().catch(() => {});
+    return () => { mounted = false; };
+  }, []);
   useEffect(() => {
     if (!ready || view !== 'editor') return;
     useEditor.getState().setSaveStatus('saving');
@@ -97,7 +141,7 @@ export default function App() {
   }, [playing, view]);
   useEffect(() => {
     const api = window.luno; if (!api) return;
-    const unsubFile = api.onProjectFile(raw => { void loadProject(raw); });
+    const unsubFile = api.onProjectFile(file => { associationSeen.current = true; associationTask.current = loadNativeFile(file); });
     const unsubPrepare = api.onPrepare(async request => {
       const s = useEditor.getState();
       if (s.busy || s.interacting || (request.reason === 'update' && (s.playing || !!document.querySelector('[role=dialog]:not(.updates-modal)'))) || s.blockReason) { api.preparationResult(request.id, false, 'Finish your current operation before restarting.'); return; }
@@ -107,12 +151,11 @@ export default function App() {
       catch (error) { api.preparationResult(request.id, false, error instanceof Error ? error.message : 'Your durable save did not finish.'); s.setBlocked(null); }
     });
     const unsubResume = api.onResume(() => useEditor.getState().setBlocked(null));
-    void initializeLibrary().then(() => api.ready()).catch(() => {});
     return () => { unsubFile(); unsubPrepare(); unsubResume(); };
-  }, [loadProject]);
+  }, [loadNativeFile]);
   useEffect(() => {
     const api = window.luno;
-    const send = () => { const s = useEditor.getState(); api?.updater.activity({ busy: s.busy || !s.libraryReady || !!s.blockReason || !!document.querySelector('[role=dialog]:not(.updates-modal)'), playing: s.playing, interacting: s.interacting, dirty: hasUnsavedProject() || s.saveStatus === 'error', lastActivity: lastActivity.current }); };
+    const send = () => { const s = useEditor.getState(); api?.updater.activity({ busy: s.busy || !s.libraryReady || !!s.blockReason || !!document.querySelector('[role=dialog]:not(.updates-modal)'), playing: s.playing, interacting: s.interacting, dirty: hasUnsavedProject() || s.saveStatus === 'error' || fileIsDirty(s.project, useDocumentFiles.getState().links[s.project.id]), lastActivity: lastActivity.current }); };
     const activity = () => { lastActivity.current = Date.now(); send(); };
     const pointerActivity = () => { if (Date.now() - lastActivity.current > 1000) activity(); };
     document.addEventListener('pointermove', pointerActivity, true); document.addEventListener('wheel', activity, true);
@@ -124,9 +167,9 @@ export default function App() {
   useEffect(() => {
     const command = (value: string) => {
       const s = useEditor.getState(); if (s.blockReason || s.busy || s.dialog) return;
-      if (['open', 'new', 'setup', 'export', 'save'].includes(value)) (document.activeElement as HTMLElement | null)?.blur?.();
-      if (value === 'open') void onOpen(); else if (value === 'new') s.setDialog('new'); else if (value === 'setup') s.setDialog('setup'); else if (value === 'help') s.setDialog('help'); else if (value === 'updates') s.setDialog('updates');
-      else if (s.view === 'editor') { if (value === 'save') void onSave(); else if (value === 'export') s.setDialog('export'); else if (value === 'undo') s.undo(); else if (value === 'redo') s.redo(); }
+      if (['open', 'new', 'setup', 'export', 'save', 'save-as', 'save-copy'].includes(value)) (document.activeElement as HTMLElement | null)?.blur?.();
+      if (value === 'open') void onOpen(); else if (value === 'new') s.setDialog('new'); else if (value === 'setup') s.setDialog('setup'); else if (value === 'help') s.setDialog('help'); else if (value === 'start') s.setDialog('start'); else if (value === 'whats-new') useLaunch.getState().openNews(); else if (value === 'updates') s.setDialog('updates');
+      else if (s.view === 'editor') { if (value === 'save') void onSave(); else if (value === 'save-as') void onSaveAs(); else if (value === 'save-copy') void onSaveCopy(); else if (value === 'export') s.setDialog('export'); else if (value === 'undo') s.undo(); else if (value === 'redo') s.redo(); }
     };
     const unsubscribe = window.luno?.onCommand(command);
     const keys = (event: KeyboardEvent) => {
@@ -135,14 +178,14 @@ export default function App() {
       const key = event.key.toLowerCase();
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === 'p') { event.preventDefault(); (document.activeElement as HTMLElement | null)?.blur?.(); s.setDialog('commands'); return; }
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) {
-        if ((event.metaKey || event.ctrlKey) && key === 's' && s.view === 'editor') { event.preventDefault(); void onSave(); }
+        if ((event.metaKey || event.ctrlKey) && key === 's' && s.view === 'editor') { event.preventDefault(); void (event.shiftKey ? onSaveAs() : onSave()); }
         return;
       }
       if (event.metaKey || event.ctrlKey) {
         if (['s', 'o', 'n', 'z', 'y', 'd', 'e', 'g', 'a', 'c', 'v', 'home', '0', '+', '=', '-', '[', ']', ','].includes(key)) event.preventDefault();
         if (key === 'o') void onOpen(); else if (key === 'n') event.shiftKey && s.view === 'editor' ? s.addScene() : s.setDialog('new');
         else if (s.view === 'editor') {
-          if (key === 's') void onSave(); else if (key === 'e') s.setDialog('export'); else if (key === 'z') event.shiftKey ? s.redo() : s.undo(); else if (key === 'y') s.redo(); else if (key === 'd') s.duplicateSelected();
+          if (key === 's') void (event.shiftKey ? onSaveAs() : onSave()); else if (key === 'e') s.setDialog('export'); else if (key === 'z') event.shiftKey ? s.redo() : s.undo(); else if (key === 'y') s.redo(); else if (key === 'd') s.duplicateSelected();
           else if (key === 'g') event.shiftKey ? s.ungroupSelected() : s.groupSelected(); else if (key === 'a') s.selectAll(); else if (key === 'c') s.copyKeys(); else if (key === 'v') s.pasteKeys(); else if (key === 'home') void goHome();
           else if (key === '0') { s.setZoom(100); s.setPan({ x: 0, y: 0 }); }
           else if (key === '+' || key === '=') s.setZoom(s.zoom * 1.25); else if (key === '-') s.setZoom(s.zoom / 1.25);
@@ -158,22 +201,22 @@ export default function App() {
       if (key === '<' || key === '>' || key === ',' || key === '.') { event.preventDefault(); s.setPlaying(false); s.setFrame(s.frame + (key === '<' || key === ',' ? -1 : 1)); }
       if (key === ' ') { event.preventDefault(); s.setPlaying(!s.playing); }
       if (key === 'k') s.addKeyframe(); if (key === 'u') s.setPreference('onionSkin', !s.preferences.onionSkin);
-      if (key === 'f6') { event.preventDefault(); s.duplicateCel(); } if (key === 'f7') { event.preventDefault(); s.blankCel(); }
+      if (key === 'f6') { event.preventDefault(); s.project.animationMode === 'frame-by-frame' ? s.nextDrawingFrame('duplicate') : s.duplicateCel(); } if (key === 'f7') { event.preventDefault(); s.project.animationMode === 'frame-by-frame' ? s.nextDrawingFrame('blank') : s.blankCel(); }
       if (key === 'delete' || key === 'backspace') { event.preventDefault(); s.keySelection.length ? s.deleteKeys() : s.deleteSelected(); }
       if (key === 'arrowleft' || key === 'arrowright') { event.preventDefault(); s.setPlaying(false); s.setFrame(s.frame + (key === 'arrowleft' ? -1 : 1) * (event.shiftKey ? 12 : 1)); }
       if (key === '[') s.setWorkArea(s.frame, Math.max(s.frame, s.project.workArea.end)); if (key === ']') s.setWorkArea(Math.min(s.frame, s.project.workArea.start), s.frame);
       if (key === 'escape') { s.select(null); useEditor.setState({ keySelection: [] }); }
     };
     window.addEventListener('keydown', keys); return () => { window.removeEventListener('keydown', keys); unsubscribe?.(); };
-  }, [onOpen, onSave]);
+  }, [onOpen, onSave, onSaveAs, onSaveCopy]);
 
   return <><SoundPlayback /><div className={`app-shell ${view === 'home' ? 'home-mode' : ''}`} inert={!!blocked} aria-busy={busy || !!blocked} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file && !useEditor.getState().dialog && !useEditor.getState().blockReason && !useEditor.getState().busy && !useEditor.getState().interacting) void importFile(file); }}>
     {view === 'home' ? <ProjectHome onOpen={() => void onOpen()} /> : <>
-      <Header onOpen={() => void onOpen()} onSave={() => void onSave()} onImport={onImport} onImportAudio={onImportAudio} />
+      <Header onOpen={() => void onOpen()} onSave={() => void onSave()} onSaveAs={() => void onSaveAs()} onSaveCopy={() => void onSaveCopy()} onImport={onImport} onImportAudio={onImportAudio} />
       <StudioWorkspace onImport={onImport} onImportAudio={onImportAudio} /><StudioStatus />
     </>}
     <Toast /><UpdateBanner />
-    {dialog === 'commands' ? <CommandPalette onOpen={() => void onOpen()} onSave={() => void onSave()} onImport={onImport} onImportAudio={onImportAudio} /> : <Suspense fallback={<div className="dialog-loading" role="status">Loading panel…</div>}>{dialog && <Dialogs />}</Suspense>}
+    {dialog === 'commands' ? <CommandPalette onOpen={() => void onOpen()} onSave={() => void onSave()} onSaveAs={() => void onSaveAs()} onSaveCopy={() => void onSaveCopy()} onImport={onImport} onImportAudio={onImportAudio} /> : <Suspense fallback={<div className="dialog-loading" role="status">Loading panel…</div>}>{dialog && <Dialogs onOpen={() => void onOpen()} />}</Suspense>}
 
     <input ref={inputProject} type="file" className="visually-hidden" aria-label="Open Luno project file" accept=".lam,.luno,.json" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
     <input ref={inputImage} type="file" className="visually-hidden" aria-label="Import image file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
