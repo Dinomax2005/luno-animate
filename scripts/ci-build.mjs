@@ -4,7 +4,14 @@ const targets = { Windows: 'desktop:windows', macOS: 'desktop:mac', Linux: 'desk
 const platform = process.argv[2];
 if (!Object.hasOwn(targets, platform)) throw new Error('Choose Windows, macOS, or Linux.');
 const command = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const child = spawn(command, ['run', targets[platform], '--', '--publish', 'never'], { shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+const environment = { ...process.env };
+// Optional GitHub secrets resolve to empty strings when unconfigured. On macOS,
+// electron-builder treats an empty CSC_LINK as the current directory, not as
+// "no certificate". Omit empty options so unsigned builds work normally.
+for (const name of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) {
+  if (!environment[name]?.trim()) delete environment[name];
+}
+const child = spawn(command, ['run', targets[platform], '--', '--publish', 'never'], { env: environment, shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
 let tail = '';
 const capture = (data, destination) => {
   destination.write(data);
