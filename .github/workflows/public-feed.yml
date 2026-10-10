@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   consumer:
-    name: v0.2 updater discovers the public release
+    name: Existing v0.2 and v0.3.4 updaters discover the public release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -30,15 +30,15 @@ jobs:
           const { newerStable } = require('./electron/update-policy.cjs');
           (async () => {
             const results = [];
-            for (const [platform, required] of [
+            for (const previousVersion of ['0.2.0', '0.3.4']) for (const [platform, required] of [
               ['win32', [`Luno-Animate-${version}-win-x64.exe`]],
               ['darwin', [`Luno-Animate-${version}-mac-x64.zip`, `Luno-Animate-${version}-mac-arm64.zip`]],
               ['linux', [`Luno-Animate-${version}-linux-x86_64.AppImage`]],
             ]) {
-              const updater = { allowPrerelease: false, allowDowngrade: false, fullChangelog: false, channel: null, currentVersion: semver.parse('0.2.0') };
+              const updater = { allowPrerelease: false, allowDowngrade: false, fullChangelog: false, channel: null, currentVersion: semver.parse(previousVersion) };
               const provider = new GitHubProvider({ provider: 'github', owner: 'Dinomax2005', repo: 'luno-animate', private: false }, updater, { platform, executor: new NodeHttpExecutor() });
               const info = await provider.getLatestVersion();
-              assert.equal(info.version, version); assert(newerStable(info.version, '0.2.0'));
+              assert.equal(info.version, version); assert(newerStable(info.version, previousVersion));
               for (const name of required) assert(info.files.some(file => decodeURIComponent(file.url) === name), `${platform} feed lacks ${name}`);
               const files = provider.resolveFiles(info);
               for (const file of files) {
@@ -46,10 +46,10 @@ jobs:
                 assert(file.url.pathname.includes(`/releases/download/v${version}/`));
                 assert.equal(Buffer.from(file.info.sha512, 'base64').length, 64);
               }
-              results.push({ platform, version: info.version, files: files.map(file => file.url.href) });
+              results.push({ previousVersion, platform, version: info.version, files: files.map(file => file.url.href) });
             }
-            console.log(JSON.stringify({ previousVersion: '0.2.0', feeds: results }, null, 2));
-            require('node:fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Unauthenticated electron-updater discovery from v0.2.0 passed for Windows, both macOS ZIP architectures, and Linux AppImage. Available stable version: ${version}. This checks discovery and manifest parsing, not cross-OS installation.\n`);
+            console.log(JSON.stringify({ previousVersions: ['0.2.0', '0.3.4'], feeds: results }, null, 2));
+            require('node:fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Unauthenticated electron-updater discovery from v0.2.0 and v0.3.4 passed for Windows, both macOS ZIP architectures, and Linux AppImage. Available stable version: ${version}. This checks discovery and manifest parsing, not cross-OS installation.\n`);
           })().catch(error => {
             console.error(error);
             const message = String(error.message).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
