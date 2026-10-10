@@ -3,5 +3,5 @@ export default defineConfig({
   testDir: './desktop-tests',
   timeout: 60_000,
   workers: 1,
-  reporter: 'list',
+  reporter: process.env.CI ? [['list'], ['github']] : 'list',
 });

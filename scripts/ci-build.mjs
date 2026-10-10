@@ -11,7 +11,9 @@ const environment = { ...process.env };
 for (const name of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) {
   if (!environment[name]?.trim()) delete environment[name];
 }
-const child = spawn(command, ['run', targets[platform], '--', '--publish', 'never'], { env: environment, shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+// Each desktop:* script already supplies --publish never. Supplying it twice
+// makes yargs produce an array, which electron-builder can misread as publishing.
+const child = spawn(command, ['run', targets[platform]], { env: environment, shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
 let tail = '';
 const capture = (data, destination) => {
   destination.write(data);
