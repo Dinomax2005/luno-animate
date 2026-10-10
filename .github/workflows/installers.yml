@@ -10,6 +10,7 @@ on:
       - 'electron/**'
       - 'native-tests/**'
       - 'desktop-tests/**'
+      - 'tests/**'
       - 'playwright.desktop.config.ts'
       - 'assets/**'
       - 'public/**'
