@@ -5,6 +5,6 @@
   "installers": [
     { "platform": "Windows", "files": ["Luno-Animate-0.3.4-win-x64.exe"], "inPlaceUpdate": true },
     { "platform": "macOS", "files": ["Luno-Animate-0.3.4-mac-x64.dmg", "Luno-Animate-0.3.4-mac-arm64.dmg"], "inPlaceUpdate": false },
-    { "platform": "Linux", "files": ["Luno-Animate-0.3.4-linux-x64.AppImage", "Luno-Animate-0.3.4-linux-x64.deb"], "inPlaceUpdate": "AppImage only" }
+    { "platform": "Linux", "files": ["Luno-Animate-0.3.4-linux-x86_64.AppImage", "Luno-Animate-0.3.4-linux-amd64.deb"], "inPlaceUpdate": "AppImage only" }
   ]
 }

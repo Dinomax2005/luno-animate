@@ -1,5 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 const [folder = 'release-assets', output = '.cache/release-notes.md'] = process.argv.slice(2);
 const notes = await readFile('docs/release-notes.md', 'utf8');
@@ -9,4 +9,5 @@ if (process.env.GITHUB_RUN_ID) report += `Installer checks: https://github.com/D
 report += `### Download checksums\n\n\`\`\`text\n${sums}\`\`\`\n\n`;
 for (const manifest of ['latest.yml', 'latest-mac.yml', 'latest-linux.yml']) report += `### ${manifest}\n\n\`\`\`yaml\n${await readFile(join(folder, manifest), 'utf8')}\`\`\`\n\n`;
 report += '</details>\n';
+await mkdir(dirname(output), { recursive: true });
 await writeFile(output, report);

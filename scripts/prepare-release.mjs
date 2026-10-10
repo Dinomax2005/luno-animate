@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { readdir, mkdir, copyFile, readFile, writeFile, stat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { load } from 'js-yaml';
+try {
 const [input = 'installers', destination = 'release-assets'] = process.argv.slice(2);
 const source = resolve(input), output = resolve(destination); if (source === output) throw new Error('Use separate source and output directories.');
 const version = JSON.parse(await readFile('package.json', 'utf8')).version;
@@ -10,9 +11,9 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Only a stable semantic ve
 const feeds = {
   'latest.yml': [`Luno-Animate-${version}-win-x64.exe`],
   'latest-mac.yml': [`Luno-Animate-${version}-mac-x64.zip`, `Luno-Animate-${version}-mac-arm64.zip`],
-  'latest-linux.yml': [`Luno-Animate-${version}-linux-x64.AppImage`],
+  'latest-linux.yml': [`Luno-Animate-${version}-linux-x86_64.AppImage`],
 };
-const requiredInstallers = [...Object.values(feeds).flat(), `Luno-Animate-${version}-mac-x64.dmg`, `Luno-Animate-${version}-mac-arm64.dmg`, `Luno-Animate-${version}-linux-x64.deb`];
+const requiredInstallers = [...Object.values(feeds).flat(), `Luno-Animate-${version}-mac-x64.dmg`, `Luno-Animate-${version}-mac-arm64.dmg`, `Luno-Animate-${version}-linux-amd64.deb`];
 await mkdir(output, { recursive: true }); if ((await readdir(output)).length) throw new Error('Use an empty release output directory; existing files have not been removed.'); const files = new Map();
 async function collect(folder) { for (const entry of await readdir(folder, { withFileTypes: true })) { const file = join(folder, entry.name); if (entry.isDirectory()) await collect(file); else if (entry.isFile()) { if (!/\.(exe|dmg|zip|deb|AppImage|blockmap|yml)$/.test(entry.name)) throw new Error(`Unexpected release asset: ${entry.name}`); if (files.has(entry.name)) throw new Error(`Duplicate release filename: ${entry.name}`); files.set(entry.name, file); } else throw new Error('Release assets must be regular files.'); } }
 await collect(source);
@@ -27,3 +28,11 @@ for (const [name, file] of files) if (name.endsWith('.yml')) {
 const sums = [];
 for (const [name, file] of [...files].sort(([a], [b]) => a.localeCompare(b))) { await copyFile(file, join(output, name)); sums.push(`${await digest(file, 'sha256', 'hex')}  ${name}`); }
 await writeFile(join(output, 'SHA256SUMS.txt'), `${sums.join('\n')}\n`); console.log(`Verified manifests and flattened ${files.size} release assets for v${version}.`);
+
+} catch (error) {
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const message = String(error.message).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+    console.error(`::error title=Release asset verification::${message}`);
+  }
+  throw error;
+}

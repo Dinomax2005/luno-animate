@@ -8,7 +8,8 @@ const { promisify } = require('node:util');
 const { execFile } = require('node:child_process');
 const run = promisify(execFile);
 const { version } = require('../package.json');
-const installer = (os, arch, ext) => `Luno-Animate-${version}-${os}-${arch}.${ext}`;
+// electron-builder uses native Linux architecture labels for these extensions.
+const installer = (os, arch, ext) => `Luno-Animate-${version}-${os}-${arch === 'x64' && ext === 'AppImage' ? 'x86_64' : arch === 'x64' && ext === 'deb' ? 'amd64' : arch}.${ext}`;
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'luno-release-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
   const input = path.join(root, 'artifacts'), output = path.join(root, 'flat');
