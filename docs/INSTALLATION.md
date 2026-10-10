@@ -32,10 +32,12 @@ Initial builds download Electron and electron-builder helper binaries from GitHu
 ## Build automation
 
 - `ci.yml`: types, unit tests, production renderer, and browser tests on pushes and PRs.
-- `installers.yml`: builds Windows, macOS, and Linux on native runners. It can be run manually and runs automatically on Arena working branches when app sources change. It uploads installers without publishing a public release or changing the default branch.
+- `installers.yml`: builds Windows, macOS, and Linux on native runners. After the workflow is on the default branch, it can be run manually. It runs automatically on Arena working branches when app sources change. It uploads installers without publishing a public release or changing the default branch.
 - `release.yml`: accepts a version tag and successful installer run ID, validates that the run belongs to the exact source commit, downloads the artifacts, computes SHA-256 checksums, and creates a **draft, prerelease** release. Publication is an explicit owner action.
 
 Nothing in the app auto-updates or downloads remote code. Creators can download a newer installer and keep using existing `.luno` files.
+
+Manual workflow dispatch becomes available after the workflow files are on the repository’s default branch. Arena branch pushes already trigger installer builds; no default-branch change is required to get test artifacts.
 
 ## Signing for public distribution
 

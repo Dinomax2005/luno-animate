@@ -6,6 +6,7 @@ on:
       - 'arena/**'
     paths:
       - 'src/**'
+      - 'scripts/**'
       - 'electron/**'
       - 'assets/**'
       - 'public/**'
@@ -16,6 +17,7 @@ on:
       - 'tsconfig.json'
       - 'index.html'
       - '.github/workflows/installers.yml'
+      - '!src/config/desktop-build.json'
 permissions:
   contents: read
 concurrency:
@@ -30,24 +32,24 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
-            command: npm run desktop:windows -- --publish never
+            command: node scripts/ci-build.mjs Windows
             files: release/*.exe
           - os: macos-latest
             name: macOS
-            command: npm run desktop:mac -- --publish never
+            command: node scripts/ci-build.mjs macOS
             files: |
               release/*.dmg
               release/*.zip
           - os: ubuntu-latest
             name: Linux
-            command: npm run desktop:linux -- --publish never
+            command: node scripts/ci-build.mjs Linux
             files: |
               release/*.AppImage
               release/*.deb
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -67,7 +69,7 @@ jobs:
         run: xvfb-run -a npm run test:desktop
         env:
           PLAYWRIGHT_ELECTRON_EXECUTABLE: release/linux-unpacked/luno-animate
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Luno-Animate-${{ matrix.name }}
           path: ${{ matrix.files }}

@@ -1,0 +1,17 @@
+{
+  "version": "0.1.0",
+  "runUrl": "https://github.com/Dinomax2005/luno-animate/actions/runs/38048070322",
+  "expiresAt": "2026-11-09",
+  "installers": [
+    {
+      "platform": "Windows",
+      "url": "https://github.com/Dinomax2005/luno-animate/actions/runs/38048070322/artifacts/11667993170",
+      "sizeMB": 112
+    },
+    {
+      "platform": "Linux",
+      "url": "https://github.com/Dinomax2005/luno-animate/actions/runs/38048070322/artifacts/11668098028",
+      "sizeMB": 225
+    }
+  ]
+}

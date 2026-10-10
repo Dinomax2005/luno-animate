@@ -15,6 +15,7 @@ interface Gesture {
   boneId?: string;
   rig?: Rig;
   pan?: Point;
+  checkpointed?: boolean;
 }
 export function Stage() {
   const project = useEditor(s => s.project);
@@ -72,13 +73,13 @@ export function Stage() {
     event.stopPropagation();
     const s = useEditor.getState(); s.select(item.id); s.setPlaying(false);
     if (item.locked) { s.notify('This layer is locked. Unlock it in the Layers panel.', 'info'); return; }
-    capture(event); s.checkpoint();
+    capture(event);
     gesture.current = { kind: 'move', start: point(event), item };
   };
   const onBoneDown = (event: PointerEvent, item: SceneItem, boneId: string) => {
     if (item.locked || playing) return;
     event.stopPropagation(); capture(event);
-    const s = useEditor.getState(); s.selectBone(boneId); s.checkpoint();
+    const s = useEditor.getState(); s.selectBone(boneId);
     gesture.current = { kind: 'bone', start: point(event), item, boneId, rig: item.rig };
   };
   const onDown = (event: PointerEvent<SVGSVGElement>) => {
@@ -94,6 +95,10 @@ export function Stage() {
   const onMove = (event: PointerEvent<SVGSVGElement>) => {
     const g = gesture.current; if (!g) return;
     const s = useEditor.getState(); const p = point(event);
+    if ((g.kind === 'move' || g.kind === 'bone') && !g.checkpointed) {
+      if (Math.hypot(p.x - g.start.x, p.y - g.start.y) < 1) return;
+      s.checkpoint(); g.checkpointed = true;
+    }
     if (g.kind === 'move' && g.item) {
       s.editItem(g.item.id, { x: Math.round(g.item.x + p.x - g.start.x), y: Math.round(g.item.y + p.y - g.start.y) }, false);
     } else if (g.kind === 'bone' && g.item && g.rig && g.boneId) {

@@ -732,3 +732,7 @@ kbd { font-family: var(--mono); font-weight: 400; font-size: 9px; color: var(--m
 @media (max-width: 600px) { .keyframe-button { font-size: 8px; } .timeline-layer-label > span:nth-child(2) { font-size: 8px; } }
 .saved-indicator.error { color: #b98a6e; }
 .dialog-loading { position: fixed; inset: 0; display: grid; place-items: center; z-index: 100; background: #283c2c42; backdrop-filter: blur(5px); font-size: 12px; color: #f3f8e9; }
+.desktop-platforms .platform-download { font-size: 8px; height: 29px; padding: 0 9px; margin-top: 4px; color: #78945a; background: #e9f1da; border: 1px solid #d9e5c8; gap: 5px; }
+.desktop-platforms .platform-download:hover { color: #526e39; background: #deebc8; }
+[data-theme=dark] .desktop-platforms .platform-download { background: #3c512e; border-color: #52673f; color: #a3c47a; }
+@media (max-width: 600px) { .desktop-platforms .platform-download { font-size: 7px; padding: 0 6px; gap: 3px; } .download-modal .dialog-footer { flex-wrap: wrap; } }

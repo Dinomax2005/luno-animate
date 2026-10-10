@@ -26,6 +26,7 @@
 
 ## Before calling it production-ready
 
+- Choose an explicit source license before public open-source distribution.
 - Signed/notarized installer releases and clean-machine installation tests.
 - Native crash recovery and durable per-project backups.
 - Large-document profiling, lazy asset decoding, worker-based export.
