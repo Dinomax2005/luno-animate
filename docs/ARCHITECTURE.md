@@ -1,4 +1,4 @@
-# Architecture · v0.3.4
+# Architecture · v0.3.7
 
 ## Local-first boundaries
 
@@ -6,11 +6,11 @@ There are no creator accounts, telemetry, cloud storage, remote fonts, backend, 
 
 ## Versioned engine
 
-`Project` is schema 2: stable document identity, global canvas/FPS, ordered scenes, and an inline active scene plus separate inactive scenes. Each scene owns layers, keys, cels, camera, sounds, duration, background, and work area. Activating a scene creates a new root and retains the previous scene; it does not duplicate or discard its art. Schema-1 `.luno` JSON migration supplies scene/camera/audio defaults without changing original source files.
+`Project` is schema 2: stable document identity, global canvas/FPS, three animation modes, shared immutable media assets, ordered scenes, and an inline active scene plus separate inactive scenes. Each scene owns layers, keys, cels, camera, sounds, duration, background, and work area. Activating a scene creates a new root and retains the previous scene; it does not duplicate or discard its art. Schema-1 `.luno` JSON migration supplies scene/camera/audio defaults without changing original source files.
 
 Zod and semantic validation check bounds, identities, duplicate frames, missing layer/bone/scene references, rig/layer cycles, audio timing, and work areas. `.lam` adds a versioned compressed container, bounded inflation, and payload integrity checking; see [LAM-FORMAT](LAM-FORMAT.md). Checksums detect accidental corruption, not authorship or malicious changes.
 
-`project.ts`, `animation.ts`, `rig.ts`, and `geometry.ts` are UI-independent. Affine matrices compose animated group/rig/attachment ancestry. Layers paint in coherent hierarchical stacks; sibling ordering controls stacking. Visibility, opacity, and locking inherit. Cutout parts follow selected bone positions/angles; imported art is not automatically mesh-skinned.
+`project.ts`, `animation.ts`, `rig.ts`, `geometry.ts`, `clips.ts`, and `keyframes.ts` are UI-independent. Affine matrices compose animated group/rig/attachment ancestry. Layers paint in coherent hierarchical stacks; sibling ordering controls stacking. Visibility, opacity, and locking inherit. Cutout parts follow selected bone positions/angles; imported art is not automatically mesh-skinned.
 
 ## Sampling and rendering
 
@@ -18,7 +18,7 @@ Zod and semantic validation check bounds, identities, duplicate frames, missing 
 
 Forward kinematics resolves bone hierarchies; connected hand/foot IK maintains segment lengths and bend direction, clamps reach, and respects joint locks/limits through editor actions. Shift performs direct rotation. Text is escaped React content. SVG image imports are rasterized into embedded PNGs, not inserted as untrusted markup.
 
-Nine easing modes include configurable cubic Bézier, overshoot, bounce, elastic, hold, and conventional curves. Auto-key seeds the starting pose before a later edit. Drawing cels hold until the next cel unless single-frame exposure is selected; empty cels end a held drawing. Camera channels use position, zoom, and rotation independently of editor pan/zoom.
+Nine easing modes include configurable cubic Bézier, overshoot, bounce, elastic, hold, and conventional curves. Auto-key seeds the starting pose before a later edit. Timed layer visibility and sampled blur/brightness/saturation/opacity use the same renderer as exports. Video frames are looked up by scene/source time and asset FPS; inactive/out-of-source footage is omitted. Easing/Bézier metadata remains shared at each physical key, not independently stored per channel. Drawing cels hold until the next cel unless single-frame exposure is selected; empty cels end a held drawing. Camera channels use position, zoom, and rotation independently of editor pan/zoom.
 
 Editor-only grids, onion ghosts, handles, paths, bones, and guides do not enter exports. Shared `SceneArtwork` implements all real artwork. Uniform animated grouping can be flattened by baking child keys at every frame; lossy skew/out-of-range flattening is refused instead of silently changing the picture. Attaching/detaching parts explicitly warns about replacing transform keys; Undo retains the previous state.
 
@@ -26,7 +26,7 @@ Elapsed-time requestAnimationFrame playback respects FPS, work range, loop/pause
 
 ## State and transactions
 
-Zustand holds immutable document roots and transient selection/tools/playback/modal state. History is limited to 40 document snapshots. Pointer gestures record one checkpoint, then make non-recording updates; timeline key drags commit on release. Keys can be selected/copied/pasted with relative timing and fresh IDs. Scene/layer duplication rebinds group/rig references and key IDs.
+Zustand holds immutable document roots and transient selection/tools/playback/modal state. History is limited to 40 document snapshots. Pointer gestures record one checkpoint, then make non-recording updates; timeline key drags commit on release. Keys can be selected/copied/pasted with relative timing and fresh IDs. Property-lane refs optionally identify one pose channel. Pure key helpers split/merge/remove only selected values, preserving other transforms/effects/bones and occupied-frame easing when unrelated values remain. Full-key and lane selections are canonicalized to avoid duplicate destructive edits. Immutable media is shared across history rather than cloned per pose update. Clip trims preserve all source frames, adjust linked audio offsets, and bound restoration by source/audio/scene availability; moves also preserve authored keys/cels outside the clip. Pixel-tolerant snapping previews the same bounded timing that will commit. Scene/layer duplication rebinds group/rig references and key IDs.
 
 History/selection are not persisted. Renderer file/navigation services serialize writes, check document identity before marking saved, and flush before switching projects/home. Imported document ID collisions receive a new document identity rather than overwriting another project. Native preparation blurs pending fields before taking the final save snapshot. Browser unload warns during dirty/failed saves, ongoing gestures, and protected navigation; it cannot await asynchronous disk writes, so wait for the saved indicator before closing a tab.
 
@@ -39,6 +39,10 @@ History/selection are not persisted. Renderer file/navigation services serialize
 Complete native snapshots include projects/trash/revisions, studio settings, and the default export-folder setting. Copy/read/parse/integrity verification and file/directory fsync precede committing their manifests. Five verified snapshots are retained. Restore first validates a staged tree, protects the current library in a new backup, and records a durable rollback journal before swapping directories/settings. Startup rolls back incomplete restores. Initialization failures remain fail-closed across every subsequent request. Backups are local; export important projects to other media as well.
 
 The v0.1 current-project localStorage key is imported once; a migration recovery copy remains. Invalid legacy storage also retains a recovery copy. An uninstall does not intentionally remove desktop creator data.
+
+## Bounded video import
+
+Mediabunny probes and decodes supported MP4/WebM/MOV/M4V input; failed/unsupported codecs or cancellation never add partial clips. Import is limited to 150 MB, 30 seconds, a 960px proxy long side, project FPS, and a 24-million-character JPEG budget inside the aggregate 64 MB LAM limit. The importer copies decoded frames into its own OffscreenCanvas (synchronous HTML-canvas fallback), builds embedded PCM16 WAV sound/waveforms, then validates the entire candidate project before a single undoable insertion. Progress is rate-limited; an identity check rejects a document switch mid-import. Shared proxy assets are reused by split/duplicate clips and pruned only when no scene references them. This is portable proxy editing, not full-source conforming/relinking.
 
 ## Media exports
 
@@ -75,3 +79,10 @@ The preload exposes `documents.open/save/saveAs` and descriptor-bearing associat
 Schema-2 `animationMode` is backward compatible with a default of `rigged`. Hand-drawn factories create a selected single-frame drawing layer and two-frame scene; `nextDrawingFrame` creates or independently clones the next cel, extends duration/work area within bounds, and never clears an existing destination cel. New scenes and reopened documents apply drawing defaults. Manual-mode transforms do not automatically record keys. The existing rig/sampling workflow is retained.
 
 `services/launch.ts` stores a validated startup preference and last acknowledged app version independently from artwork. After durable library initialization and the native association-ready handoff, one release-note dialog precedes an optional Start window. Associated files suppress Start. Existing dialogs/guarded operations are not interrupted, React StrictMode does not trigger duplicate launch UI, and both dialogs use the shared focus trap/Escape handling.
+
+
+## Native launcher and independent layouts
+
+The main BrowserWindow is created hidden; painting HTML alone no longer shows it. `startup-window.cjs` owns a separate frameless 460 × 282 sandboxed window with a nonpersistent partition and strict local CSP. Its dedicated preload exposes only status subscription, retry, and quit. Launcher IPC requires its exact sender and main frame; studio IPC requires the separate studio sender/main frame. Native ready-to-show and a trusted post-library/association/workspace-paint completion handshake jointly gate reveal. The launcher is destroyed first, then the main window is shown/focused. Error states cancel pending reveal; disposal removes action listeners/timers. Retry reruns renderer boot or reloads a failed renderer. Browser boot uses a compact card and hidden/inert app shell instead of a fullscreen screen. Start/What’s New remain ordinary optional/version-aware app dialogs.
+
+Active layout storage remains `luno.workspace.pro.v1` for compatibility. `luno.workspace.pro.profiles.v1` keeps sanitized per-mode dock dimensions, visibility, timeline zoom, and snapping. Switching stores the current profile and restores the target; Reset affects only that profile. Focus/popouts/cursor stay transient. Layout persistence is independent of document history and the existing vault backup/settings schema, and must never block artwork saving.

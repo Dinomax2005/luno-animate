@@ -1,10 +1,11 @@
 import { create } from 'zustand';
+import { channelValues, mergeChannelKey, moveKeyChannel, removeKeyChannel, sameKeyRef } from '../engine/keyframes';
 import { editClip, fadeClip, pruneMedia, type ClipEdit } from '../engine/clips';
 import { capturePose, createPreset, sampleCamera, sampleCel, sampleItem } from '../engine/animation';
 import { createCharacter, createProject, createDrawingLayer, createShape, createItem, createScene, activeScene, activateScene, createText, parseProject, uid } from '../engine/project';
 import { sceneNodes, transformPoint, inverse, parentOf, isLayerLocked, multiply as multiplyForUngroup } from '../engine/geometry';
 import { clamp, createMiloRig } from '../engine/rig';
-import type { VideoAsset, MotionProperty, AudioClip, Camera, Dialog, Keyframe, KeyRef, Point, Preferences, Preset, Project, ProjectRecord, Scene, SceneItem, ShapeKind, Tool, View } from '../engine/types';
+import type { VideoAsset, MotionProperty, AudioClip, Camera, Dialog, Keyframe, KeyRef, KeyChannel, Point, Preferences, Preset, Project, ProjectRecord, Scene, SceneItem, ShapeKind, Tool, View } from '../engine/types';
 
 export const STORAGE_KEY = 'luno.project.v1';
 export const PREFS_KEY = 'luno.preferences.v1';
@@ -21,7 +22,7 @@ function initialProject(): Project {
   return p;
 }
 function initialPreferences(): Preferences {
-  const defaults: Preferences = { onboardingComplete: false, showBones: true, showGrid: false, loop: true, autoKey: true, theme: 'dark', onionSkin: false, onionBefore: 1, onionAfter: 1, showMotionPath: false, snapToGrid: false, gridSize: 20, inverseKinematics: true, brushColor: '#dc5e68', brushSize: 5, drawingMode: 'vector', automaticUpdates: true };
+  const defaults: Preferences = { onboardingComplete: false, showBones: true, showGrid: false, loop: true, autoKey: true, theme: 'dark', onionSkin: false, onionBefore: 1, onionAfter: 1, showMotionPath: false, snapToGrid: false, gridSize: 20, inverseKinematics: true, brushColor: '#579cea', brushSize: 5, drawingMode: 'vector', automaticUpdates: true };
   try {
     const value = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
     for (const key of ['onboardingComplete', 'showBones', 'showGrid', 'loop', 'autoKey', 'onionSkin', 'showMotionPath', 'snapToGrid', 'inverseKinematics', 'automaticUpdates'] as const) {
@@ -46,7 +47,7 @@ const clone = <T,>(object: T): T => {
 interface Toast { id: string; message: string; tone: 'success' | 'info' | 'error' }
 export interface EditorStore {
   view: View; libraryReady: boolean; projects: ProjectRecord[]; selectedIds: string[]; selectedCamera: boolean; selectedAudio: string | null;
-  busy: boolean; interacting: boolean; blockReason: string | null; keySelection: KeyRef[]; keyClipboard: { itemId: string; key: Keyframe }[];
+  busy: boolean; interacting: boolean; blockReason: string | null; keySelection: KeyRef[]; keyClipboard: { itemId: string; key: Keyframe; channels?: KeyChannel[] }[];
   setView: (view: View) => void; setLibrary: (projects: ProjectRecord[]) => void; toggleSelect: (id: string) => void; selectAll: () => void;
   selectCamera: () => void; selectAudio: (id: string | null) => void;
   setBusy: (busy: boolean) => void; setInteracting: (interacting: boolean) => void; setBlocked: (reason: string | null) => void;
@@ -59,13 +60,13 @@ export interface EditorStore {
   addAudio: (clip: AudioClip) => void; editAudio: (id: string, patch: Partial<Pick<AudioClip, 'name' | 'startFrame' | 'trimStart' | 'volume' | 'muted'>>, record?: boolean) => void; removeAudio: (id: string) => void;
   setWorkArea: (start: number, end: number) => void;
   nudgeSelected: (dx: number, dy: number) => void;
-  selectKey: (itemId: string, frame: number, additive?: boolean) => void; copyKeys: () => void; pasteKeys: () => void; deleteKeys: () => void; setBezier: (bezier: [number, number, number, number]) => void;
+  selectKey: (itemId: string, frame: number, additive?: boolean, channel?: KeyChannel) => void; copyKeys: () => void; pasteKeys: () => void; deleteKeys: () => void; setBezier: (bezier: [number, number, number, number]) => void;
 
   addVideo: (asset: VideoAsset, item: SceneItem, audio?: AudioClip) => void;
   editClip: (id: string, kind: ClipEdit, at: number) => void;
   fadeClip: (id: string, kind: 'in' | 'out') => void;
   keyProperty: (property: MotionProperty) => void;
-  editMotionProperty: (property: MotionProperty, value: number) => void;
+  editMotionProperty: (property: MotionProperty, value: number, record?: boolean) => void;
   project: Project;
   selectedId: string | null;
   selectedBone: string | null;
@@ -105,8 +106,8 @@ export interface EditorStore {
   duplicateSelected: () => void;
   moveLayer: (id: string, direction: 'up' | 'down') => void;
   addKeyframe: () => void;
-  removeKeyframe: (itemId: string, frame: number) => void;
-  moveKeyframe: (itemId: string, from: number, to: number) => void;
+  removeKeyframe: (itemId: string, frame: number, channel?: KeyChannel) => void;
+  moveKeyframe: (itemId: string, from: number, to: number, channel?: KeyChannel) => void;
   setEasing: (easing: Keyframe['easing']) => void;
   applyPreset: (preset: Preset) => void;
   resetRig: () => void;
@@ -237,7 +238,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
     if (Object.keys(values).length) next.push({ id: current?.id ?? uid(), frame: s.frame, easing: current?.easing ?? 'ease-in-out', ...(current?.bezier ? { bezier: current.bezier } : {}), values });
     s.checkpoint(); set({ project: { ...s.project, keyframes: { ...s.project.keyframes, [item.id]: next.sort((a, b) => a.frame - b.frame) } } });
   },
-  editMotionProperty: (property, value) => {
+  editMotionProperty: (property, value, record = true) => {
     const s = get(), item = s.project.items.find(i => i.id === s.selectedId);
     if (!item || isLayerLocked(s.project.items, item.id) || !Number.isFinite(value) || s.busy || s.blockReason) return;
     const bounds = property === 'opacity' ? [0, 1] : property === 'blur' ? [0, 50] : property === 'brightness' || property === 'saturation' ? [0, 3] : property.startsWith('scale') ? [0.01, 100] : [-100000, 100000];
@@ -250,8 +251,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
         if (index < 0) next.push(key); else next[index] = key;
       };
       if (!keys.some(k => k.values[property] !== undefined) && s.frame > start) write(start, item[property] ?? (property === 'blur' ? 0 : 1));
-      write(s.frame, value); s.checkpoint(); set({ project: { ...s.project, keyframes: { ...s.project.keyframes, [item.id]: next.sort((a, b) => a.frame - b.frame) } } });
-    } else s.editItem(item.id, { [property]: value });
+      write(s.frame, value); if (record) s.checkpoint(); set({ project: { ...s.project, keyframes: { ...s.project.keyframes, [item.id]: next.sort((a, b) => a.frame - b.frame) } } });
+    } else s.editItem(item.id, { [property]: value }, record);
   },
   addCharacter: () => { get().addItem(createCharacter(get().project.width / 2, get().project.height * 0.47)); get().notify('Milo is ready to pose. Drag a joint to try it.'); },
   addShape: shape => get().addItem(createShape(shape, get().project.width / 2, get().project.height / 2)),
@@ -304,20 +305,17 @@ export const useEditor = create<EditorStore>((set, get) => ({
     writeKeyframe(project, sampleItem(item, project.keyframes[item.id] ?? [], s.frame), s.frame);
     set({ project }); s.notify(`Keyframe added at frame ${s.frame + 1}.`);
   },
-  removeKeyframe: (id, frame) => {
-    if (id === '@camera') { get().checkpoint(); set(s => ({ project: { ...s.project, camera: { ...s.project.camera, keys: s.project.camera.keys.filter(k => k.frame !== frame) } } })); return; }
-    const item = get().project.items.find(i => i.id === id);
-    if (!item || isLayerLocked(get().project.items, id)) { get().notify('Unlock this layer to edit keyframes.', 'info'); return; }
-    get().checkpoint(); set(s => ({ project: { ...s.project, keyframes: { ...s.project.keyframes, [id]: (s.project.keyframes[id] ?? []).filter(k => k.frame !== frame) } } }));
+  removeKeyframe: (id, frame, channel) => {
+    const s = get(); if (s.busy || s.blockReason || id !== '@camera' && (!s.project.items.some(i => i.id === id) || isLayerLocked(s.project.items, id))) return;
+    const list = id === '@camera' ? s.project.camera.keys : s.project.keyframes[id] ?? [], keys = removeKeyChannel(list, frame, channel);
+    if (list === keys) return; s.checkpoint();
+    set({ project: id === '@camera' ? { ...s.project, camera: { ...s.project.camera, keys } } : { ...s.project, keyframes: { ...s.project.keyframes, [id]: keys } }, keySelection: s.keySelection.filter(k => !(k.itemId === id && k.frame === frame && (!channel || k.channel === channel))) });
   },
-  moveKeyframe: (id, from, to) => {
-    const s = get();
-    if (id === '@camera') { if (from === to) return; s.checkpoint(); const target = clamp(Math.round(to), 0, s.project.duration - 1); const original = s.project.camera.keys.find(k => k.frame === from); if (!original) return; set({ project: { ...s.project, camera: { ...s.project.camera, keys: [...s.project.camera.keys.filter(k => k.frame !== from && k.frame !== target), { ...original, frame: target }].sort((a, b) => a.frame - b.frame) } } }); return; }
-    const key = s.project.keyframes[id]?.find(k => k.frame === from);
-    if (!key || from === to || isLayerLocked(s.project.items, id)) return;
-    s.checkpoint(); const frame = clamp(Math.round(to), 0, s.project.duration - 1);
-    const keys = s.project.keyframes[id].filter(k => k.frame !== from && k.frame !== frame);
-    set({ project: { ...s.project, keyframes: { ...s.project.keyframes, [id]: [...keys, { ...key, frame }].sort((a, b) => a.frame - b.frame) } } });
+  moveKeyframe: (id, from, to, channel) => {
+    const s = get(); if (!Number.isFinite(to) || s.busy || s.blockReason || id !== '@camera' && (!s.project.items.some(i => i.id === id) || isLayerLocked(s.project.items, id))) return;
+    const list = id === '@camera' ? s.project.camera.keys : s.project.keyframes[id] ?? [], keys = moveKeyChannel(list, from, clamp(Math.round(to), 0, s.project.duration - 1), channel);
+    if (list === keys) return; s.checkpoint();
+    set({ project: id === '@camera' ? { ...s.project, camera: { ...s.project.camera, keys } } : { ...s.project, keyframes: { ...s.project.keyframes, [id]: keys } } });
   },
   setEasing: easing => {
     const s = get(); const id = s.selectedCamera ? '@camera' : s.selectedId;
@@ -504,34 +502,63 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
   removeAudio: id => { const s = get(); s.checkpoint(); set({ project: { ...s.project, audio: s.project.audio.filter(a => a.id !== id), items: s.project.items.map(i => i.linkedAudioId === id ? { ...i, linkedAudioId: undefined } : i) }, selectedAudio: null }); },
   setWorkArea: (start, end) => { const s = get(); const a = clamp(Math.round(start), 0, s.project.duration - 1), b = clamp(Math.round(end), a, s.project.duration - 1); s.checkpoint(); set({ project: { ...s.project, workArea: { start: a, end: b } } }); },
-  selectKey: (itemId, frame, additive = false) => {
-    const s = get(); const ref = { itemId, frame }; const existing = s.keySelection.some(k => k.itemId === itemId && k.frame === frame);
-    set({ keySelection: additive ? existing ? s.keySelection.filter(k => !(k.itemId === itemId && k.frame === frame)) : [...s.keySelection, ref] : [ref], frame, playing: false });
+  selectKey: (itemId, frame, additive = false, channel) => {
+    const s = get(), ref: KeyRef = { itemId, frame, ...(channel ? { channel } : {}) };
+    const existing = s.keySelection.some(k => sameKeyRef(k, ref));
+    const sameFrame = (k: KeyRef) => k.itemId === itemId && k.frame === frame;
+    let keySelection: KeyRef[] = [ref];
+    if (additive) {
+      if (existing) keySelection = s.keySelection.filter(k => !sameKeyRef(k, ref));
+      else if (channel && s.keySelection.some(k => sameFrame(k) && !k.channel)) keySelection = s.keySelection;
+      else keySelection = [...s.keySelection.filter(k => channel || !sameFrame(k)), ref];
+    }
+    set({ keySelection, frame, playing: false });
   },
   copyKeys: () => {
-    const s = get(); const id = s.selectedCamera ? '@camera' : s.selectedId;
-    const selected = s.keySelection.length ? s.keySelection : id ? [{ itemId: id, frame: s.frame }] : [];
-    const keyClipboard = selected.flatMap(ref => { const key = (ref.itemId === '@camera' ? s.project.camera.keys : s.project.keyframes[ref.itemId] ?? []).find(k => k.frame === ref.frame); return key ? [{ itemId: ref.itemId, key: clone(key) }] : []; });
-    set({ keyClipboard }); s.notify(keyClipboard.length ? `${keyClipboard.length} keyframe${keyClipboard.length > 1 ? 's' : ''} copied.` : 'Select a timeline diamond to copy a keyframe.', 'info');
+    const s = get(), id = s.selectedCamera ? '@camera' : s.selectedId;
+    const selected: KeyRef[] = s.keySelection.length ? s.keySelection : id ? [{ itemId: id, frame: s.frame }] : [];
+    const groups = new Map<string, KeyRef[]>();
+    for (const ref of selected) { const id = `${ref.itemId}:${ref.frame}`; groups.set(id, [...(groups.get(id) ?? []), ref]); }
+    const keyClipboard = [...groups.values()].flatMap(refs => {
+      const ref = refs[0], original = (ref.itemId === '@camera' ? s.project.camera.keys : s.project.keyframes[ref.itemId] ?? []).find(k => k.frame === ref.frame);
+      if (!original) return [];
+      const channels = refs.some(r => !r.channel) ? undefined : [...new Set(refs.map(r => r.channel!))];
+      const values = channels ? Object.assign({}, ...channels.map(c => channelValues(original, c))) : channelValues(original);
+      return Object.keys(values).length ? [{ itemId: ref.itemId, key: { ...clone(original), values }, ...(channels ? { channels } : {}) }] : [];
+    });
+    set({ keyClipboard }); s.notify(keyClipboard.length ? `${keyClipboard.length} keyframe${keyClipboard.length > 1 ? 's' : ''} copied${keyClipboard.some(k => k.channels) ? ' from selected property lanes' : ''}.` : 'Select a timeline diamond to copy a keyframe.', 'info');
   },
   pasteKeys: () => {
-    const s = get(); if (!s.keyClipboard.length) return; const earliest = Math.min(...s.keyClipboard.map(k => k.key.frame)); const channels = new Set(s.keyClipboard.map(k => k.itemId)); const targetId = s.selectedCamera ? '@camera' : s.selectedId;
-    const project = clone(s.project); const keySelection: KeyRef[] = []; let overwritten = false;
+    const s = get(); if (!s.keyClipboard.length || s.busy || s.blockReason) return;
+    const earliest = Math.min(...s.keyClipboard.map(k => k.key.frame)), tracks = new Set(s.keyClipboard.map(k => k.itemId)), targetId = s.selectedCamera ? '@camera' : s.selectedId;
+    const project = clone(s.project), keySelection: KeyRef[] = []; let overlapping = false;
     for (const entry of s.keyClipboard) {
-      const id = channels.size === 1 && targetId ? targetId : entry.itemId;
-      const item = project.items.find(i => i.id === id); if (id !== '@camera' && (!item || isLayerLocked(project.items, item.id))) continue;
-      const frame = s.frame + entry.key.frame - earliest; if (frame >= project.duration) continue;
-      const list = id === '@camera' ? project.camera.keys : project.keyframes[id] ?? [];
-      if (list.some(k => k.frame === frame)) overwritten = true;
-      const key = { ...clone(entry.key), id: uid(), frame };
-      if (!item?.rig) delete key.values.bones; else if (key.values.bones) key.values.bones = Object.fromEntries(Object.entries(key.values.bones).filter(([bone]) => item.rig!.bones.some(b => b.id === bone)));
-      const keys = [...list.filter(k => k.frame !== frame), key].sort((a, b) => a.frame - b.frame);
-      if (id === '@camera') project.camera.keys = keys; else project.keyframes[id] = keys;
-      keySelection.push({ itemId: id, frame });
+      const id = tracks.size === 1 && targetId ? targetId : entry.itemId, item = project.items.find(i => i.id === id);
+      if (id !== '@camera' && (!item || isLayerLocked(project.items, item.id))) continue;
+      const frame = s.frame + entry.key.frame - earliest; if (frame < 0 || frame >= project.duration) continue;
+      const list = id === '@camera' ? project.camera.keys : project.keyframes[id] ?? [], key = { ...clone(entry.key), id: uid(), frame };
+      if (!item?.rig) delete key.values.bones; else if (key.values.bones) {
+        key.values.bones = Object.fromEntries(Object.entries(key.values.bones).filter(([bone]) => item.rig!.bones.some(b => b.id === bone)));
+        if (!Object.keys(key.values.bones).length) delete key.values.bones;
+      }
+      if (!Object.keys(key.values).length) continue;
+      if (list.some(k => k.frame === frame)) overlapping = true;
+      const keys = mergeChannelKey(list, key); if (id === '@camera') project.camera.keys = keys; else project.keyframes[id] = keys;
+      keySelection.push(...(entry.channels ? entry.channels.filter(channel => key.values[channel] !== undefined).map(channel => ({ itemId: id, frame, channel })) : [{ itemId: id, frame }]));
     }
-    if (!keySelection.length) return; s.checkpoint(); set({ project, keySelection }); s.notify(overwritten ? 'Keyframes pasted; overlapping keys were replaced. Undo restores them.' : 'Keyframes pasted.');
+    if (!keySelection.length) return; s.checkpoint(); set({ project, keySelection }); s.notify(overlapping ? 'Key values pasted. Other channels were kept; Undo restores overlaps.' : 'Keyframes pasted.');
   },
-  deleteKeys: () => { const s = get(); if (!s.keySelection.length) return; s.checkpoint(); const project = clone(s.project); for (const ref of s.keySelection) { if (ref.itemId === '@camera') project.camera.keys = project.camera.keys.filter(k => k.frame !== ref.frame); else if (!isLayerLocked(project.items, ref.itemId)) project.keyframes[ref.itemId] = (project.keyframes[ref.itemId] ?? []).filter(k => k.frame !== ref.frame); } set({ project, keySelection: [] }); },
+  deleteKeys: () => {
+    const s = get(); if (!s.keySelection.length || s.busy || s.blockReason) return;
+    const project = { ...s.project, camera: { ...s.project.camera }, keyframes: { ...s.project.keyframes } }; let changed = false;
+    for (const ref of s.keySelection) {
+      if (ref.itemId !== '@camera' && (!project.items.some(i => i.id === ref.itemId) || isLayerLocked(project.items, ref.itemId))) continue;
+      const list = ref.itemId === '@camera' ? project.camera.keys : project.keyframes[ref.itemId] ?? [], keys = removeKeyChannel(list, ref.frame, ref.channel);
+      if (list === keys) continue; changed = true;
+      if (ref.itemId === '@camera') project.camera.keys = keys; else project.keyframes[ref.itemId] = keys;
+    }
+    if (!changed) return; s.checkpoint(); set({ project, keySelection: [] });
+  },
   setBezier: bezier => { const s = get(); const id = s.selectedCamera ? '@camera' : s.selectedId; if (!id || isLayerLocked(s.project.items, id)) return; const project = clone(s.project); const keys = id === '@camera' ? project.camera.keys : project.keyframes[id] ?? []; const nearest = [...keys].reverse().find(k => k.frame <= s.frame) ?? keys[0]; if (!nearest) return; s.checkpoint(); nearest.easing = 'bezier'; nearest.bezier = bezier; set({ project }); },
   undo: () => { const s = get(); const previous = s.history.at(-1); if (!previous) return; set({ project: previous, history: s.history.slice(0, -1), future: [s.project, ...s.future].slice(0, 40), frame: Math.min(s.frame, previous.duration - 1), selectedId: previous.items.some(i => i.id === s.selectedId) ? s.selectedId : null, selectedIds: s.selectedIds.filter(id => previous.items.some(i => i.id === id)), selectedCamera: false, selectedAudio: null, keySelection: [], selectedBone: null, playing: false }); },
   redo: () => { const s = get(); const next = s.future[0]; if (!next) return; set({ project: next, history: [...s.history, s.project], future: s.future.slice(1), frame: Math.min(s.frame, next.duration - 1), selectedId: next.items.some(i => i.id === s.selectedId) ? s.selectedId : null, selectedIds: s.selectedIds.filter(id => next.items.some(i => i.id === id)), selectedCamera: false, selectedAudio: null, keySelection: [], selectedBone: null, playing: false }); },

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { StartupScreen } from './components/StartupScreen';
+import { StartupPopup } from './components/StartupPopup';
 import { Header, Toast } from './components/Header';
 import { StudioWorkspace, StudioStatus } from './components/studio/Workspace';
 import { CommandPalette } from './components/studio/CommandPalette';
@@ -23,6 +23,7 @@ export default function App() {
   const busy = useEditor(s => s.busy);
   const dialog = useEditor(s => s.dialog), view = useEditor(s => s.view), ready = useEditor(s => s.libraryReady), blocked = useEditor(s => s.blockReason);
   const [bootPhase, setBootPhase] = useState<string | null>('Opening your local project library…'), [bootError, setBootError] = useState<string | null>(null), [bootAttempt, setBootAttempt] = useState(0);
+  const booting = useRef(true); booting.current = !!bootPhase;
   const [videoProgress, setVideoProgress] = useState<{ value: number; message: string } | null>(null), videoAbort = useRef<AbortController | null>(null);
   const inputVideo = useRef<HTMLInputElement>(null);
   const inputProject = useRef<HTMLInputElement>(null), inputImage = useRef<HTMLInputElement>(null), inputAudio = useRef<HTMLInputElement>(null);
@@ -126,12 +127,19 @@ export default function App() {
       setBootPhase('Preparing the animation and video workspace…');
       const result = await window.luno?.ready(); if (!mounted) return;
       if (associationTask.current) await associationTask.current;
-      // A short, bounded splash stays visible even when a small library loads instantly.
-      await new Promise(resolve => setTimeout(resolve, Math.max(0, 900 - (performance.now() - started))));
-      if (mounted) { setBootPhase(null); presentLaunch(associationSeen.current || !!result?.openedFile); }
-    })().catch(error => { if (mounted) setBootError(error instanceof Error ? error.message : 'Could not open the local library. Your files have not been changed.'); });
+      // Desktop uses its own small native launcher; the browser has a compact fallback.
+      if (!window.luno?.startup) await new Promise(resolve => setTimeout(resolve, Math.max(0, 450 - (performance.now() - started))));
+      if (mounted) {
+        setBootPhase(null); presentLaunch(associationSeen.current || !!result?.openedFile);
+        // The first ready workspace paint is prepared before the launcher closes.
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+        if (mounted) await window.luno?.startup?.complete();
+      }
+    })().catch(error => { if (mounted) { setBootPhase('Your studio could not open'); setBootError(error instanceof Error ? error.message : 'Could not open the local library. Your files have not been changed.'); } });
     return () => { mounted = false; };
   }, [bootAttempt]);
+  useEffect(() => { if (bootPhase) window.luno?.startup?.report({ phase: bootPhase, error: bootError }); }, [bootPhase, bootError]);
+  useEffect(() => window.luno?.startup?.onRetry(() => setBootAttempt(n => n + 1)), []);
   useEffect(() => {
     if (!ready || view !== 'editor') return;
     useEditor.getState().setSaveStatus('saving');
@@ -178,7 +186,7 @@ export default function App() {
   }, [loadNativeFile]);
   useEffect(() => {
     const api = window.luno;
-    const send = () => { const s = useEditor.getState(); api?.updater.activity({ busy: s.busy || !s.libraryReady || !!s.blockReason || !!document.querySelector('[role=dialog]:not(.updates-modal)'), playing: s.playing, interacting: s.interacting, dirty: hasUnsavedProject() || s.saveStatus === 'error' || fileIsDirty(s.project, useDocumentFiles.getState().links[s.project.id]), lastActivity: lastActivity.current }); };
+    const send = () => { const s = useEditor.getState(); api?.updater.activity({ busy: booting.current || s.busy || !s.libraryReady || !!s.blockReason || !!document.querySelector('[role=dialog]:not(.updates-modal)'), playing: s.playing, interacting: s.interacting, dirty: hasUnsavedProject() || s.saveStatus === 'error' || fileIsDirty(s.project, useDocumentFiles.getState().links[s.project.id]), lastActivity: lastActivity.current }); };
     const activity = () => { lastActivity.current = Date.now(); send(); };
     const pointerActivity = () => { if (Date.now() - lastActivity.current > 1000) activity(); };
     document.addEventListener('pointermove', pointerActivity, true); document.addEventListener('wheel', activity, true);
@@ -208,7 +216,7 @@ export default function App() {
         if (['s', 'o', 'n', 'z', 'y', 'd', 'e', 'g', 'a', 'c', 'v', 'home', '0', '+', '=', '-', '[', ']', ','].includes(key)) event.preventDefault();
         if (key === 'o') void onOpen(); else if (key === 'n') event.shiftKey && s.view === 'editor' ? s.addScene() : s.setDialog('new');
         else if (s.view === 'editor') {
-          if (key === 's') void (event.shiftKey ? onSaveAs() : onSave()); else if (key === 'e') s.setDialog('export'); else if (key === 'z') event.shiftKey ? s.redo() : s.undo(); else if (key === 'y') s.redo(); else if (key === 'd') s.duplicateSelected();
+          if (key === 's') void (event.shiftKey ? onSaveAs() : onSave()); else if (key === 'e') s.setDialog('export'); else if (key === 'z') event.shiftKey ? s.redo() : s.undo(); else if (key === 'y') s.redo(); else if (key === 'd') { if (event.shiftKey && s.selectedId && s.project.animationMode !== 'frame-by-frame') s.editClip(s.selectedId, 'split', s.frame); else if (!event.shiftKey) s.duplicateSelected(); }
           else if (key === 'g') event.shiftKey ? s.ungroupSelected() : s.groupSelected(); else if (key === 'a') s.selectAll(); else if (key === 'c') s.copyKeys(); else if (key === 'v') s.pasteKeys(); else if (key === 'home') void goHome();
           else if (key === '0') { s.setZoom(100); s.setPan({ x: 0, y: 0 }); }
           else if (key === '+' || key === '=') s.setZoom(s.zoom * 1.25); else if (key === '-') s.setZoom(s.zoom / 1.25);
@@ -233,7 +241,7 @@ export default function App() {
     window.addEventListener('keydown', keys); return () => { window.removeEventListener('keydown', keys); unsubscribe?.(); };
   }, [onOpen, onSave, onSaveAs, onSaveCopy, bootPhase]);
 
-  return <><SoundPlayback /><div className={`app-shell ${view === 'home' ? 'home-mode' : ''}`} inert={!!blocked || !!bootPhase || !!videoProgress} aria-busy={busy || !!blocked || !!bootPhase} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file && !useEditor.getState().dialog && !useEditor.getState().blockReason && !useEditor.getState().busy && !useEditor.getState().interacting) void importFile(file); }}>
+  return <><SoundPlayback /><div className={`app-shell ${view === 'home' ? 'home-mode' : ''}`} data-booting={!!bootPhase} inert={!!blocked || !!bootPhase || !!videoProgress} aria-busy={busy || !!blocked || !!bootPhase} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file && !useEditor.getState().dialog && !useEditor.getState().blockReason && !useEditor.getState().busy && !useEditor.getState().interacting) void importFile(file); }}>
     {view === 'home' ? <ProjectHome onOpen={() => void onOpen()} /> : <>
       <Header onOpen={() => void onOpen()} onSave={() => void onSave()} onSaveAs={() => void onSaveAs()} onSaveCopy={() => void onSaveCopy()} onImport={onImport} onImportAudio={onImportAudio} onImportVideo={onImportVideo} />
       <StudioWorkspace onImport={onImport} onImportAudio={onImportAudio} onImportVideo={onImportVideo} /><StudioStatus />
@@ -245,7 +253,7 @@ export default function App() {
     <input ref={inputImage} type="file" className="visually-hidden" aria-label="Import image file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
     <input ref={inputVideo} type="file" className="visually-hidden" aria-label="Import video file" accept=".mp4,.webm,.mov,.m4v" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
     <input ref={inputAudio} type="file" className="visually-hidden" aria-label="Import audio file" accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,.webm" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
-  </div>{bootPhase && <StartupScreen phase={bootPhase} error={bootError} onRetry={() => setBootAttempt(n => n + 1)} />}{videoProgress && <div className="media-import-overlay" role="dialog" aria-modal="true" aria-label="Importing video"><div><img src="./favicon.svg" width="54" height="54" alt="" /><h2>Preparing your footage</h2><p>{videoProgress.message}</p><progress value={videoProgress.value} max={1} aria-label="Video import progress" /><p className="muted-text">Embedded proxies up to 960 px · source file is unchanged</p><button className="button secondary" autoFocus onClick={() => videoAbort.current?.abort()}>Cancel import</button></div></div>}{blocked && <div className="safe-operation-overlay" role="status" aria-live="polite"><div><span><RefreshCw size={25} className="spin" /></span><h2>{blocked}</h2><p>Do not close Luno until this operation completes.</p></div></div>}</>;
+  </div>{bootPhase && (!window.luno?.startup || bootError) && <StartupPopup phase={bootPhase} error={bootError} onRetry={() => setBootAttempt(n => n + 1)} />}{videoProgress && <div className="media-import-overlay" role="dialog" aria-modal="true" aria-label="Importing video"><div><img src="./favicon.svg" width="54" height="54" alt="" /><h2>Preparing your footage</h2><p>{videoProgress.message}</p><progress value={videoProgress.value} max={1} aria-label="Video import progress" /><p className="muted-text">Embedded proxies up to 960 px · source file is unchanged</p><button className="button secondary" autoFocus onClick={() => videoAbort.current?.abort()}>Cancel import</button></div></div>}{blocked && <div className="safe-operation-overlay" role="status" aria-live="polite"><div><span><RefreshCw size={25} className="spin" /></span><h2>{blocked}</h2><p>Do not close Luno until this operation completes.</p></div></div>}</>;
 }
 
 function SoundPlayback() {

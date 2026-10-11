@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <radialGradient id="space"><stop stop-color="#32161d"/><stop offset="1" stop-color="#111116"/></radialGradient>
-    <radialGradient id="corona"><stop offset=".54" stop-color="#ff785d" stop-opacity="0"/><stop offset=".64" stop-color="#ff574f" stop-opacity=".65"/><stop offset=".77" stop-color="#c92d46" stop-opacity=".2"/><stop offset="1" stop-color="#92162e" stop-opacity="0"/></radialGradient>
-    <linearGradient id="rim" x1=".12" y1=".92" x2=".88" y2=".12"><stop stop-color="#d82e49"/><stop offset=".47" stop-color="#ff514d"/><stop offset=".8" stop-color="#ff927a"/><stop offset="1" stop-color="#ffe0c8"/></linearGradient>
-    <radialGradient id="moon" cx=".37" cy=".35"><stop stop-color="#19181e"/><stop offset="1" stop-color="#0c0c11"/></radialGradient>
+    <radialGradient id="space"><stop stop-color="#122f53"/><stop offset="1" stop-color="#0b1422"/></radialGradient>
+    <radialGradient id="corona"><stop offset=".54" stop-color="#9cd6ff" stop-opacity="0"/><stop offset=".64" stop-color="#4ba5ff" stop-opacity=".65"/><stop offset=".77" stop-color="#2e74d7" stop-opacity=".2"/><stop offset="1" stop-color="#163c8f" stop-opacity="0"/></radialGradient>
+    <linearGradient id="rim" x1=".12" y1=".92" x2=".88" y2=".12"><stop stop-color="#347ce8"/><stop offset=".47" stop-color="#54acff"/><stop offset=".8" stop-color="#a5deff"/><stop offset="1" stop-color="#eefaff"/></linearGradient>
+    <radialGradient id="moon" cx=".37" cy=".35"><stop stop-color="#142236"/><stop offset="1" stop-color="#070f1d"/></radialGradient>
     <filter id="flare" x="-150%" y="-150%" width="400%" height="400%"><feGaussianBlur stdDeviation="14"/></filter>
   </defs>
   <rect x="4" y="4" width="1016" height="1016" rx="228" fill="url(#space)"/>
   <circle cx="512" cy="512" r="439" fill="url(#corona)"/>
-  <circle cx="512" cy="512" r="284" fill="none" stroke="#ff494e" stroke-width="30" opacity=".52" filter="url(#flare)"/>
+  <circle cx="512" cy="512" r="284" fill="none" stroke="#4da9ff" stroke-width="30" opacity=".52" filter="url(#flare)"/>
   <circle cx="512" cy="512" r="282" fill="url(#moon)" stroke="url(#rim)" stroke-width="19"/>
-  <path d="M265 649a280 280 0 0 0 386 111" fill="none" stroke="#f23e4f" stroke-width="13" stroke-linecap="round"/>
-  <circle cx="725" cy="329" r="36" fill="#ff7463" opacity=".9" filter="url(#flare)"/>
-  <path d="m725 291 8 29 30 9-30 8-8 30-9-30-29-8 29-9Z" fill="#ffe7d6"/>
-  <circle cx="725" cy="329" r="9" fill="#fff6e9"/>
+  <path d="M265 649a280 280 0 0 0 386 111" fill="none" stroke="#3d8af3" stroke-width="13" stroke-linecap="round"/>
+  <circle cx="725" cy="329" r="36" fill="#7fcbff" opacity=".9" filter="url(#flare)"/>
+  <path d="m725 291 8 29 30 9-30 8-8 30-9-30-29-8 29-9Z" fill="#e9f9ff"/>
+  <circle cx="725" cy="329" r="9" fill="#ffffff"/>
 </svg>

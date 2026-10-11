@@ -30,7 +30,15 @@ Clean Windows/macOS runtime/install testing, signing/notarization, and a real pu
 - Pre-workspace startup/readiness/retry screen, static HTML fallback, red eclipse SVG/PNG/ICO/favicon and installer artwork, and red light/dark accents.
 - Portable media sharing in undo/history and cross-scene references, bounded lifetime validation, and automatic unlinking for independently re-timed sound.
 
-## Future features (not claimed in v0.3.6)
+## v0.3.7: implemented
+
+- Separate compact native launcher → close → ready main studio, isolated narrow bridge, failure/retry/quit, compact browser fallback instead of fullscreen loading.
+- Blue dark/light studio and eclipse/installer identity; clearer focus/selection states and technical settings copy.
+- Expandable authored property lanes; channel-safe move/delete/copy/paste with rig/effect preservation; keyboard timing nudges.
+- Pixel-tolerant magnetic clip alignment with a visible guide and Alt bypass; source-restoring trim handles/fields and linked sound.
+- Remembered independent workspace dock/visibility/zoom/snap profiles; real split shortcut; sampled opacity/effect edits; standard ruler keyboard navigation.
+
+## Future features (not claimed in v0.3.7)
 
 - Reusable symbols and nested timelines.
 - Vector shape morphing, masks/clipping, richer paths/brushes.

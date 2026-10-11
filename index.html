@@ -4,25 +4,27 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#151318" />
+    <meta name="theme-color" content="#121820" />
     <meta name="description" content="Luno Animate is a local-first layer animation, rigging, drawing, and video editing workspace." />
     <title>Luno Animate — Animation & Video</title>
   <style>
-      html, body { margin: 0; background: #121116; }
-      .startup-screen { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 24%, #371923 0, #151318 46%, #111116 100%); color: #f3e9ed; font-family: Arial, sans-serif; text-align: center; }
-      .startup-screen img { display: block; margin: 0 auto 30px; border-radius: 27px; }
-      .startup-screen h1 { font-size: 23px; font-weight: 500; margin: 17px 0; }
-      .startup-screen p { color: #b8a0ab; font-size: 12px; }
-      .startup-overline { font-size: 10px; letter-spacing: 3px; color: #ed8a92; }
-      .startup-screen small { display: block; margin-top: 45px; color: #8c717d; font-size: 8px; letter-spacing: 2px; }
-      .startup-progress { width: 230px; height: 2px; margin: 30px auto; background: #38232e; overflow: hidden; }
-      .startup-progress span { display: block; width: 45%; height: 100%; background: #ef636d; animation: startup-load 1.35s ease-in-out infinite; }
-      @keyframes startup-load { from { transform: translateX(-110%); } to { transform: translateX(335%); } }
-      @media (prefers-reduced-motion: reduce) { .startup-progress span { animation: none; width: 100%; } }
+      html, body { margin: 0; background: #121820; }
+      .startup-popup { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); width: min(412px,calc(100vw - 78px)); border: 1px solid #3a5273; border-radius: 10px; padding: 20px 24px; background: linear-gradient(125deg,#172941,#101722 68%); box-shadow: 0 24px 100px #0005; color: #e9f2ff; font-family: Arial,sans-serif; }
+      .startup-popup-header { display: flex; height: 23px; align-items: center; gap: 9px; font-size: 9px; letter-spacing: 2px; }
+      .startup-popup-body { display: flex; align-items: center; gap: 18px; margin: 28px 0 25px; }
+      .startup-popup img { border-radius: 16px; flex-shrink: 0; }
+      .startup-popup-overline { color: #83bdff; font-size: 8px; letter-spacing: 1.4px; }
+      .startup-popup h1 { font-size: 17px; font-weight: 500; letter-spacing: -.4px; margin: 9px 0; }
+      .startup-popup p { color: #a9bdd8; font-size: 10px; line-height: 1.6; margin: 0; }
+      .startup-popup footer { color: #8099ba; font-size: 9px; margin-top: 18px; }
+      .startup-popup-progress { height: 3px; background: #2a3e58; border-radius: 3px; overflow: hidden; }
+      .startup-popup-progress span { display: block; width: 36%; height: 100%; background: #70b5ff; animation: startup-popup-load 1.4s ease-in-out infinite; }
+      @keyframes startup-popup-load { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
+      @media (prefers-reduced-motion:reduce) { .startup-popup-progress span { animation: none; width: 100%; } }
     </style>
   </head>
   <body>
-    <div id="root"><div class="startup-screen" role="status"><div class="startup-identity"><img src="./favicon.svg" width="128" height="128" alt="Luno red solar eclipse"/><span class="startup-overline">LUNO ANIMATE</span><h1>Starting up Luno Animations</h1><p>Preparing your creative workspace…</p><div class="startup-progress"><span></span></div><small>LOCAL-FIRST · ANIMATION &amp; VIDEO</small><noscript>Enable JavaScript to open the editor. Your local files have not been changed.</noscript></div></div></div>
+    <div id="root"><div class="startup-popup" data-testid="startup-popup" role="status"><div class="startup-popup-header"><strong>LUNO ANIMATE</strong></div><div class="startup-popup-body"><img src="./favicon.svg" width="68" height="68" alt="Luno blue eclipse"/><div><span class="startup-popup-overline">ANIMATION &amp; VIDEO STUDIO</span><h1>Starting up Luno Animations</h1><p>Opening your local studio…</p></div></div><div class="startup-popup-progress"><span></span></div><footer>Your work stays on this device.</footer><noscript>Enable JavaScript to open the editor. Your local files have not been changed.</noscript></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -18,11 +18,11 @@ async function videoDocument(page: Page) {
   const dialog = await start(page); await dialog.getByRole('button', { name: 'Video editing', exact: false }).click(); const create = page.getByRole('dialog', { name: 'Create a new project' }); await expect(create.getByLabel('New document width')).toHaveValue('1920'); await expect(create.getByLabel('New project frame rate')).toHaveValue('30'); await create.getByLabel('New document width').fill('128'); await create.getByLabel('New document height').fill('72'); await create.getByLabel('Project name').fill('Footage study'); await create.getByRole('button', { name: 'Create project', exact: true }).click(); await expect(page.getByTestId('stage')).toBeVisible(); await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false');
 }
 
-test('shows the eclipse startup screen before the version-aware workspace and all three document types', async ({ page }) => {
+test('shows the compact blue startup popup before the version-aware workspace and all three document types', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' }); await expect(page.getByText('Starting up Luno Animations', { exact: true })).toBeVisible();
-  const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); await expect(news).toBeVisible(); await expect(news).toContainText(APP_VERSION); await expect(page.getByTestId('startup-screen')).toHaveCount(0);
+  const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); await expect(news).toBeVisible(); await expect(news).toContainText(APP_VERSION); await expect(page.getByTestId('startup-popup')).toHaveCount(0);
   await news.getByRole('button', { name: 'Continue', exact: true }).click(); const launch = page.getByRole('dialog', { name: 'Luno Animate — Start' }); await expect(launch.getByRole('button', { name: 'Video editing', exact: false })).toBeVisible(); await expect(launch.getByRole('button', { name: 'Hand-drawn', exact: false })).toBeVisible(); await expect(launch.getByRole('button', { name: 'Rig / motion', exact: false })).toBeVisible();
-  const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()); expect(accent).toBe('#ee6977');
+  const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()); expect(accent).toBe('#77b8ff');
 });
 
 test('edits real property keys, exportable effects, and accessible custom Bézier handles in the motion studio', async ({ page }) => {

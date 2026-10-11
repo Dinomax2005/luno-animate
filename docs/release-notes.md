@@ -1,3 +1,36 @@
+# Luno Animate v0.3.7 — Blueprint / Precision
+
+## A small window first, then the studio
+
+The fullscreen startup screen is removed. The installed application now opens a **separate 460 × 282 native launcher** with the blue eclipse mark and “Starting up Luno Animations”. The actual studio stays hidden until the local library, associated document, and ready workspace paint are prepared. The small window closes **before** the main window is shown. Errors offer Retry or Quit rather than exposing a half-ready editor. Its isolated preload has no document/library/updater capabilities. Browser previews use a compact startup card; they cannot create a native desktop window.
+
+## A coherent blue professional interface
+
+Blue charcoal and light themes, blue eclipse icons/installer artwork, stronger panel hierarchy, readable selections, explicit keyboard focus, and technical document-settings copy. The dense menus/tools/property workflow is retained; this is not a tutorial-first redesign. Existing artwork is never recolored.
+
+## Precision that changes how you edit
+
+- Expand animated layer chevrons into authored property tracks. Move, copy, paste, or delete lane diamonds without discarding unrelated transforms, effects, or rig poses. Occupied-frame pastes merge unrelated values; Undo restores overwritten values.
+- Clips snap to the playhead, neighboring clip/sound boundaries, scene, and work area. A visible guide identifies the alignment. The magnet toggles snapping; hold **Alt** to bypass.
+- Clip edges and **Timing → Clip in / Clip out** can restore available source footage, not just shorten it. Source and scene limits are honored; linked sound follows the edit. Clicking an edge without moving is a safe no-op.
+- **Ctrl/⌘ Shift D** now actually splits rather than duplicating. Clip/diamond arrow keys support precision timing. The playhead ruler adds Home/End and one-second Page Up/Down navigation.
+- Opacity sliders and effect reset edit the animated values at the playhead. A continuous opacity drag is one undo gesture.
+- Animation, Drawing, Rigging, Motion, and Video editing retain independent dock sizes, visibility, timeline zoom, and snapping across switching/restarts. Reset changes only the active workspace.
+
+## Compatibility and limits
+
+All three document modes, FK/IK/cutout rigs, manual drawing cels, ordered scenes, camera, linked-file overwrite Save, copy export, autosave, revisions/backups, and MP4/audio export remain. Application/storage identity and LAM container/schema are unchanged; v0.3.6 and v0.3.7 video files are interoperable.
+
+**Video remains bounded proxy editing:** 150 MB input, 30 seconds/960px per clip, project FPS, 24 million JPEG characters/import, 32 media assets, and the 64 MB portable-project limit. Export size cannot recreate full-source detail. Easing is shared by channels at the same physical keyframe; independent per-channel curves, arbitrary-length/full-source footage, group effects/timing, masks, nested symbols, and media relinking are not implemented. This is a usable early studio, not a claim of Adobe/Alight parity or a measured “10×” gain.
+
+## Install and update
+
+Use the assets attached to this release. Existing updater-enabled Windows NSIS and Linux AppImage installs can use **Updates & backups → Check GitHub → Save, back up & restart** without uninstalling. The guarded save/verified-backup path remains unchanged. Unsigned macOS and DEB/system-managed Linux still update manually. Installers remain unsigned development builds; physical Windows/macOS upgrade tests are not claimed.
+
+Earlier releases are left untouched; this is a new version, not replacement assets for 0.3.6.
+
+---
+
 # Luno Animate v0.3.6 — Eclipse / Motion / Video
 
 ## Layer motion studio

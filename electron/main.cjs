@@ -5,6 +5,7 @@ const { pathToFileURL, fileURLToPath } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { ProjectVault, atomicWrite } = require('./vault.cjs');
 const { DocumentFiles } = require('./document-files.cjs');
+const { createStartupWindow } = require('./startup-window.cjs');
 const { SafeUpdater } = require('./lib/updater.cjs');
 // A separate profile keeps packaged CI smoke tests away from real creator data.
 if (process.env.LUNO_TEST_USER_DATA && process.env.LUNO_DISABLE_UPDATES === '1') app.setPath('userData', path.resolve(process.env.LUNO_TEST_USER_DATA));
@@ -30,6 +31,7 @@ async function closeSafely() {
 }
 
 let window;
+let startup;
 let workspace;
 function projectArgument(args) {
   const value = args.find(arg => /\.(lam|luno)$/i.test(arg));
@@ -48,7 +50,7 @@ const trustedFile = pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html
 function assertTrusted(event) {
   const url = event.senderFrame?.url;
   const trusted = devUrl && !app.isPackaged ? url?.startsWith(`${new URL(devUrl).origin}/`) : url === trustedFile;
-  if (!window || event.sender !== window.webContents || !trusted) throw new Error('Untrusted request.');
+  if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || !trusted) throw new Error('Untrusted request.');
 }
 const safeName = name => typeof name === 'string' ? name.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 80) || 'Luno animation' : 'Luno animation';
 async function getWorkspace() {
@@ -61,7 +63,7 @@ async function deliverPendingFile() {
   if (!pendingFile || !rendererReady || !window) return false;
   const file = pendingFile; pendingFile = undefined;
   try { window.webContents.send('luno:project-file', await documents.open(file)); return true; }
-  catch (error) { await dialog.showMessageBox(window, { type: 'error', title: 'Open document failed', message: error.message }); return false; }
+  catch (error) { await dialog.showMessageBox(startup && !startup.finished ? startup.window : window, { type: 'error', title: 'Open document failed', message: error.message }); return false; }
 }
 function command(name) { window?.webContents.send('luno:command', name); }
 function installMenu() {
@@ -92,7 +94,7 @@ function createWindow() {
   documents.reset();
   window = new BrowserWindow({
     width: 1440, height: 950, minWidth: 1024, minHeight: 720,
-    title: 'Luno Animate', show: false, backgroundColor: '#151318',
+    title: 'Luno Animate', show: false, backgroundColor: '#121820',
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
@@ -100,10 +102,13 @@ function createWindow() {
       contextIsolation: true, sandbox: true, nodeIntegration: false,
       webSecurity: true, allowRunningInsecureContent: false,
       partition: 'persist:luno-studio',
+      backgroundThrottling: false, // Startup handshakes must run while the studio is hidden.
     },
   });
-  window.on('close', event => { if (!allowQuit) { event.preventDefault(); void closeSafely(); } });
-  window.once('ready-to-show', () => window.show());
+  window.on('close', event => { if (!allowQuit) { event.preventDefault(); if (startup && !startup.finished) { allowQuit = true; startup.dispose(); app.quit(); } else void closeSafely(); } });
+  // A bounded dwell override is only enabled in an isolated, updates-disabled test profile.
+  const testDwell = process.env.LUNO_TEST_USER_DATA && process.env.LUNO_DISABLE_UPDATES === '1' ? Math.min(5000, Math.max(650, Number(process.env.LUNO_TEST_STARTUP_MS) || 650)) : 650;
+  startup = createStartupWindow({ BrowserWindow, ipcMain, mainWindow: window, icon: path.join(__dirname, '..', 'assets', 'icon.png'), minimumMs: testDwell, onQuit: () => { allowQuit = true; startup?.dispose(); app.quit(); } });
   window.webContents.setWindowOpenHandler(({ url }) => {
     try {
       const parsed = new URL(url);
@@ -134,16 +139,16 @@ function createWindow() {
   if (devUrl && !app.isPackaged) {
     const parsed = new URL(devUrl);
     if (!['localhost', '127.0.0.1'].includes(parsed.hostname) || parsed.protocol !== 'http:') throw new Error('The development URL must be a local HTTP server.');
-    void window.loadURL(devUrl);
-  } else void window.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  window.on('closed', () => { window = null; });
+    void window.loadURL(devUrl).catch(error => startup?.report({ phase: 'The editor could not open', error: error.message }));
+  } else void window.loadFile(path.join(__dirname, '..', 'dist', 'index.html')).catch(error => startup?.report({ phase: 'The editor could not open', error: error.message }));
+  window.on('closed', () => { startup?.dispose(); startup = null; window = null; });
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', (_event, argv) => {
     pendingFile = projectArgument(argv);
-    if (window) { if (window.isMinimized()) window.restore(); window.focus(); void deliverPendingFile(); }
+    if (window) { if (startup && !startup.finished) startup.window.focus(); else { if (window.isMinimized()) window.restore(); window.focus(); } void deliverPendingFile(); }
   });
   app.on('open-file', (event, file) => { event.preventDefault(); pendingFile = file; void deliverPendingFile(); });
   app.whenReady().then(() => {
@@ -186,6 +191,8 @@ else {
     });
     ipcMain.handle('luno:get-workspace', async event => { assertTrusted(event); return getWorkspace(); });
     ipcMain.handle('luno:ready', async event => { assertTrusted(event); rendererReady = true; return { openedFile: await deliverPendingFile() }; });
+    ipcMain.on('luno:startup-status', (event, state) => { try { assertTrusted(event); startup?.report(state); } catch { /* A launcher cannot access the studio bridge. */ } });
+    ipcMain.handle('luno:startup-complete', event => { assertTrusted(event); if (!rendererReady) throw new Error('The library has not finished opening.'); if (startup && !startup.complete()) throw new Error('The startup window is not ready. Retry startup.'); return true; });
     vault = new ProjectVault(app.getPath('userData'), app.getVersion());
     const handle = (name, callback) => ipcMain.handle(`luno:${name}`, async (event, ...args) => { assertTrusted(event); return callback(...args); });
     handle('library-list', () => vault.list()); handle('library-save', (bytes, thumb) => vault.save(bytes, thumb)); handle('library-load', id => vault.load(id));
@@ -202,6 +209,6 @@ else {
     void vault.getSettings().then(settings => updater.initialize(settings.preferences?.automaticUpdates ?? true)).catch(() => updater.initialize(false));
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
-  app.on('before-quit', event => { if (!allowQuit && window) { event.preventDefault(); void closeSafely(); } });
+  app.on('before-quit', event => { if (!allowQuit && window) { if (startup && !startup.finished) { allowQuit = true; startup.dispose(); return; } event.preventDefault(); void closeSafely(); } });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }

@@ -1,6 +1,6 @@
 # Portable `.lam` format
 
-Luno Animate v0.3.6 writes `.lam`, a **binary project format**, not JSON with a different filename. It includes every ordered scene and embedded image/video/audio, rig, layer hierarchy, drawing cel, text, key, camera, and work area. File associations register Luno as its editor. Legacy `.luno` JSON remains importable and is never overwritten by migration.
+Luno Animate v0.3.7 writes `.lam`, a **binary project format**, not JSON with a different filename. It includes every ordered scene and embedded image/video/audio, rig, layer hierarchy, drawing cel, text, key, camera, and work area. File associations register Luno as its editor. Legacy `.luno` JSON remains importable and is never overwritten by migration.
 
 This is an application-specific format, **not a claim that only Luno could ever read it**. Someone could implement the decoder below. There is no password encryption, licensing lock, or DRM. SHA-256 detects accidental corruption, not a malicious author's intent.
 
@@ -42,3 +42,7 @@ Schema 2 additionally accepts `animationMode: "video-editing"`; omitted modes st
 Layer `startFrame`/exclusive `endFrame` control visibility; `sourceStart` is measured in seconds. Video source sampling uses the scene FPS and asset FPS; out-of-range footage is not displayed. Optional `linkedAudioId` identifies an audio clip in the same scene. Audio `endFrame` is also exclusive and bounds playback/export. Moving/trimming sound independently unlinks it from video; mute/volume do not. Blur (0–50 px), brightness/saturation (0–3), and their keyframe channels use the shared SVG renderer. Asset/range/channel/ID/reference validation runs before project insertion and native saving.
 
 Video input is limited to 150 MB/30 seconds, proxies to a 960-pixel long side at project FPS and 24 million JPEG data-URL characters per import. At most 32 shared assets are supported, with 1–1800 bounded frames each, within the existing 64 MB total payload limit. Split/duplicate clips share immutable source data; deletion prunes only assets no longer referenced by any scene. The LAM container version, magic, schema number, digest, compression and application/storage identity remain unchanged.
+
+## Precision editing (v0.3.7)
+
+Property-lane selection/clipboard and workspace profiles are editor preferences, not new file fields. Lane edits split/merge the existing `values` pose while retaining unrelated channels and bone values; duplicate frame/key-ID validation still applies. A physical keyframe has one easing/Bézier curve shared by its channels. Restorable trim uses the existing source offset/range fields and shared media; no source frame is deleted. Container/schema/app/storage identity are unchanged and v0.3.6 can read v0.3.7 video documents.

@@ -42,6 +42,7 @@ export interface ProjectRecord { id: string; name: string; createdAt: number; up
 export interface SavedProject extends ProjectRecord { bytes: Uint8Array }
 export type View = 'home' | 'editor';
 export type Dialog = 'setup' | 'export' | 'new' | 'help' | 'settings' | 'download' | 'commands' | 'updates' | 'start' | 'whats-new' | null;
-export interface KeyRef { itemId: string; frame: number }
+export type KeyChannel = keyof Pose;
+export interface KeyRef { itemId: string; frame: number; channel?: KeyChannel }
 export interface UpdateState { phase: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'waiting' | 'preparing' | 'installing' | 'current' | 'unpublished' | 'disabled' | 'error'; version: string | null; progress: number; message: string; checkedAt: number | null; countdown: number | null; automatic: boolean; backupId: string | null }
 export interface BackupInfo { id: string; createdAt: number; reason: string; version: string; projects: number }

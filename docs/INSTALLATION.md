@@ -1,18 +1,18 @@
 # Installers, protected updates, and releases
 
-## Install v0.3.6
+## Install v0.3.7
 
-Download the platform assets from the [official v0.3.6 release](https://github.com/Dinomax2005/luno-animate/releases/tag/v0.3.6). Public release downloads do not need a GitHub account or artifact ZIP extraction.
+Download the platform assets from the [official v0.3.7 release](https://github.com/Dinomax2005/luno-animate/releases/tag/v0.3.7). Public release downloads do not need a GitHub account or artifact ZIP extraction.
 
 - Windows x64: run the `.exe` setup.
 - macOS: use the appropriate Intel/Apple silicon `.dmg`; these development builds are unsigned, not notarized.
 - Linux x64: use the `.AppImage` or `.deb` as appropriate to your distribution.
 
-The static eclipse splash appears before the interactive workspace, while the local library and associated document initialize. The optional workspace configuration chooses panel layout, theme, document source, stage size, and FPS. Skipping it opens the real local document manager. New documents default to a blank stage. Templates are opt-in under **Templates**.
+A separate 460 × 282 native blue-eclipse launcher appears while the library and associated document initialize. It closes before the hidden main studio is shown. Startup errors offer Retry or Quit; the browser preview uses a compact card, not a native window or a full-window loading page. The optional workspace configuration chooses panel layout, theme, document source, stage size, and FPS. Skipping it opens the real local document manager. New documents default to a blank stage. Templates are opt-in under **Templates**.
 
 ### Update an existing installation
 
-If you already use an updater-enabled v0.2/v0.3.4/v0.3.5 Windows build or Linux AppImage, **do not uninstall or reinstall**. Open **Updates & backups → Check GitHub**, download v0.3.6, then choose **Save, back up & restart**, or leave automatic updates enabled. The public stable release and its update manifests—not Actions artifacts—provide the update.
+If you already use an updater-enabled v0.2/v0.3.4/v0.3.5/v0.3.6 Windows build or Linux AppImage, **do not uninstall or reinstall**. Open **Updates & backups → Check GitHub**, download v0.3.7, then choose **Save, back up & restart**, or leave automatic updates enabled. The public stable release and its update manifests—not Actions artifacts—provide the update.
 
 Unsigned macOS and DEB installations still require manual replacement/package-manager updates. This preserves your native library; do not delete the application data directory. v0.1 has no updater and needs one initial manual upgrade.
 
@@ -38,7 +38,7 @@ The guarded install path flushes/acknowledges the renderer's latest work/setting
 | Linux AppImage | Protected AppImage replacement/restart |
 | DEB/system-managed Linux | Package-manager/manual update |
 
-Only published stable versions are discoverable. A draft is deliberately invisible to installed applications. The app remains usable offline if checking fails. v0.3.6 preserves application identity, user-data location, native storage, and document schema. Future schema changes need non-destructive migrations.
+Only published stable versions are discoverable. A draft is deliberately invisible to installed applications. The app remains usable offline if checking fails. v0.3.7 preserves application identity, user-data location, native storage, and document schema. Future schema changes need non-destructive migrations.
 
 ## Where your work lives
 
@@ -65,7 +65,7 @@ npm run desktop:linux
 `release/` is ignored. Packaging includes generated native validator/updater bundles, renderer/fonts, notices, exact unmodified MPL source ZIP, file associations, and `app-update.yml`. Build-time downloads require GitHub/Electron helper access. Use hosted Actions when local networking blocks them; do not bypass TLS.
 
 - `ci.yml`: types, engine/store/IDB tests, production build, native vault/updater failure tests, full browser media/library/editor tests.
-- `installers.yml`: native Windows/macOS/Linux build and manifests; native tests on every OS; packaged Linux smoke covering isolation, real filesystem library/LAM/backup, native MP4 with audio, close and association-style startup. Updates are disabled and a temporary profile is used for smoke tests.
+- `installers.yml`: native Windows/macOS/Linux build and manifests; native tests on every OS; packaged Linux smoke covering isolation, real filesystem library/LAM/backup, native MP4 with audio, close, association-style startup, and the real two-window launcher → studio visibility sequence. Updates are disabled and a temporary profile is used for smoke tests; a bounded test-only popup dwell lets the packaged lifecycle test observe both windows.
 - `release.yml`: exact successful installer source (only download-link metadata may differ), flattened assets, verified SHA-512 manifest references, flat SHA-256 download sums, and a **draft release** for explicit owner review.
 
 An installer push marked `[prepare-release]` stages a draft only after all matrix builds, tests, and feed checks pass; the draft targets the exact build SHA. Other builds remain artifacts. Workflows can be manually dispatched once they exist on the default branch. Arena branch source pushes already build test installers; publishing/merging main is not a prerequisite for those artifacts. The session branch does not automatically merge to main.
@@ -74,7 +74,7 @@ An installer push marked `[prepare-release]` stages a draft only after all matri
 
 After all installers/tests pass for the same source:
 
-1. Use the verified draft produced by the `[prepare-release]` installer build, run the draft workflow with `v0.3.6` (matching `package.json`) and that successful installer run ID, or download the artifacts and run `node scripts/prepare-release.mjs installers release-assets`.
+1. Use the verified draft produced by the `[prepare-release]` installer build, run the draft workflow with `v0.3.7` (matching `package.json`) and that successful installer run ID, or download the artifacts and run `node scripts/prepare-release.mjs installers release-assets`.
 2. Upload the **flat** assets: Windows EXE + block map, macOS Intel/ARM ZIPs + DMGs + block maps, Linux AppImage/DEB, `latest.yml`, `latest-mac*.yml`, `latest-linux*.yml`, and `SHA256SUMS.txt`. Do not rename installers after generating manifests.
 3. Review notes and OS/signing checks. The script validates manifest version, referenced files, and exact SHA-512; SHA-256 sums use flat names matching GitHub downloads (`sha256sum -c SHA256SUMS.txt`).
 4. Publish the draft as a **stable, non-prerelease** only after review. Drafts and prereleases are deliberately excluded from the updater. Do not overwrite an existing version's assets—ship a newer version.
@@ -105,7 +105,7 @@ Missing/empty secrets are omitted, not interpreted as certificate paths. Public 
 - [ ] Portable import/export with embedded image/audio and multiple scenes verified.
 - [ ] Flat checksum/manifest assets validated; publish only after owner review.
 
-## Launch and file-save changes in v0.3.6
+## Launch and file-save changes in v0.3.7
 
 After updating, the current What’s New notes appear once. A normal launch then shows Start with New/Open/Recent and the two animation types; disable it with its startup checkbox. Opening an associated `.lam` does not interrupt the canvas with Start. Workspace configuration remains under Help.
 

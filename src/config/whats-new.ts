@@ -1,12 +1,12 @@
 import { APP_VERSION } from './version';
 export const whatsNew = {
   version: APP_VERSION,
-  title: 'Motion, footage, and a red eclipse.',
+  title: 'A blue studio. A sharper workflow.',
   changes: [
-    { title: 'A layer-based motion studio', text: 'Rig / motion now uses clip-based layer timing, individual property keyframes, editable Bézier handles, and animated blur, brightness, and saturation. FK / IK rigging and cutout attachments stay available.' },
-    { title: 'Video editing documents', text: 'Import supported MP4, WebM, MOV, or M4V footage, then move, trim, split, and fade clips. Linked sound follows the edits. Add vector artwork, rigged characters, and animated titles over the footage.' },
-    { title: 'A real startup screen', text: 'Starting up Luno Animations appears while your local library and workspace are prepared. Startup failures offer a retry instead of leaving you behind an endless loading screen.' },
-    { title: 'A new solar eclipse identity', text: 'The red eclipse replaces the old green moon in the app icon, startup screen, favicon, and Windows installer artwork. The workspace now uses a red accent palette in dark and light themes.' },
+    { title: 'Small launcher, ready studio', text: 'The installed app opens a separate compact startup window. It closes before the main studio appears—no full-window loading screen. Startup errors offer Retry or Quit; browsers use a compact fallback card.' },
+    { title: 'A coherent blue workspace', text: 'A blue eclipse identity, dark and light blue accents, clearer panel hierarchy, visible keyboard focus, and more readable selection states. Existing artwork is never recolored.' },
+    { title: 'Precision motion and clip editing', text: 'Expand layers into individual property tracks. Move, copy, paste, or delete channel keys without losing other transforms, effects, or rig poses. Clips snap to the playhead and neighboring boundaries; hold Alt to bypass. Trim handles can restore available source footage and linked sound.' },
+    { title: 'A workspace that stays yours', text: 'Motion, Drawing, Rigging, Animation, and Video editing remember their own docks, panel visibility, timeline zoom, and snapping. Ctrl/⌘ Shift D now really splits; opacity sliders and effect resets edit the animated values at the playhead.' },
   ],
-  note: 'Video is embedded as portable JPEG proxies up to 960 px and 30 seconds per clip, within the 64 MB .lam limit. Existing projects, linked-file Save, manual drawing frames, autosave, backups, and MP4/audio exports are retained.',
+  note: 'All three document modes, rigs, manual cels, linked-file Save, autosave, backups, and MP4/audio export remain. Video uses portable proxies up to 30 seconds and 960 px per clip, within the 64 MB .lam limit. Easing remains shared by channels at the same frame.',
 };

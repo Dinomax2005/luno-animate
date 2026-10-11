@@ -4,6 +4,7 @@ interface Window {
   showSaveFilePicker?: (options: { suggestedName: string; types: { description: string; accept: Record<string, string[]> }[] }) => Promise<import('./services/document-files').WritableFileHandle>;
   luno?: {
     platform: string; version: string;
+    startup?: { report: (state: { phase: string; error: string | null }) => void; complete: () => Promise<boolean>; onRetry: (callback: () => void) => () => void };
     documents?: {
       open: () => Promise<import('./services/document-files').NativeOpenedFile | null>;
       save: (token: string, data: Uint8Array) => Promise<import('./services/document-files').NativeFileTarget>;

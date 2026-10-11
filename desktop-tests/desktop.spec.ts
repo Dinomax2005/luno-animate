@@ -1,10 +1,18 @@
 import { APP_VERSION } from '../src/config/version';
-import { _electron as electron, test, expect } from '@playwright/test';
+import { _electron as electron, test, expect, type ElectronApplication } from '@playwright/test';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { decodeLam, encodeLam } from '../src/engine/lam';
 import { movie, sound } from '../tests/fixtures/media';
+
+async function studioWindow(app: ElectronApplication) {
+  await expect.poll(() => app.windows().some(page => /\/dist\/index\.html$/.test(page.url()))).toBe(true);
+  const page = app.windows().find(page => /\/dist\/index\.html$/.test(page.url()))!;
+  const native = await app.browserWindow(page);
+  await expect.poll(() => native.evaluate(window => window.isVisible())).toBe(true);
+  await native.dispose(); await expect(page.locator('.startup-screen')).toHaveCount(0); return page;
+}
 
 test('packaged app: safe bridge, native library, LAM association, backups, real MP4 audio, and restart', async () => {
   test.setTimeout(120_000);
@@ -14,7 +22,7 @@ test('packaged app: safe bridge, native library, LAM association, backups, real 
   const launch = (extra: string[] = []) => electron.launch({ executablePath, args: [...args, ...extra], cwd: process.cwd(), env: { ...process.env, LUNO_DEV_URL: '', LUNO_DISABLE_UPDATES: '1', LUNO_TEST_USER_DATA: profile } });
   const app = await launch(); let restarted: Awaited<ReturnType<typeof launch>> | undefined;
   try {
-    const page = await app.firstWindow(); const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+    const page = await studioWindow(app); const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
     const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); await expect(news).toBeVisible(); await expect(news).toContainText(APP_VERSION);
     expect(await page.evaluate(() => ({ bridge: typeof window.luno?.documents?.save, require: typeof (window as unknown as { require?: unknown }).require }))).toEqual({ bridge: 'function', require: 'undefined' });
     if (executablePath) expect(await app.evaluate(({ app: nativeApp }) => nativeApp.isPackaged)).toBe(true);
@@ -61,7 +69,7 @@ test('packaged app: safe bridge, native library, LAM association, backups, real 
     expect(video.width).toBe(64); expect(video.height).toBe(64); expect(video.duration).toBeCloseTo(1, 1); expect(video.first[0]).toBeGreaterThan(200); expect(video.first[1]).toBeLessThan(50); expect(video.last[1]).toBeGreaterThan(200); expect(video.samples).toBeGreaterThan(40000); expect(video.rms).toBeGreaterThan(0.05);
 
     expect(await page.evaluate(async () => { try { await window.luno!.library.load('../escape'); return 'unsafe'; } catch { return 'blocked'; } })).toBe('blocked'); expect(errors).toEqual([]);
-    await app.close(); restarted = await launch([join(directory, 'Native file.lam')]); const restored = await restarted.firstWindow(); await expect(restored.getByTestId('stage')).toBeVisible(); await expect(restored.getByRole('dialog')).toHaveCount(0); await expect(restored.getByLabel('Project name')).toHaveValue('Cancellation kept the link'); expect((await restored.evaluate(() => window.luno!.library.list())).length).toBe(4);
+    await app.close(); restarted = await launch([join(directory, 'Native file.lam')]); const restored = await studioWindow(restarted); await expect(restored.getByTestId('stage')).toBeVisible(); await expect(restored.getByRole('dialog')).toHaveCount(0); await expect(restored.getByLabel('Project name')).toHaveValue('Cancellation kept the link'); expect((await restored.evaluate(() => window.luno!.library.list())).length).toBe(4);
   } finally { await restarted?.close().catch(() => {}); await app.close().catch(() => {}); await rm(directory, { recursive: true, force: true }); }
 });
 
@@ -73,7 +81,7 @@ test('packaged eclipse/video studio imports real footage, writes portable proxie
   const launch = (extra: string[] = []) => electron.launch({ executablePath, args: [...args, ...extra], cwd: process.cwd(), env: { ...process.env, LUNO_DEV_URL: '', LUNO_DISABLE_UPDATES: '1', LUNO_TEST_USER_DATA: profile } });
   const app = await launch(); let reopened: Awaited<ReturnType<typeof launch>> | undefined;
   try {
-    const page = await app.firstWindow(), errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    const page = await studioWindow(app), errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
     const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); await expect(news).toBeVisible(); await expect(news).toContainText(APP_VERSION);
     expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
     await news.getByRole('button', { name: 'Continue', exact: true }).click(); await page.getByRole('dialog', { name: 'Luno Animate — Start' }).getByRole('button', { name: 'Video editing', exact: false }).click();
@@ -84,6 +92,31 @@ test('packaged eclipse/video studio imports real footage, writes portable proxie
     const p = decodeLam(await readFile(join(directory, 'Studio.lam'))); expect(p.animationMode).toBe('video-editing'); expect(p.media[0].frames).toHaveLength(30); expect(p.items[0].linkedAudioId).toBe(p.audio[0].id);
     const slider = page.getByRole('slider', { name: 'Timeline playhead' }); await slider.focus(); for (let n = 0; n < 15; n++) await slider.press('ArrowRight'); await page.locator('.inspector-tabs').getByRole('button', { name: 'Timing', exact: true }).click(); await page.getByRole('button', { name: 'Split at playhead', exact: true }).click(); await expect(page.locator('.motion-clip.video')).toHaveCount(2); await page.keyboard.press('Control+s'); await expect(page.getByText('Saved Studio.lam.', { exact: true })).toBeVisible();
     const split = decodeLam(await readFile(join(directory, 'Studio.lam'))); expect(split.media).toHaveLength(1); expect(split.items).toHaveLength(2); expect(split.audio).toHaveLength(2); expect(await readFile('tests/fixtures/red-green-tone.webm')).toEqual(source); expect(errors).toEqual([]);
-    await app.close(); reopened = await launch([join(directory, 'Studio.lam')]); const restored = await reopened.firstWindow(); await expect(restored.getByTestId('stage')).toBeVisible(); await expect(restored.getByRole('dialog')).toHaveCount(0); await expect(restored.getByLabel('Project name')).toHaveValue('Native footage'); await expect(restored.locator('.motion-clip.video')).toHaveCount(2); await expect(restored.locator('.audio-clip')).toHaveCount(2);
+    await app.close(); reopened = await launch([join(directory, 'Studio.lam')]); const restored = await studioWindow(reopened); await expect(restored.getByTestId('stage')).toBeVisible(); await expect(restored.getByRole('dialog')).toHaveCount(0); await expect(restored.getByLabel('Project name')).toHaveValue('Native footage'); await expect(restored.locator('.motion-clip.video')).toHaveCount(2); await expect(restored.locator('.audio-clip')).toHaveCount(2);
   } finally { await reopened?.close().catch(() => {}); await app.close().catch(() => {}); await rm(directory, { recursive: true, force: true }); }
+});
+
+
+test('packaged startup: a small isolated native launcher closes before the real studio opens', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'luno-startup-test-')), profile = join(directory, 'profile'); await mkdir(profile);
+  const executablePath = process.env.PLAYWRIGHT_ELECTRON_EXECUTABLE ? resolve(process.env.PLAYWRIGHT_ELECTRON_EXECUTABLE) : undefined;
+  const app = await electron.launch({ executablePath, args: [...(executablePath ? [] : ['.']), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])], cwd: process.cwd(), env: { ...process.env, LUNO_DEV_URL: '', LUNO_DISABLE_UPDATES: '1', LUNO_TEST_USER_DATA: profile, LUNO_TEST_STARTUP_MS: '4000' } });
+  try {
+    const observed = await app.evaluate(({ BrowserWindow }) => {
+      const windows = BrowserWindow.getAllWindows(), main = windows.find(w => /\/dist\/index\.html$/.test(w.webContents.getURL())), splash = windows.find(w => /\/electron\/startup\.html$/.test(w.webContents.getURL()));
+      if (!main || !splash) throw new Error('The separate startup window was not created.');
+      const events: string[] = []; (globalThis as unknown as { startupEvents: string[] }).startupEvents = events;
+      splash.once('closed', () => events.push('splash closed')); main.once('show', () => events.push('studio shown'));
+      return { mainVisible: main.isVisible(), bounds: splash.getBounds(), mainId: main.id, splashId: splash.id };
+    });
+    expect(observed.mainVisible).toBe(false); expect(observed.bounds.width).toBe(460); expect(observed.bounds.height).toBe(282); expect(observed.mainId).not.toBe(observed.splashId);
+    await expect.poll(() => app.windows().some(page => /\/electron\/startup\.html$/.test(page.url()))).toBe(true);
+    const splash = app.windows().find(page => /\/electron\/startup\.html$/.test(page.url()))!;
+    await expect(splash.getByText('Starting up Luno Animations', { exact: true })).toBeVisible(); await expect(splash.locator('#version')).toHaveText(APP_VERSION);
+    expect(await splash.evaluate(() => ({ require: typeof (window as unknown as { require?: unknown }).require, studio: typeof window.luno, retry: typeof (window as unknown as { lunoStartup: { retry: unknown } }).lunoStartup.retry }))).toEqual({ require: 'undefined', studio: 'undefined', retry: 'function' });
+    const nativeSplash = await app.browserWindow(splash); await expect.poll(() => nativeSplash.evaluate(window => window.isVisible())).toBe(true); await nativeSplash.dispose();
+    const page = await studioWindow(app); await expect(page.getByRole('dialog', { name: 'What’s New', exact: true })).toContainText(APP_VERSION);
+    expect(await app.evaluate(() => (globalThis as unknown as { startupEvents: string[] }).startupEvents)).toEqual(['splash closed', 'studio shown']);
+    expect(splash.isClosed()).toBe(true); await expect.poll(() => app.windows().length).toBe(1);
+  } finally { await app.close().catch(() => {}); await rm(directory, { recursive: true, force: true }); }
 });
