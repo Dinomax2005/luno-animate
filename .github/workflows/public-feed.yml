@@ -1,4 +1,4 @@
-# Verify the published v0.3.6 feeds; installer source remains pinned to 3bfdcfc.
+# Verify the published v0.3.7 feeds; installer source remains pinned to 957c3c6.
 name: Verify the published stable updater feed
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   consumer:
-    name: Existing v0.2/v0.3.4/v0.3.5 updaters discover the public release
+    name: Existing v0.2/v0.3.4/v0.3.5/v0.3.6 updaters discover the public release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -31,7 +31,7 @@ jobs:
           const { newerStable } = require('./electron/update-policy.cjs');
           (async () => {
             const results = [];
-            for (const previousVersion of ['0.2.0', '0.3.4', '0.3.5']) for (const [platform, required] of [
+            for (const previousVersion of ['0.2.0', '0.3.4', '0.3.5', '0.3.6']) for (const [platform, required] of [
               ['win32', [`Luno-Animate-${version}-win-x64.exe`]],
               ['darwin', [`Luno-Animate-${version}-mac-x64.zip`, `Luno-Animate-${version}-mac-arm64.zip`]],
               ['linux', [`Luno-Animate-${version}-linux-x86_64.AppImage`]],
@@ -49,8 +49,8 @@ jobs:
               }
               results.push({ previousVersion, platform, version: info.version, files: files.map(file => file.url.href) });
             }
-            console.log(JSON.stringify({ previousVersions: ['0.2.0', '0.3.4', '0.3.5'], feeds: results }, null, 2));
-            require('node:fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Unauthenticated electron-updater discovery from v0.2.0, v0.3.4, and v0.3.5 passed for Windows, both macOS ZIP architectures, and Linux AppImage. Available stable version: ${version}. This checks discovery and manifest parsing, not cross-OS installation.\n`);
+            console.log(JSON.stringify({ previousVersions: ['0.2.0', '0.3.4', '0.3.5', '0.3.6'], feeds: results }, null, 2));
+            require('node:fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Unauthenticated electron-updater discovery from v0.2.0, v0.3.4, v0.3.5, and v0.3.6 passed for Windows, both macOS ZIP architectures, and Linux AppImage. Available stable version: ${version}. This checks discovery and manifest parsing, not cross-OS installation.\n`);
           })().catch(error => {
             console.error(error);
             const message = String(error.message).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
