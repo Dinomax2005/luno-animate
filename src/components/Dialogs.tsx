@@ -67,24 +67,24 @@ function ExportDialog() {
 function NewProjectDialog() {
   const [mode, setMode] = useState<AnimationMode>(useLaunch.getState().newMode);
   const [template, setTemplate] = useState<Template>('blank'), [name, setName] = useState('Untitled-1');
-  const [width, setWidth] = useState(960), [height, setHeight] = useState(600), [fps, setFps] = useState(24);
+  const [width, setWidth] = useState(mode === 'video-editing' ? 1920 : 960), [height, setHeight] = useState(mode === 'video-editing' ? 1080 : 600), [fps, setFps] = useState(mode === 'video-editing' ? 30 : 24);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const valid = [width, height].every(value => Number.isInteger(value) && value >= 64 && value <= 4096);
   const create = async () => {
     if (!valid || !name.trim()) return;
     setBusy(true); setError('');
-    try { let project = adaptCanvas(mode === 'frame-by-frame' ? createProject('blank', mode) : starter(template), width, height); if (mode === 'frame-by-frame') project.items = [createDrawingLayer(width, height)]; project.name = name.trim(); project.fps = fps; await openDocument(project); close(); useEditor.getState().notify('Document created.'); }
+    try { let project = adaptCanvas(mode === 'rigged' ? starter(template) : createProject('blank', mode), width, height); if (mode === 'frame-by-frame') project.items = [createDrawingLayer(width, height)]; project.name = name.trim(); project.fps = fps; await openDocument(project); close(); useEditor.getState().notify('Document created.'); }
     catch (error) { setError(error instanceof Error ? error.message : 'Document creation failed.'); }
     finally { setBusy(false); }
   };
   return <Modal title="Create a new project" onClose={() => { if (!busy) close(); }} className="new-project-modal production-new-document"><div className="dialog-heading"><span className="eyebrow">FILE / NEW</span><h1>New document</h1></div>
-    <div className="form-label">Animation type</div><AnimationTypePicker value={mode} disabled={busy} onChange={value => { setMode(value); useLaunch.getState().setNewMode(value); if (value === 'frame-by-frame') setTemplate('blank'); }} />
+    <div className="form-label">Animation type</div><AnimationTypePicker value={mode} disabled={busy} onChange={value => { setMode(value); useLaunch.getState().setNewMode(value); if (value !== 'rigged') setTemplate('blank'); if (value === 'video-editing') { setWidth(1920); setHeight(1080); setFps(30); } }} />
     <label className="form-label">Project name<input autoFocus value={name} onChange={e => setName(e.target.value)} maxLength={100} disabled={busy} /></label>
-    <label className="form-label">Document source<select aria-label="New document template" value={template} disabled={busy || mode === 'frame-by-frame'} onChange={e => setTemplate(e.target.value as Template)}><option value="blank">Blank document</option><option value="character">Character rig</option><option value="shapes">Vector animation</option><option value="title">Animated title</option><option value="cutout">Cutout rig</option></select></label>
+    <label className="form-label">Document source<select aria-label="New document template" value={template} disabled={busy || mode !== 'rigged'} onChange={e => setTemplate(e.target.value as Template)}><option value="blank">Blank document</option><option value="character">Character rig</option><option value="shapes">Vector animation</option><option value="title">Animated title</option><option value="cutout">Cutout rig</option></select></label>
     <div className="form-grid new-project-format"><label className="form-label">Width<input aria-label="New document width" type="number" min={64} max={4096} step={1} value={width} disabled={busy} onChange={e => setWidth(Number(e.target.value))} /></label><label className="form-label">Height<input aria-label="New document height" type="number" min={64} max={4096} step={1} value={height} disabled={busy} onChange={e => setHeight(Number(e.target.value))} /></label></div>
     <div className="document-size-presets"><span>STAGE PRESETS</span>{[{ label: 'HD', w: 1920, h: 1080 }, { label: 'Square', w: 1080, h: 1080 }, { label: 'Portrait', w: 1080, h: 1920 }, { label: '960 × 600', w: 960, h: 600 }].map(preset => <button key={preset.label} disabled={busy} onClick={() => { setWidth(preset.w); setHeight(preset.h); }}>{preset.label}</button>)}</div>
     <label className="form-label">Frame rate<select aria-label="New project frame rate" value={fps} disabled={busy} onChange={e => setFps(Number(e.target.value))}>{[12, 24, 25, 30, 60].map(value => <option value={value} key={value}>{value} fps</option>)}</select></label>
-    <p className="document-specification">{mode === 'frame-by-frame' ? 'Individual drawing cels · no automatic in-betweens' : 'Vector / rig document · pose & transform keys'} · RGB · .lam · local autosave</p>{!valid && <div className="form-error" role="alert">Stage dimensions must be whole numbers between 64 and 4096 pixels.</div>}{error && <div className="form-error" role="alert">{error}</div>}
+    <p className="document-specification">{mode === 'frame-by-frame' ? 'Individual drawing cels · no automatic in-betweens' : mode === 'video-editing' ? 'Video sequence · trimmed footage · sound · animated overlays' : 'Layer-based motion · rigs · effects · property keyframes'} · RGB · .lam · local autosave</p>{!valid && <div className="form-error" role="alert">Stage dimensions must be whole numbers between 64 and 4096 pixels.</div>}{error && <div className="form-error" role="alert">{error}</div>}
     <div className="dialog-footer"><button className="button secondary" disabled={busy} onClick={close}>Cancel</button><button className="button primary" disabled={busy || !valid || !name.trim()} onClick={() => void create()}>{busy ? 'Creating…' : 'Create project'}</button></div>
   </Modal>;
 }

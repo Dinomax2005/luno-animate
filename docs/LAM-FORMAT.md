@@ -1,6 +1,6 @@
 # Portable `.lam` format
 
-Luno Animate v0.3.4 writes `.lam`, a **binary project format**, not JSON with a different filename. It includes every ordered scene and embedded image/audio, rig, layer hierarchy, drawing cel, text, key, camera, and work area. File associations register Luno as its editor. Legacy `.luno` JSON remains importable and is never overwritten by migration.
+Luno Animate v0.3.6 writes `.lam`, a **binary project format**, not JSON with a different filename. It includes every ordered scene and embedded image/video/audio, rig, layer hierarchy, drawing cel, text, key, camera, and work area. File associations register Luno as its editor. Legacy `.luno` JSON remains importable and is never overwritten by migration.
 
 This is an application-specific format, **not a claim that only Luno could ever read it**. Someone could implement the decoder below. There is no password encryption, licensing lock, or DRM. SHA-256 detects accidental corruption, not a malicious author's intent.
 
@@ -34,3 +34,11 @@ Future readers should reject unknown container/schema versions with an explanato
 Schema 2 now includes `animationMode: "rigged" | "frame-by-frame"`. The container version, schema number, magic, bounds, and checksum format are unchanged. Older schema-2 files that omit the field default to `rigged`; legacy JSON migration remains supported. Hand-drawn documents start with `holdCels: false`, exact-frame cels, and no generated in-between drawings. Their type and all cels survive portable saving, library autosave/recovery, and scene switching.
 
 External filenames, permission tokens, and browser handles are **not embedded** in `.lam` payloads or portable copies. The renderer keeps session destinations by the actual library ID, while a collision-cloned library document preserves the external document’s original ID when saving back to its source. Save As creates a new external identity from the library document. Copy export never retargets Save.
+
+## Timed layers and embedded video (v0.3.6)
+
+Schema 2 additionally accepts `animationMode: "video-editing"`; omitted modes still default to `rigged`. `media` defaults to an empty array for older files and is shared across all scenes. Assets contain a unique ID/name, dimensions, FPS, and bounded JPEG data-URL frames. Items reference `videoAssetId` rather than duplicating frames. No file-system path or remote URL is stored for playback. Older app versions do not understand video documents; use v0.3.6 or newer to open them.
+
+Layer `startFrame`/exclusive `endFrame` control visibility; `sourceStart` is measured in seconds. Video source sampling uses the scene FPS and asset FPS; out-of-range footage is not displayed. Optional `linkedAudioId` identifies an audio clip in the same scene. Audio `endFrame` is also exclusive and bounds playback/export. Moving/trimming sound independently unlinks it from video; mute/volume do not. Blur (0–50 px), brightness/saturation (0–3), and their keyframe channels use the shared SVG renderer. Asset/range/channel/ID/reference validation runs before project insertion and native saving.
+
+Video input is limited to 150 MB/30 seconds, proxies to a 960-pixel long side at project FPS and 24 million JPEG data-URL characters per import. At most 32 shared assets are supported, with 1–1800 bounded frames each, within the existing 64 MB total payload limit. Split/duplicate clips share immutable source data; deletion prunes only assets no longer referenced by any scene. The LAM container version, magic, schema number, digest, compression and application/storage identity remain unchanged.

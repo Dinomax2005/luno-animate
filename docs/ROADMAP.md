@@ -22,12 +22,21 @@ Clean Windows/macOS runtime/install testing, signing/notarization, and a real pu
 - Compact Start/New/Open/Recent launcher and acknowledged once-per-version What’s New with manual Help access.
 - Native disk-failure tests, browser file-handle/launch/mode acceptance, and packaged repeated-save/Save As/conflict smoke.
 
-## Future features (not claimed in v0.3.5)
+## v0.3.6: implemented
+
+- Alight Motion–inspired timed layer bars, independent transform/effect keys, accessible editable Bézier graph, and Gaussian blur/brightness/saturation/opacity transitions; existing FK/IK cutout rigging retained.
+- Third Video editing document type and workspace: bounded real video decoding, embedded JPEG proxies, linked PCM sound, non-destructive trim/split/move, animated overlays, and the shared export renderer.
+- Real VP8/Opus footage acceptance, pixel-sampling, linked edit/save/reopen, playable non-silent MP4 output, cancellation, and malformed/oversized-input rejection.
+- Pre-workspace startup/readiness/retry screen, static HTML fallback, red eclipse SVG/PNG/ICO/favicon and installer artwork, and red light/dark accents.
+- Portable media sharing in undo/history and cross-scene references, bounded lifetime validation, and automatic unlinking for independently re-timed sound.
+
+## Future features (not claimed in v0.3.6)
 
 - Reusable symbols and nested timelines.
 - Vector shape morphing, masks/clipping, richer paths/brushes.
 - Arbitrary mesh skinning, deformable art/weights, richer custom rig creation.
 - Lip-sync and stronger audio/scene editing.
+- Full-resolution external-media conform/relink, longer footage, extendable source handles, masks, and a dedicated audio mixer.
 - Better large-document undo/memory budgets and GPU rendering.
 - Broad platform/codec compatibility and production export pipelines.
 - Optional password encryption (not “only this program can read”).

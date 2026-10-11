@@ -54,7 +54,7 @@ export function ProjectHome({ onOpen }: { onOpen: () => void }) {
   const title = section === 'favorites' ? 'Favorites' : section === 'templates' ? 'Templates' : section === 'trash' ? 'Trash' : 'Recent documents';
   return <div className="home-shell production-home" inert={busy}>
     <aside className="home-sidebar">
-      <a href="#" className="home-brand" onClick={e => { e.preventDefault(); setSection('projects'); }}><span className="home-application-mark">Lu</span><span>LUNO<small>ANIMATE</small></span></a>
+      <a href="#" className="home-brand" onClick={e => { e.preventDefault(); setSection('projects'); }}><span className="home-application-mark"><img src="./favicon.svg" alt="" /></span><span>LUNO<small>ANIMATE</small></span></a>
       <div className="home-file-actions"><button className="button secondary" disabled={!ready || working} onClick={() => useEditor.getState().setDialog('new')}><Plus size={14} /> New project</button><button className="button secondary" disabled={!ready || working} onClick={onOpen}><FolderOpen size={14} /> Open…</button></div>
       <span className="home-nav-label">DOCUMENTS</span>
       <nav aria-label="Project library">{([{ id: 'projects', label: 'All projects', icon: FolderOpen, count: active.length }, { id: 'favorites', label: 'Favorites', icon: Star, count: favorite.length }, { id: 'templates', label: 'Templates', icon: Layers2 }, { id: 'trash', label: 'Trash', icon: Trash2, count: trash.length }] as const).map(item => <button key={item.id} aria-label={item.label} title={item.label} className={section === item.id ? 'active' : ''} onClick={() => { setSection(item.id); setSearch(''); }}><item.icon size={15} /><span>{item.label}</span>{'count' in item && <small>{item.count}</small>}</button>)}</nav>

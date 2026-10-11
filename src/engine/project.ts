@@ -44,9 +44,10 @@ export function createDrawingLayer(width: number, height: number, name = 'Drawin
 }
 export function createProject(template: Template = 'character', animationMode: AnimationMode = 'rigged'): Project {
   const scene = createScene(960, 600);
-  const project: Project = { ...scene, version: 2, animationMode, id: uid(), name: template === 'title' ? 'Typography-1' : template === 'cutout' ? 'Cutout-1' : template === 'character' ? 'Character-1' : template === 'shapes' ? 'Motion-1' : 'Untitled-1',
+  const project: Project = { ...scene, version: 2, animationMode, media: [], id: uid(), name: template === 'title' ? 'Typography-1' : template === 'cutout' ? 'Cutout-1' : template === 'character' ? 'Character-1' : template === 'shapes' ? 'Motion-1' : 'Untitled-1',
     width: 960, height: 600, fps: 24, sceneId: scene.id, sceneName: scene.name, sceneOrder: [scene.id], scenes: [] };
   if (animationMode === 'frame-by-frame') { project.duration = 2; project.workArea = { start: 0, end: 1 }; project.name = 'Untitled-1'; project.items = [createDrawingLayer(project.width, project.height)]; return project; }
+  if (animationMode === 'video-editing') { project.width = 1920; project.height = 1080; project.fps = 30; project.duration = 300; project.workArea = { start: 0, end: 299 }; project.camera = { ...project.camera, x: 960, y: 540 }; project.name = 'Sequence-1'; project.background = '#111114'; return project; }
   if (template === 'character') {
     const ground = createShape('ground', 480, 493); Object.assign(ground, { name: 'Ground', width: 210, height: 26, locked: true });
     const orbit = createShape('ellipse', 695, 203); Object.assign(orbit, { name: 'Accent circle', width: 46, height: 46, fill: '#f0b793' });
@@ -71,11 +72,11 @@ const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/).refine(v => !['_
 const color = z.string().regex(/^(#[0-9a-fA-F]{3,8}|none|transparent)$/);
 const frame = z.number().int().min(0).max(1799);
 const bone = z.object({ id, name: z.string().max(100), parentId: id.nullable(), length: finite.min(0).max(10000), angle: finite.min(-100000).max(100000), locked: z.boolean().optional(), minAngle: finite.min(-3600).max(3600).optional(), maxAngle: finite.min(-3600).max(3600).optional() });
-const pose = z.object({ x: point.shape.x.optional(), y: point.shape.y.optional(), scaleX: finite.min(0.01).max(100).optional(), scaleY: finite.min(0.01).max(100).optional(), rotation: finite.optional(), opacity: finite.min(0).max(1).optional(), bones: z.record(id, finite.min(-100000).max(100000)).optional() });
+const pose = z.object({ x: point.shape.x.optional(), y: point.shape.y.optional(), scaleX: finite.min(0.01).max(100).optional(), scaleY: finite.min(0.01).max(100).optional(), rotation: finite.optional(), opacity: finite.min(0).max(1).optional(), blur: finite.min(0).max(50).optional(), brightness: finite.min(0).max(3).optional(), saturation: finite.min(0).max(3).optional(), bones: z.record(id, finite.min(-100000).max(100000)).optional() });
 const keyframe = z.object({ id, frame, easing: z.enum(['linear', 'ease-in-out', 'ease-out', 'ease-in', 'hold', 'back-out', 'bounce-out', 'elastic-out', 'bezier']), values: pose,
   bezier: z.tuple([finite.min(0).max(1), finite.min(-3).max(3), finite.min(0).max(1), finite.min(-3).max(3)]).optional() });
 const itemSchema = z.object({
-  id, name: z.string().min(1).max(100), type: z.enum(['character', 'shape', 'path', 'image', 'text', 'group', 'drawing']),
+  id, name: z.string().min(1).max(100), type: z.enum(['character', 'shape', 'path', 'image', 'text', 'group', 'drawing', 'video']),
   shape: z.enum(['rectangle', 'ellipse', 'star', 'sparkle', 'ground']).optional(), parentId: id.nullable().optional(),
   attachment: z.object({ characterId: id, boneId: id, anchor: finite.min(0).max(1) }).optional(),
   x: point.shape.x, y: point.shape.y, width: finite.min(1).max(10000), height: finite.min(1).max(10000),
@@ -85,12 +86,15 @@ const itemSchema = z.object({
   rig: z.object({ origin: point, bones: z.array(bone).max(200) }).optional(), characterStyle: z.enum(['milo', 'skeleton']).optional(),
   text: z.string().max(4000).optional(), fontSize: finite.min(4).max(600).optional(), fontWeight: finite.min(100).max(900).optional(), textAlign: z.enum(['start', 'middle', 'end']).optional(),
   cels: z.array(z.object({ frame, strokes: z.array(z.object({ points: z.array(point).min(2).max(20000), color, width: finite.min(0.5).max(100) })).max(500) })).max(1800).optional(),
+  startFrame: frame.optional(), endFrame: z.number().int().min(1).max(1800).optional(), sourceStart: finite.min(0).max(30).optional(), videoAssetId: id.optional(), linkedAudioId: id.optional(),
+  blur: finite.min(0).max(50).optional(), brightness: finite.min(0).max(3).optional(), saturation: finite.min(0).max(3).optional(),
   holdCels: z.boolean().optional(), blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay']).optional(),
 });
-const audioSchema = z.object({ id, name: z.string().min(1).max(100), data: z.string().max(40_000_000).regex(/^data:audio\/(mpeg|mp3|wav|x-wav|wave|ogg|mp4|aac|flac|webm);base64,[a-zA-Z0-9+/=]+$/), duration: finite.min(0.01).max(7200), startFrame: frame, trimStart: finite.min(0).max(7200), volume: finite.min(0).max(2), muted: z.boolean(), waveform: z.array(finite.min(0).max(1)).max(512) });
+const audioSchema = z.object({ id, name: z.string().min(1).max(100), data: z.string().max(40_000_000).regex(/^data:audio\/(mpeg|mp3|wav|x-wav|wave|ogg|mp4|aac|flac|webm);base64,[a-zA-Z0-9+/=]+$/), duration: finite.min(0.01).max(7200), startFrame: frame, endFrame: z.number().int().min(1).max(1800).optional(), trimStart: finite.min(0).max(7200), volume: finite.min(0).max(2), muted: z.boolean(), waveform: z.array(finite.min(0).max(1)).max(512) });
+const videoAssetSchema = z.object({ id, name: z.string().min(1).max(100), width: z.number().int().min(1).max(4096), height: z.number().int().min(1).max(4096), fps: z.number().int().min(1).max(60), frames: z.array(z.string().max(2_000_000).regex(/^data:image\/jpeg;base64,[a-zA-Z0-9+/=]+$/)).min(1).max(1800) });
 const sceneFields = { duration: z.number().int().min(2).max(1800), background: color, items: z.array(itemSchema).max(500), keyframes: z.record(id, z.array(keyframe).max(1800)),
   camera: z.object({ x: point.shape.x, y: point.shape.y, zoom: finite.min(0.05).max(20), rotation: finite, keys: z.array(keyframe).max(1800) }), audio: z.array(audioSchema).max(32), workArea: z.object({ start: frame, end: frame }) };
-export const projectSchema = z.object({ version: z.literal(2), animationMode: z.enum(['rigged', 'frame-by-frame']).default('rigged'), id, name: z.string().min(1).max(100), width: z.number().int().min(64).max(4096), height: z.number().int().min(64).max(4096), fps: z.number().int().min(1).max(60),
+export const projectSchema = z.object({ version: z.literal(2), animationMode: z.enum(['rigged', 'frame-by-frame', 'video-editing']).default('rigged'), media: z.array(videoAssetSchema).max(32).default([]), id, name: z.string().min(1).max(100), width: z.number().int().min(64).max(4096), height: z.number().int().min(64).max(4096), fps: z.number().int().min(1).max(60),
   sceneId: id, sceneName: z.string().min(1).max(100), sceneOrder: z.array(id).min(1).max(32), scenes: z.array(z.object({ id, name: z.string().min(1).max(100), ...sceneFields })).max(31), ...sceneFields });
 
 function validateScene(scene: SceneContent) {
@@ -109,6 +113,7 @@ function validateScene(scene: SceneContent) {
   for (const clip of scene.audio) if (clip.startFrame >= scene.duration || clip.trimStart >= clip.duration) throw new Error('An audio clip has invalid timing.');
   if (new Set(scene.audio.map(a => a.id)).size !== scene.audio.length) throw new Error('Duplicate audio clip IDs.');
   for (const item of scene.items) {
+    if ((item.startFrame ?? 0) >= (item.endFrame ?? scene.duration) || (item.endFrame ?? scene.duration) > scene.duration) throw new Error('The layer clip range is invalid.');
     if (item.type === 'character' && !item.rig) throw new Error('A character is missing its rig.');
     if (item.type === 'image' && !item.imageData) throw new Error('An image layer is missing its artwork.');
     if (item.type === 'drawing') validateKeys(item.cels ?? []);
@@ -155,7 +160,22 @@ export function parseProject(raw: string, allowLegacy = true): Project {
   const p = result.data as Project;
   const sceneIds = [p.sceneId, ...p.scenes.map(s => s.id)];
   if (new Set(sceneIds).size !== sceneIds.length || new Set(p.sceneOrder).size !== sceneIds.length || p.sceneOrder.length !== sceneIds.length || p.sceneOrder.some(id => !sceneIds.includes(id))) throw new Error('The scene order is invalid.');
-  for (const scene of getScenes(p)) validateScene(scene);
+  const media = new Map(p.media.map(m => [m.id, m]));
+  if (media.size !== p.media.length) throw new Error('The project contains duplicate media assets.');
+  if (p.media.some(m => m.frames.length / m.fps > 30 + 1 / m.fps)) throw new Error('Embedded video assets support up to 30 seconds.');
+  for (const scene of getScenes(p)) {
+    validateScene(scene);
+    const audioIds = new Set(scene.audio.map(a => a.id));
+    if (audioIds.size !== scene.audio.length) throw new Error('The scene contains duplicate audio IDs.');
+    for (const a of scene.audio) if (a.endFrame !== undefined && (a.endFrame <= a.startFrame || a.endFrame > scene.duration)) throw new Error('The audio clip range is invalid.');
+    for (const i of scene.items) {
+      if (i.type === 'video') {
+        const asset = i.videoAssetId ? media.get(i.videoAssetId) : undefined;
+        if (!asset || (i.sourceStart ?? 0) >= asset.frames.length / asset.fps) throw new Error('A video clip refers to missing media or an invalid source time.');
+      }
+      if (i.linkedAudioId && !audioIds.has(i.linkedAudioId)) throw new Error('A video clip refers to missing linked sound.');
+    }
+  }
   return p;
 }
 export const serializeProject = (project: Project) => JSON.stringify(project, null, 2);

@@ -4,12 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f5f6f2" />
-    <meta name="description" content="A little less complicated. A lot more animated. Luno is your friendly, local-first 2D animation studio." />
-    <title>Luno Animate — Make a little magic.</title>
+    <meta name="theme-color" content="#151318" />
+    <meta name="description" content="Luno Animate is a local-first layer animation, rigging, drawing, and video editing workspace." />
+    <title>Luno Animate — Animation & Video</title>
+  <style>
+      html, body { margin: 0; background: #121116; }
+      .startup-screen { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 24%, #371923 0, #151318 46%, #111116 100%); color: #f3e9ed; font-family: Arial, sans-serif; text-align: center; }
+      .startup-screen img { display: block; margin: 0 auto 30px; border-radius: 27px; }
+      .startup-screen h1 { font-size: 23px; font-weight: 500; margin: 17px 0; }
+      .startup-screen p { color: #b8a0ab; font-size: 12px; }
+      .startup-overline { font-size: 10px; letter-spacing: 3px; color: #ed8a92; }
+      .startup-screen small { display: block; margin-top: 45px; color: #8c717d; font-size: 8px; letter-spacing: 2px; }
+      .startup-progress { width: 230px; height: 2px; margin: 30px auto; background: #38232e; overflow: hidden; }
+      .startup-progress span { display: block; width: 45%; height: 100%; background: #ef636d; animation: startup-load 1.35s ease-in-out infinite; }
+      @keyframes startup-load { from { transform: translateX(-110%); } to { transform: translateX(335%); } }
+      @media (prefers-reduced-motion: reduce) { .startup-progress span { animation: none; width: 100%; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="startup-screen" role="status"><div class="startup-identity"><img src="./favicon.svg" width="128" height="128" alt="Luno red solar eclipse"/><span class="startup-overline">LUNO ANIMATE</span><h1>Starting up Luno Animations</h1><p>Preparing your creative workspace…</p><div class="startup-progress"><span></span></div><small>LOCAL-FIRST · ANIMATION &amp; VIDEO</small><noscript>Enable JavaScript to open the editor. Your local files have not been changed.</noscript></div></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

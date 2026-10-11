@@ -6,7 +6,7 @@ import { isLayerLocked } from '../../engine/geometry';
 import { useLaunch } from '../../services/launch';
 import { goHome } from '../../services/library';
 
-export interface AppActions { onOpen: () => void; onSave: () => void; onSaveAs?: () => void; onSaveCopy?: () => void; onImport: () => void; onImportAudio: () => void }
+export interface AppActions { onOpen: () => void; onSave: () => void; onSaveAs?: () => void; onSaveCopy?: () => void; onImport: () => void; onImportAudio: () => void; onImportVideo?: () => void }
 export type MenuName = 'File' | 'Edit' | 'Insert' | 'Object' | 'Animation' | 'View' | 'Window' | 'Help';
 export const menuNames: MenuName[] = ['File', 'Edit', 'Insert', 'Object', 'Animation', 'View', 'Window', 'Help'];
 export interface AppCommand {
@@ -51,6 +51,7 @@ export function appCommands(actions: AppActions): AppCommand[] {
     { id: 'insert.rectangle', menu: 'Insert', label: 'Rectangle', icon: Square, run: () => s().addShape('rectangle'), enabled: editing },
     { id: 'insert.text', menu: 'Insert', label: 'Text layer', icon: Type, run: () => s().addText(), enabled: editing },
     { id: 'insert.image', menu: 'Insert', label: 'Import artwork…', icon: Image, separator: true, run: actions.onImport, enabled: editing },
+    { id: 'insert.video', menu: 'Insert', label: 'Import video…', icon: Film, description: 'Decode MP4 / WebM / MOV footage into embedded editing proxies', run: () => actions.onImportVideo?.(), enabled: () => editing() && !!actions.onImportVideo && s().project.animationMode !== 'frame-by-frame' },
     { id: 'insert.audio', menu: 'Insert', label: 'Import sound…', icon: Volume2, run: actions.onImportAudio, enabled: editing },
     { id: 'object.group', menu: 'Object', label: 'Group selection', icon: Group, shortcut: 'Ctrl+G', run: () => s().groupSelected(), enabled: () => selection() && s().selectedIds.length > 1 },
     { id: 'object.ungroup', menu: 'Object', label: 'Ungroup', icon: Ungroup, shortcut: 'Ctrl+Shift+G', run: () => s().ungroupSelected(), enabled: () => selection() && s().project.items.some(i => s().selectedIds.includes(i.id) && i.type === 'group') },
@@ -60,6 +61,7 @@ export function appCommands(actions: AppActions): AppCommand[] {
     { id: 'animation.key', menu: 'Animation', label: 'Insert keyframe', icon: DiamondPlus, shortcut: 'K', separator: true, run: () => s().addKeyframe(), enabled: () => selection() || editing() && s().selectedCamera },
     { id: 'animation.cel', menu: 'Animation', label: s().project.animationMode === 'frame-by-frame' ? 'Duplicate to next frame' : 'Insert drawing exposure', icon: Brush, shortcut: 'F6', run: () => s().project.animationMode === 'frame-by-frame' ? s().nextDrawingFrame('duplicate') : s().duplicateCel(), enabled: () => editing() && s().project.items.some(i => i.id === s().selectedId && i.type === 'drawing' && !isLayerLocked(s().project.items, i.id)) },
     { id: 'animation.blank', menu: 'Animation', label: s().project.animationMode === 'frame-by-frame' ? 'New blank frame' : 'Insert blank cel', icon: Film, shortcut: 'F7', run: () => s().project.animationMode === 'frame-by-frame' ? s().nextDrawingFrame('blank') : s().blankCel(), enabled: () => editing() && s().project.items.some(i => i.id === s().selectedId && i.type === 'drawing' && !isLayerLocked(s().project.items, i.id)) },
+    { id: 'animation.split', menu: 'Animation', label: 'Split clip at playhead', icon: Film, shortcut: 'Ctrl+Shift+D', run: () => { if (s().selectedId) s().editClip(s().selectedId!, 'split', s().frame); }, enabled: () => selection() && s().project.animationMode !== 'frame-by-frame' },
     { id: 'animation.autokey', menu: 'Animation', label: 'Auto-key transforms', icon: DiamondPlus, checked: p.autoKey, separator: true, run: () => s().setPreference('autoKey', !s().preferences.autoKey), enabled: () => editing() && s().project.animationMode !== 'frame-by-frame' },
     { id: 'animation.loop', menu: 'Animation', label: 'Loop playback', icon: Repeat2, checked: p.loop, run: () => s().setPreference('loop', !s().preferences.loop), enabled: editing },
     { id: 'view.fit', menu: 'View', label: 'Fit stage in window', icon: Expand, shortcut: 'Ctrl+0', run: () => { s().setZoom(100); s().setPan({ x: 0, y: 0 }); }, enabled: editing },
@@ -76,7 +78,7 @@ export function appCommands(actions: AppActions): AppCommand[] {
     { id: 'window.properties', menu: 'Window', label: 'Properties', icon: PanelRight, checked: w().showProperties && !w().focused, run: () => w().togglePanel('properties'), enabled: editing },
     { id: 'window.timeline', menu: 'Window', label: 'Timeline', icon: Film, checked: w().showTimeline && !w().focused, run: () => w().setLayout({ showTimeline: !w().showTimeline }), enabled: editing },
     { id: 'window.focus', menu: 'Window', label: 'Focus stage', icon: Expand, shortcut: 'Tab', checked: w().focused, separator: true, run: () => w().toggleFocus(), enabled: editing },
-    ...(['Animation', 'Drawing', 'Rigging'] as const).map(name => ({ id: `window.workspace.${name.toLowerCase()}`, menu: 'Window' as const, label: `${name} workspace`, icon: name === 'Rigging' ? Bone : name === 'Drawing' ? Brush : Film, checked: w().workspace === name, run: () => applyWorkspace(name), enabled: editing })),
+    ...(['Animation', 'Drawing', 'Rigging', 'Motion', 'Video editing'] as const).map(name => ({ id: `window.workspace.${name.toLowerCase()}`, menu: 'Window' as const, label: `${name} workspace`, icon: name === 'Rigging' ? Bone : name === 'Drawing' ? Brush : Film, checked: w().workspace === name, run: () => applyWorkspace(name), enabled: editing })),
     { id: 'window.reset', menu: 'Window', label: 'Reset workspace layout', icon: RefreshCw, run: () => w().reset(), enabled: editing },
     { id: 'help.start', menu: 'Help', label: 'Start window…', icon: Home, run: dialog('start') },
     { id: 'help.news', menu: 'Help', label: 'What’s New…', icon: Film, run: () => useLaunch.getState().openNews() },

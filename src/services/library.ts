@@ -3,7 +3,7 @@ import { uid, activateScene } from '../engine/project';
 import type { Project } from '../engine/types';
 import { repository, type RecordPatch } from './repository';
 import { useDocumentFiles } from './document-files';
-import { useWorkspace } from '../store/workspace';
+import { useWorkspace, WORKSPACE_KEY } from '../store/workspace';
 
 let boot: Promise<void> | null = null;
 let saveQueue: Promise<unknown> = Promise.resolve();
@@ -60,11 +60,19 @@ export async function goHome() {
   catch (error) { useEditor.getState().notify(`${error instanceof Error ? error.message : 'Save failed.'} Your canvas is still open. Export a .lam copy before leaving.`, 'error'); }
   finally { useEditor.getState().setBlocked(null); }
 }
+function documentWorkspace(project: Project, newDocument = false) {
+  const recommend = (p: Project) => p.animationMode === 'frame-by-frame' ? 'Drawing' as const : p.animationMode === 'video-editing' ? 'Video editing' as const : 'Motion' as const;
+  const previous = useEditor.getState().project, workspace = useWorkspace.getState();
+  let savedLayout = false; try { savedLayout = !!localStorage.getItem(WORKSPACE_KEY); } catch { /* Preferences must not block opening work. */ }
+  // New document types get contextual defaults. Reopening work must not erase
+  // the user's dock dimensions, visibility choices, or explicit workspace.
+  if (newDocument || !savedLayout || previous.animationMode !== project.animationMode && workspace.workspace === recommend(previous)) workspace.preset(recommend(project));
+}
 export async function openLibraryProject(id: string) {
   useEditor.getState().setBlocked('Opening document…');
   try {
   await flushProject(true); const project = await repository().load(id);
-  useEditor.getState().replaceProject(project, false); if (project.animationMode === 'frame-by-frame') useWorkspace.getState().preset('Drawing'); lastSaved = project; useEditor.getState().markSaved();
+  documentWorkspace(project); useEditor.getState().replaceProject(project, false); lastSaved = project; useEditor.getState().markSaved();
   await repository().saveSettings({ lastProjectId: id, preferences: useEditor.getState().preferences });
   } finally { useEditor.getState().setBlocked(null); }
 }
@@ -75,7 +83,7 @@ export async function openDocument(project: Project, imported = false, preserveN
   await flushProject(true);
   const records = await repository().list();
   if (imported && records.some(r => r.id === project.id)) project = { ...project, id: uid(), name: preserveName ? project.name : `${project.name} (imported)`.slice(0, 100) };
-  await repository().save(project); useEditor.getState().replaceProject(project, false); if (project.animationMode === 'frame-by-frame') useWorkspace.getState().preset('Drawing'); lastSaved = project; useEditor.getState().markSaved();
+  await repository().save(project); documentWorkspace(project, !imported); useEditor.getState().replaceProject(project, false); lastSaved = project; useEditor.getState().markSaved();
   await repository().saveSettings({ lastProjectId: project.id, preferences: useEditor.getState().preferences });
   } finally { useEditor.getState().setBlocked(null); }
 }

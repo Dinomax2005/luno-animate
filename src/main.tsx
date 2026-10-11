@@ -5,5 +5,6 @@ import App from './App';
 import './styles.css';
 import './professional.css';
 import './launch.css';
+import './eclipse.css';
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);

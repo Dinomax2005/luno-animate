@@ -1,3 +1,31 @@
+# Luno Animate v0.3.6 — Eclipse / Motion / Video
+
+## Layer motion studio
+
+Rig / motion now opens a dedicated Motion workspace with timed layer clips, drag-to-move and trim handles, individual transform/effect keyframe diamonds, and an editable Bézier graph. Animate blur, brightness and saturation, or add opacity fades. Split and re-time artwork without deleting other animation channels. Existing FK/IK, character poses, cutout attachments, manual drawings, camera and scenes are retained. This is an Alight Motion–inspired workflow, not feature parity.
+
+## Third mode: Video editing
+
+Choose **Video editing** in Start or New. Import actual MP4/WebM/MOV/M4V footage into embedded JPEG proxies, with decoded sound linked to the clip. Use Timing to trim/split, drag to arrange, and add text/artwork/drawing overlays with the same property animation and effects. Video trim/split/move follows linked sound; independently moving or trimming sound unlinks it. Portable `.lam` saves include all proxy frames and sound. MP4 exports render the edited footage, overlays and mixed audio.
+
+**Limits:** 150 MB input, 30 seconds per clip, 960px maximum proxy long side, project FPS, a 24-million-character JPEG budget per import, 32 shared media assets and the existing 64 MB portable-project limit. This is bounded proxy editing—not an arbitrary-length or full-source-quality video editor. Exporting a larger resolution does not restore original detail. Trim handles shorten only; Undo restores. Group effects/timing, masks and external-media relinking are not implemented. Codec support depends on the device; failed or cancelled imports do not add partial footage.
+
+## Startup and red eclipse identity
+
+A real **“Starting up Luno Animations”** screen appears before the interactive app, while the library and associated file initialize. It includes an HTML fallback and error/retry state, and keeps editing locked until ready. The Start/New/Open/Recent launcher remains a separate, remembered preference. The new red solar-eclipse mark is used by the app icon, installers, favicon, header and splash, with red accents in dark and light themes.
+
+## Existing work and updates
+
+Save still overwrites the opened approved `.lam`; Save As and copy export remain separate. Older hand-drawn/rig projects, library revisions/backups, app identity, storage location, file protections and the guarded updater are preserved. Video documents require v0.3.6 or newer.
+
+Windows NSIS and Linux AppImage can update in place through **Updates & backups → Check GitHub**. There is no need to uninstall. Unsigned macOS/DEB need a manual newer installer/package update; v0.1 needs an initial manual upgrade. Installers are unsigned development builds. Physical Windows/macOS upgrade testing and signing/notarization remain outstanding. Keep independent portable backups; no software can guarantee against every hardware/OS failure.
+
+Release assets and updater manifests are validated for the exact release source; the public feed consumer covers installed v0.2.0/v0.3.4/v0.3.5. Public downloads need no GitHub sign-in. Prior releases are not replaced.
+
+---
+
+## Previous release notes
+
 # Luno Animate v0.3.5
 
 ## Save to the document you opened

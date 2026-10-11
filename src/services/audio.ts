@@ -36,7 +36,7 @@ export class AudioPlayback {
       let track = this.tracks.get(clip.id);
       if (!track || track.data !== clip.data) { track?.element.pause(); const element = new Audio(clip.data); element.preload = 'metadata'; track = { data: clip.data, element }; this.tracks.set(clip.id, track); }
       const element = track.element, time = (frame - clip.startFrame) / project.fps + clip.trimStart;
-      const active = playing && !clip.muted && frame >= clip.startFrame && time < clip.duration;
+      const active = playing && !clip.muted && frame >= clip.startFrame && time < clip.duration && frame < (clip.endFrame ?? Infinity);
       element.volume = Math.min(1, clip.volume);
       if (!active) { element.pause(); continue; }
       if (Math.abs(element.currentTime - time) > 0.15) { try { element.currentTime = time; } catch { /* Metadata is still loading. */ } }

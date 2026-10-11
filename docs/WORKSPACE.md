@@ -79,3 +79,15 @@ The document manager defaults to a list; Templates are an explicit section. File
 The document manager remains a persistent local library—not example/mock projects. Returning home durably saves before navigation. Autosave status distinguishes saving, saved, and errors. Export `.lam` for portable editable copies, and use the export dialog for MP4, GIF, PNG, SVG, or sprite atlases.
 
 The professional workspace does not change `.lam` format/schema, media encoding, native library locations, installation setup, or guarded update logic. Desktop installation and stable update-feed availability are described in [INSTALLATION.md](INSTALLATION.md).
+
+## Motion and Video workspaces (v0.3.6)
+
+Rig / motion opens the Motion preset, with larger Properties/timeline docks and timed layer bars. Video editing opens the Video preset with a footage-first timeline; Layers remains available through Window. Animation/Drawing/Rigging presets and saved custom layouts remain supported. The document type is separate from the panel layout.
+
+Select a layer and use **Object** for its transform/rig, **Motion** for interpolation, **Effects** for Gaussian blur/brightness/saturation, or **Timing** for lifetime edits. Property diamonds add/remove only their own channel at the current frame. Editing an already-animated property adds that property's key even with Auto-key off. The Bézier graph has draggable handles; arrow keys move a focused handle in 0.05 increments (Shift: 0.01). Input fields remain available. Effects render in the stage and all rendered output. Apply effects/timing to artwork layers, not groups.
+
+Drag a layer clip to move it; move preserves its animation/cels, shifts linked sound, and extends the scene within the 1,800-frame limit. Drag an edge to shorten it. **Timing → Trim start/end to playhead**, **Split at playhead**, and **Fade in/out** are undoable. Split retains globally timed animation and shared source media. Fades add opacity keys without deleting position/rig channels. Empty/out-of-range clips do not render. The Out number is the final included, one-based frame; the file stores an exclusive zero-based end.
+
+**Import video** accepts a decodable MP4/WebM/MOV/M4V, up to 150 MB/30 seconds. A cancellable progress screen locks editing until every required video/audio chunk is prepared and the bounded project validates. Footage is converted into embedded JPEG proxies (960px maximum) and linked PCM sound. No external source is changed; no half-imported layers are added. Select the sound waveform for volume/mute; independently changing its start/trim breaks linkage and prevents later video edits from unexpectedly re-timing it. Add vector/text/image/drawing layers for animated overlays. Proxy quality and the portable 64 MB limit are intentionally disclosed in Import/What’s New and README.
+
+The red eclipse startup screen is separate from Start: it is visible while the library and associated file initialize, with error/retry rather than a fake completion timer. The workspace is inert during boot and media import. What’s New remains once per version; Start is still optional and remembered.

@@ -30,7 +30,7 @@ function ResizeHandle({ side }: { side: 'layers' | 'properties' | 'timeline' }) 
     if ([positive, negative].includes(e.key)) { e.preventDefault(); e.stopPropagation(); set(value + (e.key === positive ? 1 : -1) * (side === 'layers' ? 1 : -1) * (e.shiftKey ? 32 : 8)); }
   }} />;
 }
-export function StudioWorkspace({ onImport, onImportAudio }: { onImport: () => void; onImportAudio: () => void }) {
+export function StudioWorkspace({ onImport, onImportAudio, onImportVideo }: { onImport: () => void; onImportAudio: () => void; onImportVideo?: () => void }) {
   const layout = useWorkspace(useShallow(s => ({ leftWidth: s.leftWidth, rightWidth: s.rightWidth, timelineHeight: s.timelineHeight, showLayers: s.showLayers, showProperties: s.showProperties, showTimeline: s.showTimeline, focused: s.focused, popout: s.popout }))), busy = useEditor(s => s.busy);
   const layers = layout.showLayers && !layout.focused, properties = layout.showProperties && !layout.focused, timeline = layout.showTimeline && !layout.focused;
   const style = { '--layers-width': `${layout.leftWidth}px`, '--properties-width': `${layout.rightWidth}px`, '--timeline-height': `${layout.timelineHeight}px` } as CSSProperties;
@@ -41,7 +41,7 @@ export function StudioWorkspace({ onImport, onImportAudio }: { onImport: () => v
         <div className={`workspace ${layers ? '' : 'without-layers'}`}>
           {layers && <><Library onImport={onImport} /><ResizeHandle side="layers" /></>}<Stage />
         </div>
-        {timeline && <><ResizeHandle side="timeline" /><Timeline onImportAudio={onImportAudio} /></>}
+        {timeline && <><ResizeHandle side="timeline" /><Timeline onImportAudio={onImportAudio} onImportVideo={onImportVideo} /></>}
       </main>
       {properties && <><ResizeHandle side="properties" /><Inspector /></>}
     </div>

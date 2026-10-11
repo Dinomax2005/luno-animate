@@ -40,12 +40,14 @@ function sampleChannel(keys: Keyframe[], frame: number, get: (pose: Pose) => num
   return a + delta * t;
 }
 
+export const effectDefaults = { blur: 0, brightness: 1, saturation: 1 } as const;
 export function sampleItem(item: SceneItem, keys: Keyframe[], frame: number): SceneItem {
   const sampled = { ...item };
   for (const key of ['x', 'y', 'rotation', 'scaleX', 'scaleY', 'opacity'] as const) {
     const value = sampleChannel(keys, frame, p => p[key], item[key], key === 'rotation');
     sampled[key] = key === 'opacity' ? Math.max(0, Math.min(1, value)) : key === 'scaleX' || key === 'scaleY' ? Math.max(0.01, Math.min(100, value)) : value;
   }
+  for (const key of ['blur', 'brightness', 'saturation'] as const) sampled[key] = Math.max(0, Math.min(key === 'blur' ? 50 : 3, sampleChannel(keys, frame, p => p[key], item[key] ?? effectDefaults[key])));
   if (item.rig) {
     sampled.rig = { ...item.rig, bones: item.rig.bones.map(b => ({
       ...b,
@@ -57,7 +59,7 @@ export function sampleItem(item: SceneItem, keys: Keyframe[], frame: number): Sc
 
 export function capturePose(item: SceneItem): Pose {
   return {
-    x: item.x, y: item.y, rotation: item.rotation, scaleX: item.scaleX, scaleY: item.scaleY, opacity: item.opacity,
+    x: item.x, y: item.y, rotation: item.rotation, scaleX: item.scaleX, scaleY: item.scaleY, opacity: item.opacity, blur: item.blur ?? 0, brightness: item.brightness ?? 1, saturation: item.saturation ?? 1,
     ...(item.rig ? { bones: Object.fromEntries(item.rig.bones.map(b => [b.id, b.angle])) } : {}),
   };
 }

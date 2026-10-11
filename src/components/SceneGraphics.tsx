@@ -1,3 +1,4 @@
+import { videoFrameData } from '../engine/clips';
 import { forwardKinematics } from '../engine/rig';
 import { sampleCamera, sampleCel } from '../engine/animation';
 import { sceneNodes, matrixString } from '../engine/geometry';
@@ -70,13 +71,14 @@ export function Milo({ item }: { item: SceneItem }) {
   </g>;
 }
 
-export function ItemGraphic({ item, frame = 0 }: { item: SceneItem; frame?: number }) {
+export function ItemGraphic({ item, frame = 0, project }: { item: SceneItem; frame?: number; project?: Project }) {
   const common = { fill: item.fill, stroke: item.stroke, strokeWidth: item.strokeWidth };
   const w = item.width, h = item.height;
   if (item.type === 'group') return null;
   if (item.type === 'text') return <text fontFamily="Arial, Helvetica, sans-serif" fontSize={item.fontSize ?? 56} fontWeight={item.fontWeight ?? 600} textAnchor={item.textAlign ?? 'middle'} dominantBaseline="central" {...common}>{(item.text ?? '').split('\n').map((line, n, all) => <tspan key={n} x={item.textAlign === 'start' ? -w / 2 : item.textAlign === 'end' ? w / 2 : 0} dy={n ? (item.fontSize ?? 56) * 1.2 : -(all.length - 1) * (item.fontSize ?? 56) * 0.6}>{line || '\u00a0'}</tspan>)}</text>;
   if (item.type === 'drawing') return <g>{sampleCel(item, frame)?.strokes.map((stroke, n) => <path key={n} d={stroke.points.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ')} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" />)}</g>;
   if (item.type === 'character') return <Milo item={item} />;
+  if (item.type === 'video') { const data = project && videoFrameData(project, item, frame); return data ? <image href={data} x={-w / 2} y={-h / 2} width={w} height={h} /> : null; }
   if (item.type === 'image') return <image href={item.imageData} x={-w / 2} y={-h / 2} width={w} height={h} />;
   if (item.type === 'path') return <path d={item.points?.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ')} fill="none" stroke={item.stroke === 'none' ? item.fill : item.stroke} strokeWidth={item.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />;
   if (item.shape === 'ellipse' || item.shape === 'ground') return <ellipse cx="0" cy="0" rx={w / 2} ry={h / 2} {...common} />;
@@ -88,6 +90,15 @@ export function ItemGraphic({ item, frame = 0 }: { item: SceneItem; frame?: numb
   return <rect x={-w / 2} y={-h / 2} width={w} height={h} rx={Math.min(w, h) * 0.12} {...common} />;
 }
 
+export function ItemEffects({ item }: { item: SceneItem }) {
+  if (!(item.blur || item.brightness !== undefined && item.brightness !== 1 || item.saturation !== undefined && item.saturation !== 1)) return null;
+  return <defs><filter id={`fx-${item.id}`} x="-100%" y="-100%" width="300%" height="300%" colorInterpolationFilters="sRGB">
+    <feGaussianBlur stdDeviation={item.blur ?? 0} />
+    <feColorMatrix type="saturate" values={String(item.saturation ?? 1)} />
+    <feComponentTransfer>{(['R', 'G', 'B'] as const).map(c => c === 'R' ? <feFuncR key={c} type="linear" slope={item.brightness ?? 1} /> : c === 'G' ? <feFuncG key={c} type="linear" slope={item.brightness ?? 1} /> : <feFuncB key={c} type="linear" slope={item.brightness ?? 1} />)}</feComponentTransfer>
+  </filter></defs>;
+}
+export function effectFilter(item: SceneItem) { return item.blur || item.brightness !== undefined && item.brightness !== 1 || item.saturation !== undefined && item.saturation !== 1 ? `url(#fx-${item.id})` : undefined; }
 export const itemTransform = (item: SceneItem) => `translate(${item.x} ${item.y}) rotate(${item.rotation}) scale(${item.scaleX} ${item.scaleY})`;
 export function cameraTransform(project: Project, frame: number) {
   const camera = sampleCamera(project.camera, frame);
@@ -96,6 +107,6 @@ export function cameraTransform(project: Project, frame: number) {
 export function SceneArtwork({ project, frame, transparent = false }: { project: Project; frame: number; transparent?: boolean }) {
   return <svg xmlns="http://www.w3.org/2000/svg" width={project.width} height={project.height} viewBox={`0 0 ${project.width} ${project.height}`}>
     {!transparent && <rect width={project.width} height={project.height} fill={project.background} />}
-    <g transform={cameraTransform(project, frame)}>{sceneNodes(project, frame).filter(n => n.visible).map(n => <g key={n.item.id} transform={matrixString(n.matrix)} opacity={n.opacity} style={n.item.blendMode && n.item.blendMode !== 'normal' ? { mixBlendMode: n.item.blendMode } : undefined}><ItemGraphic item={n.item} frame={frame} /></g>)}</g>
+    <g transform={cameraTransform(project, frame)}>{sceneNodes(project, frame).filter(n => n.visible).map(n => <g key={n.item.id} transform={matrixString(n.matrix)} opacity={n.opacity} style={n.item.blendMode && n.item.blendMode !== 'normal' ? { mixBlendMode: n.item.blendMode } : undefined}><ItemEffects item={n.item} /><g filter={effectFilter(n.item)}><ItemGraphic item={n.item} frame={frame} project={project} /></g></g>)}</g>
   </svg>;
 }

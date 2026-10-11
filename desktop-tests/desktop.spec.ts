@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../src/config/version';
 import { _electron as electron, test, expect } from '@playwright/test';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,7 +15,7 @@ test('packaged app: safe bridge, native library, LAM association, backups, real 
   const app = await launch(); let restarted: Awaited<ReturnType<typeof launch>> | undefined;
   try {
     const page = await app.firstWindow(); const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-    const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); await expect(news).toBeVisible(); await expect(news).toContainText('0.3.5');
+    const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); await expect(news).toBeVisible(); await expect(news).toContainText(APP_VERSION);
     expect(await page.evaluate(() => ({ bridge: typeof window.luno?.documents?.save, require: typeof (window as unknown as { require?: unknown }).require }))).toEqual({ bridge: 'function', require: 'undefined' });
     if (executablePath) expect(await app.evaluate(({ app: nativeApp }) => nativeApp.isPackaged)).toBe(true);
     expect(await app.evaluate(({ app: nativeApp }) => nativeApp.getPath('userData'))).toBe(profile);
@@ -62,4 +63,27 @@ test('packaged app: safe bridge, native library, LAM association, backups, real 
     expect(await page.evaluate(async () => { try { await window.luno!.library.load('../escape'); return 'unsafe'; } catch { return 'blocked'; } })).toBe('blocked'); expect(errors).toEqual([]);
     await app.close(); restarted = await launch([join(directory, 'Native file.lam')]); const restored = await restarted.firstWindow(); await expect(restored.getByTestId('stage')).toBeVisible(); await expect(restored.getByRole('dialog')).toHaveCount(0); await expect(restored.getByLabel('Project name')).toHaveValue('Cancellation kept the link'); expect((await restored.evaluate(() => window.luno!.library.list())).length).toBe(4);
   } finally { await restarted?.close().catch(() => {}); await app.close().catch(() => {}); await rm(directory, { recursive: true, force: true }); }
+});
+
+
+test('packaged eclipse/video studio imports real footage, writes portable proxies, and reopens linked edits', async () => {
+  test.setTimeout(120_000); const directory = await mkdtemp(join(tmpdir(), 'luno-video-desktop-')), profile = join(directory, 'profile'); await mkdir(profile);
+  const executablePath = process.env.PLAYWRIGHT_ELECTRON_EXECUTABLE ? resolve(process.env.PLAYWRIGHT_ELECTRON_EXECUTABLE) : undefined;
+  const args = [...(executablePath ? [] : ['.']), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])];
+  const launch = (extra: string[] = []) => electron.launch({ executablePath, args: [...args, ...extra], cwd: process.cwd(), env: { ...process.env, LUNO_DEV_URL: '', LUNO_DISABLE_UPDATES: '1', LUNO_TEST_USER_DATA: profile } });
+  const app = await launch(); let reopened: Awaited<ReturnType<typeof launch>> | undefined;
+  try {
+    const page = await app.firstWindow(), errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); await expect(news).toBeVisible(); await expect(news).toContainText(APP_VERSION);
+    expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+    await news.getByRole('button', { name: 'Continue', exact: true }).click(); await page.getByRole('dialog', { name: 'Luno Animate — Start' }).getByRole('button', { name: 'Video editing', exact: false }).click();
+    const create = page.getByRole('dialog', { name: 'Create a new project' }); await expect(create.getByLabel('New document width')).toHaveValue('1920'); await create.getByLabel('New document width').fill('128'); await create.getByLabel('New document height').fill('72'); await create.getByLabel('Project name').fill('Native footage'); await create.getByRole('button', { name: 'Create project', exact: true }).click(); await expect(page.getByTestId('stage')).toBeVisible(); await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false');
+    const source = await readFile('tests/fixtures/red-green-tone.webm'); await page.getByLabel('Import video file').setInputFiles(resolve('tests/fixtures/red-green-tone.webm')); await expect(page.locator('.motion-clip.video')).toHaveCount(1, { timeout: 45_000 }); await expect(page.locator('.audio-clip')).toHaveCount(1);
+    await app.evaluate(({ dialog }, file) => { dialog.showSaveDialog = (async () => ({ canceled: false, filePath: file })) as typeof dialog.showSaveDialog; }, join(directory, 'Studio.lam'));
+    await page.keyboard.press('Control+s'); await expect(page.getByText('Saved Studio.lam.', { exact: true })).toBeVisible();
+    const p = decodeLam(await readFile(join(directory, 'Studio.lam'))); expect(p.animationMode).toBe('video-editing'); expect(p.media[0].frames).toHaveLength(30); expect(p.items[0].linkedAudioId).toBe(p.audio[0].id);
+    const slider = page.getByRole('slider', { name: 'Timeline playhead' }); await slider.focus(); for (let n = 0; n < 15; n++) await slider.press('ArrowRight'); await page.locator('.inspector-tabs').getByRole('button', { name: 'Timing', exact: true }).click(); await page.getByRole('button', { name: 'Split at playhead', exact: true }).click(); await expect(page.locator('.motion-clip.video')).toHaveCount(2); await page.keyboard.press('Control+s'); await expect(page.getByText('Saved Studio.lam.', { exact: true })).toBeVisible();
+    const split = decodeLam(await readFile(join(directory, 'Studio.lam'))); expect(split.media).toHaveLength(1); expect(split.items).toHaveLength(2); expect(split.audio).toHaveLength(2); expect(await readFile('tests/fixtures/red-green-tone.webm')).toEqual(source); expect(errors).toEqual([]);
+    await app.close(); reopened = await launch([join(directory, 'Studio.lam')]); const restored = await reopened.firstWindow(); await expect(restored.getByTestId('stage')).toBeVisible(); await expect(restored.getByRole('dialog')).toHaveCount(0); await expect(restored.getByLabel('Project name')).toHaveValue('Native footage'); await expect(restored.locator('.motion-clip.video')).toHaveCount(2); await expect(restored.locator('.audio-clip')).toHaveCount(2);
+  } finally { await reopened?.close().catch(() => {}); await app.close().catch(() => {}); await rm(directory, { recursive: true, force: true }); }
 });

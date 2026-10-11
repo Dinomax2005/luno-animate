@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { whatsNew } from '../src/config/whats-new';
 import { APP_VERSION } from '../src/config/version';
 import { decodeLam } from '../src/engine/lam';
 
@@ -37,8 +38,8 @@ test('start preference survives restart and both windows can be reopened from He
 });
 
 test('upgrading from an acknowledged older version shows the current changes once', async ({ page }) => {
-  await page.addInitScript(version => { if (!localStorage.getItem('luno.launch.v1')) localStorage.setItem('luno.launch.v1', JSON.stringify({ showStart: false, seenVersion: version })); }, '0.3.4');
-  await page.goto('/'); const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); await expect(news).toContainText('Save to the file you opened'); await expect(news).toContainText(APP_VERSION);
+  await page.addInitScript(version => { if (!localStorage.getItem('luno.launch.v1')) localStorage.setItem('luno.launch.v1', JSON.stringify({ showStart: false, seenVersion: version })); }, '0.3.5');
+  await page.goto('/'); const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); await expect(news).toContainText(whatsNew.title); await expect(news).toContainText(APP_VERSION);
   await news.getByRole('button', { name: 'Continue', exact: true }).click(); await page.reload(); await expect(page.getByRole('button', { name: 'New project', exact: true })).toBeEnabled(); await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 

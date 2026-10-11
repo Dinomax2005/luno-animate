@@ -92,7 +92,7 @@ function createWindow() {
   documents.reset();
   window = new BrowserWindow({
     width: 1440, height: 950, minWidth: 1024, minHeight: 720,
-    title: 'Luno Animate', show: false, backgroundColor: '#242424',
+    title: 'Luno Animate', show: false, backgroundColor: '#151318',
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {

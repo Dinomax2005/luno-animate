@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type WorkspaceName = 'Animation' | 'Drawing' | 'Rigging';
+export type WorkspaceName = 'Animation' | 'Drawing' | 'Rigging' | 'Motion' | 'Video editing';
 export interface WorkspaceLayout {
   workspace: WorkspaceName;
   leftWidth: number;
@@ -21,7 +21,7 @@ export function validateLayout(value: unknown): WorkspaceLayout {
   const result = { ...defaultLayout };
   if (!value || typeof value !== 'object') return result;
   const input = value as Record<string, unknown>;
-  if (['Animation', 'Drawing', 'Rigging'].includes(String(input.workspace))) result.workspace = input.workspace as WorkspaceName;
+  if (['Animation', 'Drawing', 'Rigging', 'Motion', 'Video editing'].includes(String(input.workspace))) result.workspace = input.workspace as WorkspaceName;
   for (const [key, min, max] of [['leftWidth', 176, 380], ['rightWidth', 240, 460], ['timelineHeight', 140, 560], ['frameWidth', 4, 40]] as const) {
     const number = input[key]; if (typeof number === 'number' && Number.isFinite(number)) result[key] = Math.round(Math.min(max, Math.max(min, number)));
   }
@@ -49,7 +49,7 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   setCursor: cursor => set(s => s.cursor?.x === cursor?.x && s.cursor?.y === cursor?.y ? s : { cursor }),
   toggleFocus: () => set(s => ({ focused: !s.focused, popout: null })),
   reset: () => set({ ...defaultLayout, focused: false, popout: null }),
-  preset: workspace => set({ ...defaultLayout, workspace, rightWidth: workspace === 'Rigging' ? 320 : 282, timelineHeight: workspace === 'Drawing' ? 292 : 258, focused: false, popout: null }),
+  preset: workspace => set({ ...defaultLayout, workspace, rightWidth: ['Rigging', 'Motion', 'Video editing'].includes(workspace) ? 320 : 282, leftWidth: workspace === 'Motion' ? 196 : 218, showLayers: workspace !== 'Video editing', frameWidth: workspace === 'Video editing' ? 4 : workspace === 'Motion' ? 8 : 12, timelineHeight: workspace === 'Drawing' ? 292 : workspace === 'Motion' || workspace === 'Video editing' ? 310 : 258, focused: false, popout: null }),
 }));
 let writeTimer: ReturnType<typeof setTimeout> | undefined;
 useWorkspace.subscribe((s, old) => {

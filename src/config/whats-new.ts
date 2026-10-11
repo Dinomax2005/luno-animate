@@ -1,13 +1,12 @@
 import { APP_VERSION } from './version';
-
 export const whatsNew = {
   version: APP_VERSION,
-  title: 'Documents, frames, and a new starting point.',
+  title: 'Motion, footage, and a red eclipse.',
   changes: [
-    { title: 'Save to the file you opened', text: 'Save updates the same .lam file. Save As chooses a new destination; exporting a copy leaves the linked file alone. External changes are checked before replacement.' },
-    { title: 'Hand-drawn animation', text: 'Author each frame as an individual drawing cel. New blank frame and Duplicate to next frame advance the playhead without erasing an existing drawing. Onion skin is enabled; empty frames stay blank.' },
-    { title: 'Rig / motion animation', text: 'Keep the drag, pose, and keyframe workflow for vector artwork, characters, and cutouts, with automatic transforms and FK / IK rig controls.' },
-    { title: 'A focused start window', text: 'Create either document type, open a .lam file, or continue a recent project. Toggle the window at startup; reopen Start and What’s New from Help at any time.' },
+    { title: 'A layer-based motion studio', text: 'Rig / motion now uses clip-based layer timing, individual property keyframes, editable Bézier handles, and animated blur, brightness, and saturation. FK / IK rigging and cutout attachments stay available.' },
+    { title: 'Video editing documents', text: 'Import supported MP4, WebM, MOV, or M4V footage, then move, trim, split, and fade clips. Linked sound follows the edits. Add vector artwork, rigged characters, and animated titles over the footage.' },
+    { title: 'A real startup screen', text: 'Starting up Luno Animations appears while your local library and workspace are prepared. Startup failures offer a retry instead of leaving you behind an endless loading screen.' },
+    { title: 'A new solar eclipse identity', text: 'The red eclipse replaces the old green moon in the app icon, startup screen, favicon, and Windows installer artwork. The workspace now uses a red accent palette in dark and light themes.' },
   ],
-  note: 'Library autosave and backups remain separate from saving an external file. Direct file saving is available in the desktop app and browsers with file-system permissions; other browsers download a copy.',
+  note: 'Video is embedded as portable JPEG proxies up to 960 px and 30 seconds per clip, within the 64 MB .lam limit. Existing projects, linked-file Save, manual drawing frames, autosave, backups, and MP4/audio exports are retained.',
 };

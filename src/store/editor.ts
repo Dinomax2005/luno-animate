@@ -1,9 +1,10 @@
 import { create } from 'zustand';
+import { editClip, fadeClip, pruneMedia, type ClipEdit } from '../engine/clips';
 import { capturePose, createPreset, sampleCamera, sampleCel, sampleItem } from '../engine/animation';
 import { createCharacter, createProject, createDrawingLayer, createShape, createItem, createScene, activeScene, activateScene, createText, parseProject, uid } from '../engine/project';
 import { sceneNodes, transformPoint, inverse, parentOf, isLayerLocked, multiply as multiplyForUngroup } from '../engine/geometry';
 import { clamp, createMiloRig } from '../engine/rig';
-import type { AudioClip, Camera, Dialog, Keyframe, KeyRef, Point, Preferences, Preset, Project, ProjectRecord, Scene, SceneItem, ShapeKind, Tool, View } from '../engine/types';
+import type { VideoAsset, MotionProperty, AudioClip, Camera, Dialog, Keyframe, KeyRef, Point, Preferences, Preset, Project, ProjectRecord, Scene, SceneItem, ShapeKind, Tool, View } from '../engine/types';
 
 export const STORAGE_KEY = 'luno.project.v1';
 export const PREFS_KEY = 'luno.preferences.v1';
@@ -20,7 +21,7 @@ function initialProject(): Project {
   return p;
 }
 function initialPreferences(): Preferences {
-  const defaults: Preferences = { onboardingComplete: false, showBones: true, showGrid: false, loop: true, autoKey: true, theme: 'dark', onionSkin: false, onionBefore: 1, onionAfter: 1, showMotionPath: false, snapToGrid: false, gridSize: 20, inverseKinematics: true, brushColor: '#496853', brushSize: 5, drawingMode: 'vector', automaticUpdates: true };
+  const defaults: Preferences = { onboardingComplete: false, showBones: true, showGrid: false, loop: true, autoKey: true, theme: 'dark', onionSkin: false, onionBefore: 1, onionAfter: 1, showMotionPath: false, snapToGrid: false, gridSize: 20, inverseKinematics: true, brushColor: '#dc5e68', brushSize: 5, drawingMode: 'vector', automaticUpdates: true };
   try {
     const value = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
     for (const key of ['onboardingComplete', 'showBones', 'showGrid', 'loop', 'autoKey', 'onionSkin', 'showMotionPath', 'snapToGrid', 'inverseKinematics', 'automaticUpdates'] as const) {
@@ -34,7 +35,13 @@ function initialPreferences(): Preferences {
   return defaults;
 }
 const initial = initialProject();
-const clone = <T,>(object: T): T => structuredClone(object);
+const clone = <T,>(object: T): T => {
+  // Decoded proxy assets are immutable and shared by clips/history, not copied on every pose edit.
+  if (object && typeof object === 'object' && 'media' in object && 'sceneId' in object) {
+    const p = object as unknown as Project; return { ...structuredClone({ ...p, media: [] }), media: p.media } as T;
+  }
+  return structuredClone(object);
+};
 
 interface Toast { id: string; message: string; tone: 'success' | 'info' | 'error' }
 export interface EditorStore {
@@ -54,6 +61,11 @@ export interface EditorStore {
   nudgeSelected: (dx: number, dy: number) => void;
   selectKey: (itemId: string, frame: number, additive?: boolean) => void; copyKeys: () => void; pasteKeys: () => void; deleteKeys: () => void; setBezier: (bezier: [number, number, number, number]) => void;
 
+  addVideo: (asset: VideoAsset, item: SceneItem, audio?: AudioClip) => void;
+  editClip: (id: string, kind: ClipEdit, at: number) => void;
+  fadeClip: (id: string, kind: 'in' | 'out') => void;
+  keyProperty: (property: MotionProperty) => void;
+  editMotionProperty: (property: MotionProperty, value: number) => void;
   project: Project;
   selectedId: string | null;
   selectedBone: string | null;
@@ -156,7 +168,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
     if (record) state.checkpoint();
     const project = clone(state.project);
     const index = project.items.findIndex(i => i.id === id);
-    const animatedKeys = ['x', 'y', 'scaleX', 'scaleY', 'rotation', 'opacity'];
+    const animatedKeys = ['x', 'y', 'scaleX', 'scaleY', 'rotation', 'opacity', 'blur', 'brightness', 'saturation'];
     const transforms = Object.keys(patch).some(k => animatedKeys.includes(k));
     if (transforms && state.project.animationMode !== 'frame-by-frame' && state.preferences.autoKey && (state.frame > 0 || project.keyframes[id]?.length)) {
       const sampled = sampleItem(item, project.keyframes[id] ?? [], state.frame);
@@ -195,6 +207,52 @@ export const useEditor = create<EditorStore>((set, get) => ({
     for (const n of targets) { const matrix = inverse(n.parentMatrix), start = transformPoint(matrix, { x: 0, y: 0 }), end = transformPoint(matrix, { x: dx, y: dy }); get().editItem(n.item.id, { x: n.item.x + end.x - start.x, y: n.item.y + end.y - start.y }, false); }
   },
   addItem: item => { if (get().project.items.length >= 500) { get().notify('This scene has reached its 500-layer limit.', 'error'); return; } get().checkpoint(); set(s => ({ project: { ...s.project, items: [...s.project.items, item] }, selectedId: item.id, selectedIds: [item.id], selectedBone: null, selectedCamera: false, selectedAudio: null, tool: 'select' })); },
+  addVideo: (asset, item, audio) => {
+    const s = get();
+    if (s.project.items.length >= 500 || s.project.media.length >= 32 || audio && s.project.audio.length >= 32) throw new Error('This document has reached its layer, media, or sound limit.');
+    const end = item.endFrame ?? s.project.duration, duration = s.project.animationMode === 'video-editing' && !s.project.items.length && !s.project.audio.length ? Math.max(2, end) : Math.max(s.project.duration, end);
+    const project = { ...s.project, duration, workArea: { start: s.project.workArea.start, end: Math.min(duration - 1, Math.max(s.project.workArea.end, end - 1)) }, items: [...s.project.items, item], media: [...s.project.media, asset], audio: audio ? [...s.project.audio, audio] : s.project.audio };
+    // Validation happens before any mutation, including the aggregate portable-project size limit.
+    parseProject(JSON.stringify(project)); s.checkpoint();
+    set({ project, selectedId: item.id, selectedIds: [item.id], selectedCamera: false, selectedAudio: null, selectedBone: null, tool: 'select' });
+  },
+  editClip: (id, kind, at) => {
+    const s = get(); if (s.busy || s.blockReason) return;
+    const project = editClip(s.project, id, kind, at); if (project === s.project) return;
+    s.checkpoint(); set({ project, playing: false, keySelection: [] });
+  },
+  fadeClip: (id, kind) => {
+    const s = get(); if (s.busy || s.blockReason) return;
+    const project = fadeClip(s.project, id, kind); if (project === s.project) return;
+    s.checkpoint(); set({ project });
+  },
+  keyProperty: property => {
+    const s = get(), item = s.project.items.find(i => i.id === s.selectedId);
+    if (!item || isLayerLocked(s.project.items, item.id) || s.busy || s.blockReason || s.project.animationMode === 'frame-by-frame') return;
+    const keys = s.project.keyframes[item.id] ?? [], current = keys.find(k => k.frame === s.frame);
+    const sampled = sampleItem(item, keys, s.frame), fallback = property === 'blur' ? 0 : 1;
+    let values = { ...current?.values };
+    if (values[property] !== undefined) delete values[property]; else values = { ...values, [property]: sampled[property] ?? fallback };
+    const next = keys.filter(k => k.frame !== s.frame);
+    if (Object.keys(values).length) next.push({ id: current?.id ?? uid(), frame: s.frame, easing: current?.easing ?? 'ease-in-out', ...(current?.bezier ? { bezier: current.bezier } : {}), values });
+    s.checkpoint(); set({ project: { ...s.project, keyframes: { ...s.project.keyframes, [item.id]: next.sort((a, b) => a.frame - b.frame) } } });
+  },
+  editMotionProperty: (property, value) => {
+    const s = get(), item = s.project.items.find(i => i.id === s.selectedId);
+    if (!item || isLayerLocked(s.project.items, item.id) || !Number.isFinite(value) || s.busy || s.blockReason) return;
+    const bounds = property === 'opacity' ? [0, 1] : property === 'blur' ? [0, 50] : property === 'brightness' || property === 'saturation' ? [0, 3] : property.startsWith('scale') ? [0.01, 100] : [-100000, 100000];
+    value = clamp(value, bounds[0], bounds[1]);
+    const keys = s.project.keyframes[item.id] ?? [], start = item.startFrame ?? 0;
+    if (keys.some(k => k.values[property] !== undefined) || s.preferences.autoKey && s.frame > start) {
+      const next = [...keys], write = (frame: number, number: number) => {
+        const index = next.findIndex(k => k.frame === frame), previous = next[index];
+        const key = { id: previous?.id ?? uid(), frame, easing: previous?.easing ?? 'ease-in-out' as const, ...(previous?.bezier ? { bezier: previous.bezier } : {}), values: { ...previous?.values, [property]: number } };
+        if (index < 0) next.push(key); else next[index] = key;
+      };
+      if (!keys.some(k => k.values[property] !== undefined) && s.frame > start) write(start, item[property] ?? (property === 'blur' ? 0 : 1));
+      write(s.frame, value); s.checkpoint(); set({ project: { ...s.project, keyframes: { ...s.project.keyframes, [item.id]: next.sort((a, b) => a.frame - b.frame) } } });
+    } else s.editItem(item.id, { [property]: value });
+  },
   addCharacter: () => { get().addItem(createCharacter(get().project.width / 2, get().project.height * 0.47)); get().notify('Milo is ready to pose. Drag a joint to try it.'); },
   addShape: shape => get().addItem(createShape(shape, get().project.width / 2, get().project.height / 2)),
   deleteSelected: () => {
@@ -206,7 +264,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
     let changed = true;
     while (changed) { changed = false; for (const i of s.project.items) if (!ids.has(i.id) && ((i.parentId && ids.has(i.parentId)) || (i.attachment && ids.has(i.attachment.characterId)))) { ids.add(i.id); changed = true; } }
     s.checkpoint();
-    set({ project: { ...s.project, items: s.project.items.filter(i => !ids.has(i.id)), keyframes: Object.fromEntries(Object.entries(s.project.keyframes).filter(([id]) => !ids.has(id))) }, selectedId: null, selectedIds: [], selectedBone: null, keySelection: [] });
+    const audioIds = new Set(s.project.items.filter(i => ids.has(i.id)).map(i => i.linkedAudioId));
+    set({ project: pruneMedia({ ...s.project, items: s.project.items.filter(i => !ids.has(i.id)), audio: s.project.audio.filter(a => !audioIds.has(a.id)), keyframes: Object.fromEntries(Object.entries(s.project.keyframes).filter(([id]) => !ids.has(id))) }), selectedId: null, selectedIds: [], selectedBone: null, keySelection: [] });
   },
   duplicateSelected: () => {
     const s = get(); const selected = new Set(s.selectedIds.length ? s.selectedIds : s.selectedId ? [s.selectedId] : []);
@@ -215,16 +274,20 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const originals = s.project.items.filter(i => selected.has(i.id));
     if (!originals.length) return;
     if (s.project.items.length + originals.length > 500) { s.notify('The duplicated layers would exceed the scene limit.', 'error'); return; }
-    s.checkpoint(); const map = new Map(originals.map(i => [i.id, uid()])); const keyframes = { ...s.project.keyframes };
+    const sounds = originals.map(i => s.project.audio.find(a => a.id === i.linkedAudioId)).filter((a): a is AudioClip => !!a);
+    if (s.project.audio.length + sounds.length > 32) { s.notify('Duplicating these clips would exceed the 32-sound limit.', 'error'); return; }
+    s.checkpoint(); const map = new Map(originals.map(i => [i.id, uid()])); const keyframes = { ...s.project.keyframes }; const audio = [...s.project.audio];
     const items = originals.map(o => {
       const nested = !!((o.parentId && selected.has(o.parentId)) || (o.attachment && selected.has(o.attachment.characterId)));
+      const sound = s.project.audio.find(a => a.id === o.linkedAudioId), soundId = sound ? uid() : undefined;
+      if (sound) audio.push({ ...sound, id: soundId!, name: `${sound.name} copy`.slice(0, 100) });
       const dx = nested ? 0 : 24;
-      const i = { ...clone(o), id: map.get(o.id)!, name: `${o.name} copy`.slice(0, 100), x: o.x + dx, y: o.y + dx, locked: false,
+      const i = { ...clone(o), id: map.get(o.id)!, name: `${o.name} copy`.slice(0, 100), x: o.x + dx, y: o.y + dx, locked: false, linkedAudioId: soundId,
         ...(o.parentId ? { parentId: map.get(o.parentId) ?? o.parentId } : {}), ...(o.attachment ? { attachment: { ...o.attachment, characterId: map.get(o.attachment.characterId) ?? o.attachment.characterId } } : {}) };
       keyframes[i.id] = (s.project.keyframes[o.id] ?? []).map(k => ({ ...clone(k), id: uid(), values: { ...clone(k.values), ...(k.values.x !== undefined ? { x: k.values.x + dx } : {}), ...(k.values.y !== undefined ? { y: k.values.y + dx } : {}) } }));
       return i;
     });
-    set({ project: { ...s.project, items: [...s.project.items, ...items], keyframes }, selectedId: items.at(-1)!.id, selectedIds: items.map(i => i.id), selectedBone: null });
+    set({ project: { ...s.project, items: [...s.project.items, ...items], keyframes, audio }, selectedId: items.at(-1)!.id, selectedIds: items.map(i => i.id), selectedBone: null });
   },
   moveLayer: (id, direction) => {
     const s = get(), items = [...s.project.items], item = items.find(i => i.id === id); if (!item || isLayerLocked(items, id)) return;
@@ -424,8 +487,22 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
   resetCamera: () => { const s = get(); s.checkpoint(); set({ project: { ...s.project, camera: { x: s.project.width / 2, y: s.project.height / 2, zoom: 1, rotation: 0, keys: [] } } }); },
   addAudio: clip => { const s = get(); if (s.project.audio.length >= 32) { s.notify('Each scene supports up to 32 audio clips.', 'info'); return; } s.checkpoint(); set({ project: { ...s.project, audio: [...s.project.audio, clip] }, selectedAudio: clip.id, selectedId: null, selectedIds: [], selectedCamera: false }); },
-  editAudio: (id, patch, record = true) => { const s = get(); const audio = s.project.audio.map(a => a.id === id ? { ...a, ...patch, startFrame: clamp(Math.round(patch.startFrame ?? a.startFrame), 0, s.project.duration - 1), trimStart: clamp(patch.trimStart ?? a.trimStart, 0, Math.max(0, a.duration - 0.01)) } : a); if (record) s.checkpoint(); set({ project: { ...s.project, audio } }); },
-  removeAudio: id => { const s = get(); s.checkpoint(); set({ project: { ...s.project, audio: s.project.audio.filter(a => a.id !== id) }, selectedAudio: null }); },
+  editAudio: (id, patch, record = true) => {
+    const s = get(); let unlink = false;
+    const audio = s.project.audio.map(a => {
+      if (a.id !== id) return a;
+      const next = { ...a, ...patch, startFrame: clamp(Math.round(patch.startFrame ?? a.startFrame), 0, s.project.duration - 1), trimStart: clamp(patch.trimStart ?? a.trimStart, 0, Math.max(0, a.duration - 0.01)) };
+      unlink = next.startFrame !== a.startFrame || next.trimStart !== a.trimStart;
+      if (a.endFrame !== undefined) {
+        const length = Math.min(a.endFrame - a.startFrame, Math.max(1, Math.ceil((a.duration - next.trimStart) * s.project.fps - 1e-6)));
+        next.endFrame = Math.min(s.project.duration, next.startFrame + length);
+      }
+      return next;
+    });
+    if (record) s.checkpoint();
+    set({ project: { ...s.project, audio, items: unlink ? s.project.items.map(i => i.linkedAudioId === id ? { ...i, linkedAudioId: undefined } : i) : s.project.items } });
+  },
+  removeAudio: id => { const s = get(); s.checkpoint(); set({ project: { ...s.project, audio: s.project.audio.filter(a => a.id !== id), items: s.project.items.map(i => i.linkedAudioId === id ? { ...i, linkedAudioId: undefined } : i) }, selectedAudio: null }); },
   setWorkArea: (start, end) => { const s = get(); const a = clamp(Math.round(start), 0, s.project.duration - 1), b = clamp(Math.round(end), a, s.project.duration - 1); s.checkpoint(); set({ project: { ...s.project, workArea: { start: a, end: b } } }); },
   selectKey: (itemId, frame, additive = false) => {
     const s = get(); const ref = { itemId, frame }; const existing = s.keySelection.some(k => k.itemId === itemId && k.frame === frame);
@@ -476,16 +553,17 @@ export function trimScene(project: Project, duration: number, previousDuration =
   const fullRange = project.workArea.start === 0 && project.workArea.end === previousDuration - 1;
   project.duration = duration;
   project.keyframes = Object.fromEntries(Object.entries(project.keyframes).map(([id, keys]) => [id, keys.filter(k => k.frame < duration)]));
-  project.items = project.items.map(item => item.cels ? { ...item, cels: item.cels.filter(c => c.frame < duration) } : item);
+  project.items = project.items.map(item => ({ ...item, ...(item.cels ? { cels: item.cels.filter(c => c.frame < duration) } : {}), ...(item.startFrame !== undefined ? { startFrame: Math.min(item.startFrame, duration - 1) } : {}), ...(item.endFrame !== undefined ? { endFrame: Math.min(item.endFrame, duration) } : {}) }));
   project.camera = { ...project.camera, keys: project.camera.keys.filter(k => k.frame < duration) };
-  project.audio = project.audio.filter(a => a.startFrame < duration);
+  project.audio = project.audio.filter(a => a.startFrame < duration).map(a => ({ ...a, ...(a.endFrame !== undefined ? { endFrame: Math.min(a.endFrame, duration) } : {}) }));
+  const audioIds = new Set(project.audio.map(a => a.id)); project.items = project.items.map(i => i.linkedAudioId && !audioIds.has(i.linkedAudioId) ? { ...i, linkedAudioId: undefined } : i);
   project.workArea = { start: Math.min(project.workArea.start, duration - 1), end: fullRange ? duration - 1 : Math.min(project.workArea.end, duration - 1) };
 }
 export function duplicateSceneDocument(original: Scene): Scene {
-  const scene = clone(original); const map = new Map(scene.items.map(i => [i.id, uid()]));
+  const scene = clone(original); const audioMap = new Map(scene.audio.map(a => [a.id, uid()])); const map = new Map(scene.items.map(i => [i.id, uid()]));
   scene.id = uid(); scene.name = `${scene.name} copy`.slice(0, 100);
-  scene.items = scene.items.map(i => ({ ...i, id: map.get(i.id)!, ...(i.parentId ? { parentId: map.get(i.parentId)! } : {}), ...(i.attachment ? { attachment: { ...i.attachment, characterId: map.get(i.attachment.characterId)! } } : {}) }));
+  scene.items = scene.items.map(i => ({ ...i, id: map.get(i.id)!, ...(i.linkedAudioId ? { linkedAudioId: audioMap.get(i.linkedAudioId) } : {}), ...(i.parentId ? { parentId: map.get(i.parentId)! } : {}), ...(i.attachment ? { attachment: { ...i.attachment, characterId: map.get(i.attachment.characterId)! } } : {}) }));
   scene.keyframes = Object.fromEntries(Object.entries(scene.keyframes).map(([id, keys]) => [map.get(id)!, keys.map(k => ({ ...k, id: uid() }))]));
-  scene.camera.keys = scene.camera.keys.map(k => ({ ...k, id: uid() })); scene.audio = scene.audio.map(a => ({ ...a, id: uid() }));
+  scene.camera.keys = scene.camera.keys.map(k => ({ ...k, id: uid() })); scene.audio = scene.audio.map(a => ({ ...a, id: audioMap.get(a.id)! }));
   return scene;
 }

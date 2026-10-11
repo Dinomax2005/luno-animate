@@ -39,7 +39,7 @@ export function sceneNodes(project: Project, frame: number): RenderNode[] {
     const known = cache.get(item.id); if (known) return known;
     if (resolving.has(item.id)) throw new Error('The layer hierarchy contains a cycle.');
     resolving.add(item.id);
-    let parentMatrix = identity(), opacity = item.opacity, visible = item.visible, locked = item.locked;
+    let parentMatrix = identity(), opacity = item.opacity, visible = item.visible && frame >= (item.startFrame ?? 0) && frame < (item.endFrame ?? Infinity), locked = item.locked;
     const parentId = item.parentId ?? item.attachment?.characterId;
     const parent = parentId ? sampled.get(parentId) : undefined;
     if (parent) {

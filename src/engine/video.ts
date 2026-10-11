@@ -23,7 +23,7 @@ async function mixAudio(project: Project, options: AnimationExportOptions, lengt
     const duration = (end - start + 1) / project.fps;
     for (const clip of scene.audio.filter(c => !c.muted && c.volume > 0)) {
       signal?.throwIfAborted(); const clipStart = (clip.startFrame - start) / project.fps, when = Math.max(0, clipStart);
-      const trim = clip.trimStart + Math.max(0, -clipStart); const remaining = Math.min(clip.duration - trim, duration - when);
+      const trim = clip.trimStart + Math.max(0, -clipStart); const remaining = Math.min(clip.duration - trim, duration - when, clip.endFrame === undefined ? Infinity : (clip.endFrame - Math.max(clip.startFrame, start)) / project.fps);
       if (remaining <= 0) continue;
       let decoded = cache.get(clip.data); if (!decoded) { decoded = await decodeClip(clip, context); cache.set(clip.data, decoded); }
       signal?.throwIfAborted(); const playable = Math.min(remaining, decoded.duration - trim); if (playable <= 0) continue;
@@ -47,7 +47,7 @@ export async function exportMp4(project: Project, options: AnimationExportOption
   const canvas = document.createElement('canvas'); canvas.width = capability.width; canvas.height = capability.height;
   const target = new BufferTarget(), output = new Output({ target, format: new Mp4OutputFormat({ fastStart: 'in-memory' }) });
   const video = new CanvasSource(canvas, { codec: capability.video, bitrate: 4_000_000 });
-  output.addVideoTrack(video, { frameRate: project.fps }); output.setMetadataTags({ title: project.name, comment: 'Created with Luno Animate 0.2' });
+  output.addVideoTrack(video, { frameRate: project.fps }); output.setMetadataTags({ title: project.name, comment: 'Created with Luno Animate' });
   const audio = mixed && capability.audio ? new AudioBufferSource({ codec: capability.audio, bitrate: 160_000 }) : null;
   if (audio) output.addAudioTrack(audio);
   const cancel = () => { void output.cancel().catch(() => {}); }; signal?.addEventListener('abort', cancel, { once: true });

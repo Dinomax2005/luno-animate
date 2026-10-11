@@ -1,5 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useRef } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { StartupScreen } from './components/StartupScreen';
 import { Header, Toast } from './components/Header';
 import { StudioWorkspace, StudioStatus } from './components/studio/Workspace';
 import { CommandPalette } from './components/studio/CommandPalette';
@@ -21,6 +22,9 @@ export default function App() {
   const project = useEditor(s => s.project), preferences = useEditor(s => s.preferences), playing = useEditor(s => s.playing);
   const busy = useEditor(s => s.busy);
   const dialog = useEditor(s => s.dialog), view = useEditor(s => s.view), ready = useEditor(s => s.libraryReady), blocked = useEditor(s => s.blockReason);
+  const [bootPhase, setBootPhase] = useState<string | null>('Opening your local project library…'), [bootError, setBootError] = useState<string | null>(null), [bootAttempt, setBootAttempt] = useState(0);
+  const [videoProgress, setVideoProgress] = useState<{ value: number; message: string } | null>(null), videoAbort = useRef<AbortController | null>(null);
+  const inputVideo = useRef<HTMLInputElement>(null);
   const inputProject = useRef<HTMLInputElement>(null), inputImage = useRef<HTMLInputElement>(null), inputAudio = useRef<HTMLInputElement>(null);
   const lastActivity = useRef(Date.now());
   const associationTask = useRef<Promise<boolean> | null>(null), associationSeen = useRef(false);
@@ -76,6 +80,7 @@ export default function App() {
     } catch (error) { s.notify(error instanceof Error ? error.message : 'Could not open the project file.', 'error'); }
     finally { s.setBusy(false); }
   }, [loadProject, loadNativeFile]);
+  const onImportVideo = useCallback(() => inputVideo.current?.click(), []);
   const onImport = useCallback(() => inputImage.current?.click(), []), onImportAudio = useCallback(() => inputAudio.current?.click(), []);
   const importFile = useCallback(async (file: File) => {
     const s = useEditor.getState();
@@ -87,7 +92,21 @@ export default function App() {
         if (file.size > MAX_LAM_BYTES) { s.notify('Choose a project smaller than 64 MB.', 'error'); return; }
         await loadProject(await file.arrayBuffer(), true); return;
       }
-      if (s.view === 'home') await openDocument(createProject('blank'));
+      const isVideo = /\.(mp4|mov|m4v)$/i.test(file.name) || /\.webm$/i.test(file.name) && (file.type.startsWith('video/') || s.project.animationMode === 'video-editing');
+      if (s.view === 'home') await openDocument(createProject('blank', isVideo ? 'video-editing' : 'rigged'));
+      if (isVideo) {
+        if (useEditor.getState().project.animationMode === 'frame-by-frame') throw new Error('Import footage into a Video editing or Rig / motion document. Your hand-drawn frames are unchanged.');
+        const snapshot = useEditor.getState().project, frame = useEditor.getState().frame;
+        videoAbort.current = new AbortController(); setVideoProgress({ value: 0, message: 'Reading footage…' });
+        let lastProgress = 0;
+        const result = await (await import('./services/video-import')).importVideo(file, snapshot, frame, (value, message) => {
+          // Keep decoder throughput independent of full studio redraws.
+          const now = performance.now(); if (value === 0 || value >= 0.85 || now - lastProgress >= 100) { lastProgress = now; setVideoProgress({ value, message }); }
+        }, videoAbort.current.signal);
+        videoAbort.current.signal.throwIfAborted();
+        if (useEditor.getState().project !== snapshot) throw new Error('The active document changed during import. Please try again.');
+        s.addVideo(result.asset, result.item, result.audio); s.notify('Footage imported as an embedded proxy. Open Timing to trim, split, or add fades.'); return;
+      }
       if (/\.(mp3|wav|ogg|m4a|aac|flac|webm)$/i.test(file.name)) {
         const clip = await audioFromFile(file, useEditor.getState().frame); useEditor.getState().addAudio(clip); s.notify('Sound added. Press play to hear it with your animation.'); return;
       }
@@ -95,20 +114,24 @@ export default function App() {
       const scale = Math.min(1, p.width * 0.5 / image.width, p.height * 0.6 / image.height);
       s.addItem(createItem('image', { name: file.name.replace(/\.[^.]+$/, '').slice(0, 100) || 'Artwork', x: p.width / 2, y: p.height / 2, width: image.width, height: image.height, scaleX: scale, scaleY: scale, imageData: image.data }));
       s.notify('Artwork imported. Animate it directly, or attach it to a rig joint in the inspector.');
-    } catch (error) { s.notify(error instanceof Error ? error.message : 'Could not import this file.', 'error'); }
-    finally { s.setBusy(false); }
+    } catch (error) { s.notify(videoAbort.current?.signal.aborted ? 'Video import cancelled. No clips were added.' : error instanceof Error ? error.message : 'Could not import this file.', videoAbort.current?.signal.aborted ? 'info' : 'error'); }
+    finally { videoAbort.current = null; setVideoProgress(null); s.setBusy(false); }
   }, [loadProject]);
 
   useEffect(() => {
-    let mounted = true;
+    let mounted = true; const started = performance.now();
+    setBootError(null); setBootPhase('Opening your local project library…');
     void (async () => {
       await initializeLibrary(); if (!mounted) return;
+      setBootPhase('Preparing the animation and video workspace…');
       const result = await window.luno?.ready(); if (!mounted) return;
       if (associationTask.current) await associationTask.current;
-      if (mounted) presentLaunch(associationSeen.current || !!result?.openedFile);
-    })().catch(() => {});
+      // A short, bounded splash stays visible even when a small library loads instantly.
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, 900 - (performance.now() - started))));
+      if (mounted) { setBootPhase(null); presentLaunch(associationSeen.current || !!result?.openedFile); }
+    })().catch(error => { if (mounted) setBootError(error instanceof Error ? error.message : 'Could not open the local library. Your files have not been changed.'); });
     return () => { mounted = false; };
-  }, []);
+  }, [bootAttempt]);
   useEffect(() => {
     if (!ready || view !== 'editor') return;
     useEditor.getState().setSaveStatus('saving');
@@ -166,7 +189,7 @@ export default function App() {
   useEffect(() => { void window.luno?.updater.setAutomatic(preferences.automaticUpdates).catch(() => {}); }, [preferences.automaticUpdates]);
   useEffect(() => {
     const command = (value: string) => {
-      const s = useEditor.getState(); if (s.blockReason || s.busy || s.dialog) return;
+      const s = useEditor.getState(); if (bootPhase || s.blockReason || s.busy || s.dialog) return;
       if (['open', 'new', 'setup', 'export', 'save', 'save-as', 'save-copy'].includes(value)) (document.activeElement as HTMLElement | null)?.blur?.();
       if (value === 'open') void onOpen(); else if (value === 'new') s.setDialog('new'); else if (value === 'setup') s.setDialog('setup'); else if (value === 'help') s.setDialog('help'); else if (value === 'start') s.setDialog('start'); else if (value === 'whats-new') useLaunch.getState().openNews(); else if (value === 'updates') s.setDialog('updates');
       else if (s.view === 'editor') { if (value === 'save') void onSave(); else if (value === 'save-as') void onSaveAs(); else if (value === 'save-copy') void onSaveCopy(); else if (value === 'export') s.setDialog('export'); else if (value === 'undo') s.undo(); else if (value === 'redo') s.redo(); }
@@ -174,7 +197,7 @@ export default function App() {
     const unsubscribe = window.luno?.onCommand(command);
     const keys = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement, s = useEditor.getState();
-      if (event.defaultPrevented || s.dialog || s.blockReason || s.busy || s.interacting) return;
+      if (bootPhase || event.defaultPrevented || s.dialog || s.blockReason || s.busy || s.interacting) return;
       const key = event.key.toLowerCase();
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === 'p') { event.preventDefault(); (document.activeElement as HTMLElement | null)?.blur?.(); s.setDialog('commands'); return; }
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) {
@@ -208,20 +231,21 @@ export default function App() {
       if (key === 'escape') { s.select(null); useEditor.setState({ keySelection: [] }); }
     };
     window.addEventListener('keydown', keys); return () => { window.removeEventListener('keydown', keys); unsubscribe?.(); };
-  }, [onOpen, onSave, onSaveAs, onSaveCopy]);
+  }, [onOpen, onSave, onSaveAs, onSaveCopy, bootPhase]);
 
-  return <><SoundPlayback /><div className={`app-shell ${view === 'home' ? 'home-mode' : ''}`} inert={!!blocked} aria-busy={busy || !!blocked} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file && !useEditor.getState().dialog && !useEditor.getState().blockReason && !useEditor.getState().busy && !useEditor.getState().interacting) void importFile(file); }}>
+  return <><SoundPlayback /><div className={`app-shell ${view === 'home' ? 'home-mode' : ''}`} inert={!!blocked || !!bootPhase || !!videoProgress} aria-busy={busy || !!blocked || !!bootPhase} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file && !useEditor.getState().dialog && !useEditor.getState().blockReason && !useEditor.getState().busy && !useEditor.getState().interacting) void importFile(file); }}>
     {view === 'home' ? <ProjectHome onOpen={() => void onOpen()} /> : <>
-      <Header onOpen={() => void onOpen()} onSave={() => void onSave()} onSaveAs={() => void onSaveAs()} onSaveCopy={() => void onSaveCopy()} onImport={onImport} onImportAudio={onImportAudio} />
-      <StudioWorkspace onImport={onImport} onImportAudio={onImportAudio} /><StudioStatus />
+      <Header onOpen={() => void onOpen()} onSave={() => void onSave()} onSaveAs={() => void onSaveAs()} onSaveCopy={() => void onSaveCopy()} onImport={onImport} onImportAudio={onImportAudio} onImportVideo={onImportVideo} />
+      <StudioWorkspace onImport={onImport} onImportAudio={onImportAudio} onImportVideo={onImportVideo} /><StudioStatus />
     </>}
     <Toast /><UpdateBanner />
-    {dialog === 'commands' ? <CommandPalette onOpen={() => void onOpen()} onSave={() => void onSave()} onSaveAs={() => void onSaveAs()} onSaveCopy={() => void onSaveCopy()} onImport={onImport} onImportAudio={onImportAudio} /> : <Suspense fallback={<div className="dialog-loading" role="status">Loading panel…</div>}>{dialog && <Dialogs onOpen={() => void onOpen()} />}</Suspense>}
+    {dialog === 'commands' ? <CommandPalette onOpen={() => void onOpen()} onSave={() => void onSave()} onSaveAs={() => void onSaveAs()} onSaveCopy={() => void onSaveCopy()} onImport={onImport} onImportAudio={onImportAudio} onImportVideo={onImportVideo} /> : <Suspense fallback={<div className="dialog-loading" role="status">Loading panel…</div>}>{dialog && <Dialogs onOpen={() => void onOpen()} />}</Suspense>}
 
     <input ref={inputProject} type="file" className="visually-hidden" aria-label="Open Luno project file" accept=".lam,.luno,.json" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
     <input ref={inputImage} type="file" className="visually-hidden" aria-label="Import image file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
+    <input ref={inputVideo} type="file" className="visually-hidden" aria-label="Import video file" accept=".mp4,.webm,.mov,.m4v" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
     <input ref={inputAudio} type="file" className="visually-hidden" aria-label="Import audio file" accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,.webm" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
-  </div>{blocked && <div className="safe-operation-overlay" role="status" aria-live="polite"><div><span><RefreshCw size={25} className="spin" /></span><h2>{blocked}</h2><p>Do not close Luno until this operation completes.</p></div></div>}</>;
+  </div>{bootPhase && <StartupScreen phase={bootPhase} error={bootError} onRetry={() => setBootAttempt(n => n + 1)} />}{videoProgress && <div className="media-import-overlay" role="dialog" aria-modal="true" aria-label="Importing video"><div><img src="./favicon.svg" width="54" height="54" alt="" /><h2>Preparing your footage</h2><p>{videoProgress.message}</p><progress value={videoProgress.value} max={1} aria-label="Video import progress" /><p className="muted-text">Embedded proxies up to 960 px · source file is unchanged</p><button className="button secondary" autoFocus onClick={() => videoAbort.current?.abort()}>Cancel import</button></div></div>}{blocked && <div className="safe-operation-overlay" role="status" aria-live="polite"><div><span><RefreshCw size={25} className="spin" /></span><h2>{blocked}</h2><p>Do not close Luno until this operation completes.</p></div></div>}</>;
 }
 
 function SoundPlayback() {
