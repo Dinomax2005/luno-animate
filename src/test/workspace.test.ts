@@ -47,7 +47,7 @@ describe('independent production workspace preferences', () => {
 
 describe('context-aware application commands', () => {
   it('has unique IDs, real menu categories, and searchable workspace commands', () => {
-    const commands = appCommands(actions); expect(new Set(commands.map(c => c.id)).size).toBe(commands.length); expect(new Set(commands.map(c => c.menu)).size).toBe(8); expect(commands.find(c => c.id === 'window.workspace.rigging')?.label).toBe('Rigging workspace');
+    const commands = appCommands(actions); expect(new Set(commands.map(c => c.id)).size).toBe(commands.length); expect(new Set(commands.map(c => c.menu)).size).toBe(9); expect(commands.find(c => c.id === 'window.workspace.rigging')?.label).toBe('Rigging workspace');
   });
   it('disables unavailable undo, redo, and object commands', () => {
     const commands = appCommands(actions); for (const id of ['edit.undo', 'edit.redo', 'edit.duplicate', 'object.group']) expect(commands.find(c => c.id === id)!.enabled!()).toBe(false);

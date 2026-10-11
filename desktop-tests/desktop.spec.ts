@@ -4,6 +4,8 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { decodeLam, encodeLam } from '../src/engine/lam';
+import { createDrawingLayer, createProject } from '../src/engine/project';
+import { BRUSH_PRESETS, DEFAULT_BRUSH } from '../src/engine/brushes';
 import { movie, sound } from '../tests/fixtures/media';
 
 async function studioWindow(app: ElectronApplication) {
@@ -119,4 +121,30 @@ test('packaged startup: a small isolated native launcher closes before the real 
     expect(await app.evaluate(() => (globalThis as unknown as { startupEvents: string[] }).startupEvents)).toEqual(['splash closed', 'studio shown']);
     expect(splash.isClosed()).toBe(true); await expect.poll(() => app.windows().length).toBe(1);
   } finally { await app.close().catch(() => {}); await rm(directory, { recursive: true, force: true }); }
+});
+
+
+test('packaged painting: real native LAM overwrite, custom-brush settings, backup and restart', async () => {
+  test.setTimeout(120_000);
+  const directory = await mkdtemp(join(tmpdir(), 'luno-paint-desktop-')), profile = join(directory, 'profile'), file = join(directory, 'Paint.lam'); await mkdir(profile);
+  const project = createProject('blank', 'frame-by-frame'); project.name = 'Native brush study'; project.width = project.height = 128; project.camera.x = project.camera.y = 64; project.duration = 3; project.fps = 12; project.workArea = { start: 0, end: 2 };
+  const layer = createDrawingLayer(128, 128, 'Paint study');
+  layer.cels = [{ frame: 0, strokes: BRUSH_PRESETS.map((preset, index) => ({ points: [{ x: -48, y: -48 + index * 8, pressure: 0.3 }, { x: 48, y: -48 + index * 8, pressure: 1 }], color: '#235c9c', width: 4, brush: preset.brush, mode: 'paint' as const })) }];
+  layer.cels[0].strokes.push({ points: [{ x: 0, y: -48, pressure: 1 }, { x: 0, y: 48, pressure: 1 }], color: '#000000', width: 3, brush: DEFAULT_BRUSH, mode: 'erase' }); project.items = [layer]; await writeFile(file, encodeLam(project));
+  const executablePath = process.env.PLAYWRIGHT_ELECTRON_EXECUTABLE ? resolve(process.env.PLAYWRIGHT_ELECTRON_EXECUTABLE) : undefined;
+  const launch = () => electron.launch({ executablePath, args: [...(executablePath ? [] : ['.']), ...(process.platform === 'linux' ? ['--no-sandbox'] : []), file], cwd: process.cwd(), env: { ...process.env, LUNO_DEV_URL: '', LUNO_DISABLE_UPDATES: '1', LUNO_TEST_USER_DATA: profile } });
+  const app = await launch(); let reopened: ElectronApplication | undefined;
+  try {
+    const page = await studioWindow(app), errors: string[] = []; page.on('pageerror', error => errors.push(error.message)); await expect(page.getByTestId('stage')).toBeVisible();
+    const news = page.getByRole('dialog', { name: 'What’s New', exact: true }); if (await news.isVisible()) await news.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page.getByLabel('Project name')).toHaveValue(project.name); await page.getByRole('button', { name: 'Draw tool', exact: true }).click(); await expect(page.getByTestId('brush-studio')).toBeVisible();
+    await page.getByRole('button', { name: 'Use Pixel Square brush', exact: true }).click(); const bounds = (await page.getByTestId('stage').boundingBox())!;
+    await page.mouse.move(bounds.x + bounds.width * 0.3, bounds.y + bounds.height * 0.7); await page.mouse.down(); await page.mouse.move(bounds.x + bounds.width * 0.7, bounds.y + bounds.height * 0.7, { steps: 8 }); await page.mouse.up();
+    await page.keyboard.press('Control+s'); await expect(page.getByText('Saved Paint.lam.', { exact: true })).toBeVisible(); await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false');
+    const bytes = await readFile(file), saved = decodeLam(bytes); expect(bytes.readUInt16LE(10)).toBe(3); expect(saved.items[0].cels![0].strokes.slice(0, 13)).toEqual(layer.cels[0].strokes); expect(saved.items[0].cels![0].strokes.at(-1)?.brush?.kind).toBe('pixel');
+    await page.getByText('Custom presets & brush packs', { exact: true }).click(); await page.getByLabel('Custom brush name').fill('Native saved pixels'); await page.getByRole('button', { name: 'Save custom brush', exact: true }).click();
+    await expect.poll(async () => (await page.evaluate(() => window.luno!.library.getSettings())).paint?.customPresets.some(p => p.name === 'Native saved pixels')).toBe(true);
+    const backup = await page.evaluate(() => window.luno!.library.backup()); expect(backup.projects).toBe(1); expect(await page.evaluate(id => window.luno!.library.load(id), project.id)).toBeDefined(); expect(errors).toEqual([]);
+    await app.close(); reopened = await launch(); const restored = await studioWindow(reopened); await expect(restored.getByRole('dialog')).toHaveCount(0); await expect(restored.getByLabel('Project name')).toHaveValue(project.name); await restored.getByRole('button', { name: 'Draw tool', exact: true }).click(); await restored.getByLabel('Brush category').selectOption('Custom'); await expect(restored.getByRole('button', { name: 'Use Native saved pixels brush', exact: true })).toBeVisible(); expect(decodeLam(await readFile(file))).toEqual(saved);
+  } finally { await reopened?.close().catch(() => {}); await app.close().catch(() => {}); await rm(directory, { recursive: true, force: true }); }
 });

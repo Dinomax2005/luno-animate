@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { decodeLam, encodeLam, projectRecord, MAX_LAM_BYTES } = require('./lib/core.cjs');
+const { decodeLam, encodeLam, projectRecord, MAX_LAM_BYTES, validatePaintSettings } = require('./lib/core.cjs');
 const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/;
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype', 'toString', 'valueOf']);
 function checkId(id) { if (typeof id !== 'string' || !SAFE_ID.test(id) || RESERVED.has(id)) throw new Error('Invalid project identifier.'); return id; }
@@ -14,9 +14,9 @@ function validateSettings(settings) {
     if (!p || typeof p !== 'object' || Array.isArray(p) || !['light', 'dark'].includes(p.theme)) throw new Error('Invalid studio preferences.');
     const bools = ['onboardingComplete', 'showBones', 'showGrid', 'loop', 'autoKey', 'onionSkin', 'showMotionPath', 'snapToGrid', 'inverseKinematics', 'automaticUpdates'];
     if (bools.some(k => typeof p[k] !== 'boolean') || !['vector', 'cel'].includes(p.drawingMode) || !/^#[a-f0-9]{6}$/i.test(p.brushColor)) throw new Error('Invalid studio preferences.');
-    for (const key of ['brushSize', 'gridSize', 'onionBefore', 'onionAfter']) if (!Number.isFinite(p[key]) || p[key] < (key.startsWith('onion') ? 0 : 1) || p[key] > (key.startsWith('onion') ? 5 : 100)) throw new Error('Invalid studio preferences.');
+    for (const key of ['brushSize', 'gridSize', 'onionBefore', 'onionAfter']) if (!Number.isFinite(p[key]) || p[key] < (key.startsWith('onion') ? 0 : 1) || p[key] > (key.startsWith('onion') ? 5 : key === 'brushSize' ? 256 : 100)) throw new Error('Invalid studio preferences.');
   }
-  return { lastProjectId: settings.lastProjectId, ...(p ? { preferences: p } : {}) };
+  return { lastProjectId: settings.lastProjectId, ...(p ? { preferences: p } : {}), ...(settings.paint !== undefined ? { paint: validatePaintSettings(settings.paint) } : {}) };
 }
 async function atomicWrite(file, data, beforeCommit, mode = 0o600) {
   const temp = `${file}.${randomUUID()}.tmp`; let handle;

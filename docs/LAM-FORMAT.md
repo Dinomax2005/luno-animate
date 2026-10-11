@@ -1,6 +1,6 @@
 # Portable `.lam` format
 
-Luno Animate v0.3.7 writes `.lam`, a **binary project format**, not JSON with a different filename. It includes every ordered scene and embedded image/video/audio, rig, layer hierarchy, drawing cel, text, key, camera, and work area. File associations register Luno as its editor. Legacy `.luno` JSON remains importable and is never overwritten by migration.
+Luno Animate v0.4.0 writes `.lam`, a **binary project format**, not JSON with a different filename. It includes every ordered scene and embedded image/video/audio, rig, layer hierarchy, drawing cel, text, key, camera, and work area. File associations register Luno as its editor. Legacy `.luno` JSON remains importable and is never overwritten by migration.
 
 This is an application-specific format, **not a claim that only Luno could ever read it**. Someone could implement the decoder below. There is no password encryption, licensing lock, or DRM. SHA-256 detects accidental corruption, not a malicious author's intent.
 
@@ -12,7 +12,7 @@ All integer fields are little-endian; the fixed header is 56 bytes:
 | --- | --- | --- |
 | 0 | 8 | `LUNOLAM\0` (bytes `4c 55 4e 4f 4c 41 4d 00`) |
 | 8 | 2 | Container version: `1` |
-| 10 | 2 | Flags: `1` (raw DEFLATE compression) |
+| 10 | 2 | Flags: `1` (raw DEFLATE) or `3` (raw DEFLATE + advanced painting) |
 | 12 | 4 | Document schema version: `2` |
 | 16 | 4 | Uncompressed UTF-8 byte length |
 | 20 | 4 | Compressed byte length |
@@ -46,3 +46,11 @@ Video input is limited to 150 MB/30 seconds, proxies to a 960-pixel long side at
 ## Precision editing (v0.3.7)
 
 Property-lane selection/clipboard and workspace profiles are editor preferences, not new file fields. Lane edits split/merge the existing `values` pose while retaining unrelated channels and bone values; duplicate frame/key-ID validation still applies. A physical keyframe has one easing/Bézier curve shared by its channels. Restorable trim uses the existing source offset/range fields and shared media; no source frame is deleted. Container/schema/app/storage identity are unchanged and v0.3.6 can read v0.3.7 video documents.
+
+## v0.4.0 advanced painting feature flag
+
+The container remains version 1 and the document remains schema 2. Header flags now accept `1` (compressed legacy-compatible content) and `3` (compressed content plus painting flag `2`). The writer scans **all scenes**, including inactive ones, for brush metadata, point pressure, paint/erase modes or fill runs. Advanced painting requires flags `3`; a flags-`1` payload containing it is rejected. Unknown flags are rejected. Older readers accepting only flags `1` cannot silently open and strip the new artwork.
+
+Optional `Stroke.brush`, `Stroke.mode`, `Stroke.fill`, `Point.pressure` and vector `SceneItem.brush` carry validated procedural data. Texture seeds, opacity/flow, pressure behavior and erase order are portable. Fill stores local-coordinate horizontal runs and cell size; it is not an external image. Legacy strokes without these fields retain their original SVG path.
+
+Brush size is at most 256; pressure is finite in [0,1]; raw points, fill runs, and per-cel/per-scene procedural work are bounded. The existing 64 MB raw/compressed document budgets and SHA-256 integrity checks remain. `.lunobrush` is a separate strict JSON brush-preset/swatches format, not a LAM project.

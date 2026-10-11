@@ -55,7 +55,7 @@ export function StudioStatus() {
   const fileDirty = fileIsDirty(project, fileLink);
   const protectedOperation = useEditor(s => s.busy || !!s.blockReason || s.interacting);
   const cursor = useWorkspace(s => s.cursor), focused = useWorkspace(s => s.focused);
-  const toolNames = { select: 'Selection', hand: 'Hand', pen: 'Brush', rectangle: 'Rectangle', ellipse: 'Ellipse', text: 'Text', camera: 'Camera', rig: 'Bone / IK' };
+  const toolNames = { select: 'Selection', hand: 'Hand', pen: 'Brush', eraser: 'Cel eraser', bucket: 'Cel fill', eyedropper: 'Eyedropper', rectangle: 'Rectangle', ellipse: 'Ellipse', text: 'Text', camera: 'Camera', rig: 'Bone / IK' };
   return <footer className="app-footer pro-statusbar" inert={protectedOperation} aria-label="Workspace status">
     <span className="status-tool"><MousePointer2 size={11} />{toolNames[tool]}<span className="status-divider" />{selectedIds.length ? `${selectedIds.length} selected` : 'No selection'}</span>
     <span className="status-coordinate"><Crosshair size={10} /> X <strong>{cursor?.x ?? '—'}</strong> Y <strong>{cursor?.y ?? '—'}</strong></span>

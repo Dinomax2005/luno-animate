@@ -1,5 +1,7 @@
 import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical, Bone, Brush, Check, Copy, DiamondPlus, Download, Expand, Eye, Film, FolderOpen, Grid3X3, Group, History, Home, Image, Layers2, Magnet, Moon, PanelLeft, PanelRight, Pause, Play, Plus, Redo2, RefreshCw, Repeat2, Route, Save, Search, Settings2, Square, Sun, Trash2, Type, Ungroup, Undo2, Volume2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { usePaint } from '../../store/paint';
+import { BRUSH_PRESETS } from '../../engine/brushes';
 import { useEditor } from '../../store/editor';
 import { useWorkspace, type WorkspaceName } from '../../store/workspace';
 import { isLayerLocked } from '../../engine/geometry';
@@ -7,8 +9,8 @@ import { useLaunch } from '../../services/launch';
 import { goHome } from '../../services/library';
 
 export interface AppActions { onOpen: () => void; onSave: () => void; onSaveAs?: () => void; onSaveCopy?: () => void; onImport: () => void; onImportAudio: () => void; onImportVideo?: () => void }
-export type MenuName = 'File' | 'Edit' | 'Insert' | 'Object' | 'Animation' | 'View' | 'Window' | 'Help';
-export const menuNames: MenuName[] = ['File', 'Edit', 'Insert', 'Object', 'Animation', 'View', 'Window', 'Help'];
+export type MenuName = 'File' | 'Edit' | 'Insert' | 'Object' | 'Animation' | 'Paint' | 'View' | 'Window' | 'Help';
+export const menuNames: MenuName[] = ['File', 'Edit', 'Insert', 'Object', 'Animation', 'Paint', 'View', 'Window', 'Help'];
 export interface AppCommand {
   id: string; label: string; menu: MenuName; icon: LucideIcon; shortcut?: string;
   description?: string; separator?: boolean; checked?: boolean;
@@ -64,6 +66,12 @@ export function appCommands(actions: AppActions): AppCommand[] {
     { id: 'animation.split', menu: 'Animation', label: 'Split clip at playhead', icon: Film, shortcut: 'Ctrl+Shift+D', run: () => { if (s().selectedId) s().editClip(s().selectedId!, 'split', s().frame); }, enabled: () => selection() && s().project.animationMode !== 'frame-by-frame' },
     { id: 'animation.autokey', menu: 'Animation', label: 'Auto-key transforms', icon: DiamondPlus, checked: p.autoKey, separator: true, run: () => s().setPreference('autoKey', !s().preferences.autoKey), enabled: () => editing() && s().project.animationMode !== 'frame-by-frame' },
     { id: 'animation.loop', menu: 'Animation', label: 'Loop playback', icon: Repeat2, checked: p.loop, run: () => s().setPreference('loop', !s().preferences.loop), enabled: editing },
+    { id: 'paint.studio', menu: 'Paint', label: 'Brush Studio', icon: Brush, shortcut: 'Ctrl+Shift+B', description: 'Brush library, color studio, pressure, pixels and custom presets', run: () => { w().setLayout({ showProperties: true }); useWorkspace.setState({ focused: false, popout: window.matchMedia('(max-width: 800px)').matches ? 'properties' : null }); s().setTool('pen'); usePaint.getState().requestStudio(); }, enabled: editing },
+    { id: 'paint.layer', menu: 'Paint', label: 'New paint layer', icon: Plus, run: () => s().addPaintLayer(), enabled: editing },
+    ...([['pen', 'Brush tool', 'B'], ['eraser', 'Cel eraser', 'E'], ['bucket', 'Area fill', 'F'], ['eyedropper', 'Eyedropper', 'I']] as const).map(([tool, label, shortcut], index) => ({ id: `paint.tool.${tool}`, menu: 'Paint' as const, label, icon: Brush, shortcut, separator: index === 0, checked: s().tool === tool, run: () => s().setTool(tool), enabled: editing })),
+    { id: 'paint.swap', menu: 'Paint', label: 'Swap paint colors', icon: Repeat2, shortcut: 'X', separator: true, run: () => usePaint.getState().swapColors(), enabled: editing },
+    { id: 'paint.reset', menu: 'Paint', label: 'Reset paint colors', icon: RefreshCw, shortcut: 'D', run: () => usePaint.getState().resetColors(), enabled: editing },
+    ...BRUSH_PRESETS.map((preset, index) => ({ id: `paint.brush.${preset.id}`, menu: 'Paint' as const, label: `Brush: ${preset.name}`, icon: Brush, separator: index === 0, description: preset.description, run: () => { usePaint.getState().choosePreset(preset.id); s().setTool('pen'); w().setLayout({ showProperties: true }); useWorkspace.setState({ focused: false, popout: window.matchMedia('(max-width: 800px)').matches ? 'properties' : null }); usePaint.getState().requestStudio(); }, enabled: editing })),
     { id: 'view.fit', menu: 'View', label: 'Fit stage in window', icon: Expand, shortcut: 'Ctrl+0', run: () => { s().setZoom(100); s().setPan({ x: 0, y: 0 }); }, enabled: editing },
     { id: 'view.zoom.in', menu: 'View', label: 'Zoom in', icon: Plus, shortcut: 'Ctrl++', run: () => s().setZoom(s().zoom * 1.25), enabled: editing },
     { id: 'view.zoom.out', menu: 'View', label: 'Zoom out', icon: Search, shortcut: 'Ctrl+-', run: () => s().setZoom(s().zoom / 1.25), enabled: editing },

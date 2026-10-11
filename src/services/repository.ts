@@ -1,8 +1,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { decodeLam, encodeLam } from '../engine/lam';
 import { projectRecord } from '../engine/library-record';
-import type { Preferences, Project, ProjectRecord, SavedProject } from '../engine/types';
-export interface LibrarySettings { lastProjectId: string | null; preferences?: Preferences }
+import type { Preferences, PaintSettings, Project, ProjectRecord, SavedProject } from '../engine/types';
+export interface LibrarySettings { lastProjectId: string | null; preferences?: Preferences; paint?: PaintSettings }
 export type RecordPatch = { name?: string; starred?: boolean; deletedAt?: number | null };
 export interface Repository {
   list(): Promise<ProjectRecord[]>; save(project: Project, thumbnail?: string | null): Promise<ProjectRecord>;

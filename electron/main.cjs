@@ -84,6 +84,7 @@ function installMenu() {
       { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => command('redo') },
       { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
     ] },
+    { label: 'Paint', submenu: [{ label: 'Brush Studio', accelerator: 'CmdOrCtrl+Shift+B', click: () => command('brush-studio') }, { label: 'New paint layer', click: () => command('paint-layer') }, { type: 'separator' }, { label: 'Brush', click: () => command('paint-brush') }, { label: 'Cel eraser', click: () => command('paint-eraser') }, { label: 'Area fill', click: () => command('paint-fill') }, { label: 'Eyedropper', click: () => command('paint-picker') }, { type: 'separator' }, { label: 'Swap paint colors', click: () => command('paint-swap') }] },
     { label: 'View', submenu: [{ role: 'togglefullscreen' }, ...(!app.isPackaged ? [{ role: 'reload' }, { role: 'toggleDevTools' }] : [])] },
     { label: 'Help', submenu: [{ label: "What's New…", click: () => command('whats-new') }, { label: 'Start window…', click: () => command('start') }, { label: 'Check for updates…', click: () => command('updates') }, { label: 'Workspace configuration', click: () => command('setup') }, { label: 'Reference', click: () => command('help') }] },
   ];

@@ -12,14 +12,16 @@ export function exportSvg(project: Project, frame: number, transparent = false):
 }
 export async function rasterize(project: Project, frame: number, canvas: HTMLCanvasElement, transparent = false) {
   const url = URL.createObjectURL(exportSvg(project, frame, transparent));
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const image = new Image(); image.src = url; await image.decode();
+    const image = new Image(); image.src = url;
+    await Promise.race([image.decode(), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('The artwork took too long to render. Try a simpler frame or a smaller export.')), 12000); })]);
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('Your device does not support canvas exports.');
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     return context;
-  } finally { URL.revokeObjectURL(url); }
+  } finally { clearTimeout(timer); URL.revokeObjectURL(url); }
 }
 export async function exportPng(project: Project, frame: number, scale = 1, transparent = false): Promise<Blob> {
   const canvas = document.createElement('canvas');

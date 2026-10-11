@@ -6,5 +6,6 @@ import './styles.css';
 import './professional.css';
 import './launch.css';
 import './blueprint.css';
+import './paint.css';
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);

@@ -50,3 +50,7 @@ Clean Windows/macOS runtime/install testing, signing/notarization, and a real pu
 - Optional password encryption (not “only this program can read”).
 
 Prefer small, tested workflows over inflated feature counts. Keep legacy documents recoverable and project data independent of updates.
+
+## v0.4.0 · Brushes & Paint
+
+Twelve procedural brush families, captured per-mark settings/pressure/seeds, smooth and crisp pixel painting, a full painting/color dock, symmetry, non-destructive cel eraser, bounded fill, composited eyedropper, editable mark stack, custom presets/packs, shared animated-paint rendering and portable LAM feature flags. Physical pigment simulation, unlimited/full-resolution raster surfaces, CMYK/ICC color management, Photoshop/Adobe/Alight feature parity and universal tablet-driver compatibility are not part of this release.

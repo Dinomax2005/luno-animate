@@ -1,3 +1,4 @@
+import { CelPaint, PaintStroke } from './PaintGraphic';
 import { videoFrameData } from '../engine/clips';
 import { forwardKinematics } from '../engine/rig';
 import { sampleCamera, sampleCel } from '../engine/animation';
@@ -76,10 +77,11 @@ export function ItemGraphic({ item, frame = 0, project }: { item: SceneItem; fra
   const w = item.width, h = item.height;
   if (item.type === 'group') return null;
   if (item.type === 'text') return <text fontFamily="Arial, Helvetica, sans-serif" fontSize={item.fontSize ?? 56} fontWeight={item.fontWeight ?? 600} textAnchor={item.textAlign ?? 'middle'} dominantBaseline="central" {...common}>{(item.text ?? '').split('\n').map((line, n, all) => <tspan key={n} x={item.textAlign === 'start' ? -w / 2 : item.textAlign === 'end' ? w / 2 : 0} dy={n ? (item.fontSize ?? 56) * 1.2 : -(all.length - 1) * (item.fontSize ?? 56) * 0.6}>{line || '\u00a0'}</tspan>)}</text>;
-  if (item.type === 'drawing') return <g>{sampleCel(item, frame)?.strokes.map((stroke, n) => <path key={n} d={stroke.points.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ')} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" />)}</g>;
+  if (item.type === 'drawing') return <CelPaint strokes={sampleCel(item, frame)?.strokes ?? []} id={`${item.id}-cel-${frame}`} width={w} height={h} />;
   if (item.type === 'character') return <Milo item={item} />;
   if (item.type === 'video') { const data = project && videoFrameData(project, item, frame); return data ? <image href={data} x={-w / 2} y={-h / 2} width={w} height={h} /> : null; }
   if (item.type === 'image') return <image href={item.imageData} x={-w / 2} y={-h / 2} width={w} height={h} />;
+  if (item.type === 'path' && item.brush) return <PaintStroke id={`${item.id}-paint`} stroke={{ points: item.points ?? [], color: item.stroke === 'none' ? item.fill : item.stroke, width: item.strokeWidth, brush: item.brush }} />;
   if (item.type === 'path') return <path d={item.points?.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ')} fill="none" stroke={item.stroke === 'none' ? item.fill : item.stroke} strokeWidth={item.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />;
   if (item.shape === 'ellipse' || item.shape === 'ground') return <ellipse cx="0" cy="0" rx={w / 2} ry={h / 2} {...common} />;
   if (item.shape === 'star') {

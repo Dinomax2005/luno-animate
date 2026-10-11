@@ -1,14 +1,25 @@
-# Luno Animate · v0.3.7
+# Luno Animate · v0.4.0 — Brushes & Paint
 
-**Precision. Every frame.**
+**Expressive brushes. Every frame.**
 
 A professional, local-first 2D animation workspace with vector, keyframe, frame-by-frame, and character-rigging workflows. React + TypeScript power the editor; Electron provides standalone desktop installers, a native project library, and protected updates.
+
+## Brushes & Paint · v0.4.0
+
+Open **Paint → Brush Studio** (`Ctrl/Cmd+Shift+B`) for twelve procedural brushes, a scratchpad, pressure and stabilization controls, tip dynamics, symmetry, custom presets and portable `.lunobrush` packs. **Color Studio** includes HSV/HEX controls, foreground/background colors, four palettes, saved swatches and recent colors.
+
+- **B / E / F / I:** brush, cel-only non-destructive eraser, connected-area fill, and composited-stage eyedropper. Hold **Alt** with the brush to sample. **X / D** swap/reset colors; **[ / ]** resize.
+- **Smooth or pixel:** ink, round, airbrush, pencil, dry paint, chalk, marker, flat nib, pixel grid, spray, stipple and glow retain their settings per mark.
+- **Paint layers & cels:** edit the active cel’s stroke stack, recolor or restyle marks, undo a whole symmetrical gesture, and use **F6/F7** with onion skins. Rig/motion and video projects can also use paint layers and transformable vector brush strokes.
+- **Portable artwork:** painting is part of `.lam`, thumbnails, onion skins and SVG/PNG/MP4 output. Legacy files remain supported; advanced-paint files require **Luno v0.4.0+**. Fill operates on the active cel at up to 1024 pixels on its longest side, not the whole composite.
+
+[Painting reference](docs/PAINTING.md) · [Release notes](docs/release-notes.md)
 
 ## What works
 
 The production interface stays technical rather than tutorial-first. A separate small desktop launcher closes before the ready studio opens; browsers have a compact startup card, not a full-screen loading page. The optional Start window offers New, Open, and Recent documents, and What’s New is shown once per version. New documents default to a blank stage; the document manager defaults to a sortable list. Technical controls, menus, and shortcuts take priority.
 
-- **Production workspace:** blue-accented charcoal/light interfaces; eight context-aware application menus; searchable command palette; individually remembered Animation/Drawing/Rigging/Motion/Video layouts; pointer/keyboard-resizable docks; stage rulers, context actions, spatial nudging, and focus mode; responsive panel overlays and document properties. See the [workspace reference](docs/WORKSPACE.md).
+- **Production workspace:** blue-accented charcoal/light interfaces; nine context-aware application menus; searchable command palette; individually remembered Animation/Drawing/Rigging/Motion/Video layouts; pointer/keyboard-resizable docks; stage rulers, context actions, spatial nudging, and focus mode; responsive panel overlays and document properties. See the [workspace reference](docs/WORKSPACE.md).
 - **Save documents:** Save overwrites the opened `.lam`; Save As selects and binds a new destination only after success. Copy export remains separate. External changes, missing files, invalid data, symbolic links, and internal library targets are refused instead of silently clobbered.
 - **Three document types:** Hand-drawn uses manually authored cels; Rig / motion combines FK/IK posing with a layer motion studio; Video editing imports footage and adds animated overlays.
 - **Document manager:** every saved project, thumbnails, favorites, search/sort, rename, duplicate, Trash/restore, revision recovery, and five editable templates. Projects remain independent and survive restarting.
@@ -26,13 +37,13 @@ This is a **working early studio, not full Adobe Animate parity**. Symbols/neste
 
 ## Download and install
 
-Use the **[official v0.3.7 release](https://github.com/Dinomax2005/luno-animate/releases/tag/v0.3.7)** for installers and stable update feeds. Existing updater-enabled Windows and AppImage installations can use **Updates & backups → Check GitHub** without uninstalling.
+Use the **[official v0.4.0 release](https://github.com/Dinomax2005/luno-animate/releases/tag/v0.4.0)** for installers and stable update feeds. Existing updater-enabled Windows and AppImage installations can use **Updates & backups → Check GitHub** without uninstalling.
 
 | Platform | Installer | How to install |
 | --- | --- | --- |
-| Windows x64 | `Luno-Animate-0.3.7-win-x64.exe` | NSIS setup, selectable installation folder, shortcuts, workspace configuration. |
-| macOS Apple silicon | `Luno-Animate-0.3.7-mac-arm64.dmg` | Drag the app to Applications. |
-| macOS Intel | `Luno-Animate-0.3.7-mac-x64.dmg` | Drag the app to Applications. |
+| Windows x64 | `Luno-Animate-0.4.0-win-x64.exe` | NSIS setup, selectable installation folder, shortcuts, workspace configuration. |
+| macOS Apple silicon | `Luno-Animate-0.4.0-mac-arm64.dmg` | Drag the app to Applications. |
+| macOS Intel | `Luno-Animate-0.4.0-mac-x64.dmg` | Drag the app to Applications. |
 | Linux x64 | `.AppImage` or `.deb` | Make the AppImage executable, or install the DEB with your package manager. |
 
 Public release downloads do not require GitHub sign-in and do not expire like Actions artifacts. Installers are unsigned development builds without configured certificates; macOS automatic installation remains disabled without Developer ID signing. DEB packages require manual/package-manager updates; v0.1 has no updater. See [installation and releases](docs/INSTALLATION.md).

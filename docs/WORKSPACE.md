@@ -102,3 +102,7 @@ Expand the chevron next to an animated timeline layer to see only its authored *
 Focused diamonds support ←/→ timing nudges (Shift: ten frames), Enter/Space selection, and ordinary Copy/Paste/Delete. The timeline ruler supports Home/End, ←/→ (Shift: ten), and Page Up/Down (one second). Opacity drags now edit the sampled animated channel as one undo gesture; effect reset writes values at the playhead rather than invisibly changing an animated base value.
 
 **LAM v2 stores one easing curve per physical keyframe.** Channels remain independently keyed/sampled, but easing is shared when they coincide at a frame. Moving/pasting into a key with unrelated channels preserves that destination key’s easing. Editing its curve changes all coincident channels. Per-channel easing metadata is not claimed.
+
+## Painting dock (v0.4.0)
+
+The new **Paint** menu and command search open **Brush Studio** (`Ctrl/Cmd+Shift+B`), add paint layers, select tools and choose any built-in brush. Properties includes a Paint tab with Brush library/Color studio. Relevant family-specific dynamics are shown rather than presenting inactive sliders. The existing Draw tool/Drawing mode controls remain; frame-by-frame mode disables vector selection. See [PAINTING.md](PAINTING.md) for tool shortcuts, editable marks, color/preset persistence and limits.

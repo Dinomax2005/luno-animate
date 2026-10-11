@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { createMiloRig } from './rig';
+import { MAX_CEL_PAINT_WORK, MAX_SCENE_PAINT_WORK, paintWork, scenePaintWork } from './brushes';
+import { brushSchema, paintPointSchema, strokeSchema } from './paint-schema';
 import type { AnimationMode, Project, Scene, SceneContent, SceneItem, ShapeKind, Template } from './types';
 
 export const uid = () => globalThis.crypto?.randomUUID?.() ?? `luno-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -81,11 +83,11 @@ const itemSchema = z.object({
   attachment: z.object({ characterId: id, boneId: id, anchor: finite.min(0).max(1) }).optional(),
   x: point.shape.x, y: point.shape.y, width: finite.min(1).max(10000), height: finite.min(1).max(10000),
   scaleX: finite.min(0.01).max(100), scaleY: finite.min(0.01).max(100), rotation: finite, opacity: finite.min(0).max(1),
-  visible: z.boolean(), locked: z.boolean(), fill: color, stroke: color, strokeWidth: finite.min(0).max(100),
-  points: z.array(point).max(20000).optional(), imageData: z.string().max(40_000_000).regex(/^data:image\/(png|jpeg|webp);base64,[a-zA-Z0-9+/=]+$/).optional(),
+  visible: z.boolean(), locked: z.boolean(), fill: color, stroke: color, strokeWidth: finite.min(0).max(256),
+  points: z.array(paintPointSchema).max(20000).optional(), brush: brushSchema.optional(), imageData: z.string().max(40_000_000).regex(/^data:image\/(png|jpeg|webp);base64,[a-zA-Z0-9+/=]+$/).optional(),
   rig: z.object({ origin: point, bones: z.array(bone).max(200) }).optional(), characterStyle: z.enum(['milo', 'skeleton']).optional(),
   text: z.string().max(4000).optional(), fontSize: finite.min(4).max(600).optional(), fontWeight: finite.min(100).max(900).optional(), textAlign: z.enum(['start', 'middle', 'end']).optional(),
-  cels: z.array(z.object({ frame, strokes: z.array(z.object({ points: z.array(point).min(2).max(20000), color, width: finite.min(0.5).max(100) })).max(500) })).max(1800).optional(),
+  cels: z.array(z.object({ frame, strokes: z.array(strokeSchema).max(500) })).max(1800).optional(),
   startFrame: frame.optional(), endFrame: z.number().int().min(1).max(1800).optional(), sourceStart: finite.min(0).max(30).optional(), videoAssetId: id.optional(), linkedAudioId: id.optional(),
   blur: finite.min(0).max(50).optional(), brightness: finite.min(0).max(3).optional(), saturation: finite.min(0).max(3).optional(),
   holdCels: z.boolean().optional(), blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay']).optional(),
@@ -112,7 +114,9 @@ function validateScene(scene: SceneContent) {
   if (scene.workArea.start > scene.workArea.end || scene.workArea.end >= scene.duration) throw new Error('The scene work area is invalid.');
   for (const clip of scene.audio) if (clip.startFrame >= scene.duration || clip.trimStart >= clip.duration) throw new Error('An audio clip has invalid timing.');
   if (new Set(scene.audio.map(a => a.id)).size !== scene.audio.length) throw new Error('Duplicate audio clip IDs.');
+  if (scenePaintWork(scene.items) > MAX_SCENE_PAINT_WORK) throw new Error('This scene exceeds its procedural painting detail budget. Simplify the paint or move it into another scene.');
   for (const item of scene.items) {
+    if (item.cels?.some(c => c.strokes.reduce((sum, stroke) => sum + paintWork(stroke), 0) > MAX_CEL_PAINT_WORK)) throw new Error('This cel exceeds its procedural painting detail budget. Split the artwork into multiple paint layers.');
     if ((item.startFrame ?? 0) >= (item.endFrame ?? scene.duration) || (item.endFrame ?? scene.duration) > scene.duration) throw new Error('The layer clip range is invalid.');
     if (item.type === 'character' && !item.rig) throw new Error('A character is missing its rig.');
     if (item.type === 'image' && !item.imageData) throw new Error('An image layer is missing its artwork.');

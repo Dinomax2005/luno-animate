@@ -1,5 +1,5 @@
-export type Point = { x: number; y: number };
-export type Tool = 'select' | 'hand' | 'rig' | 'pen' | 'rectangle' | 'ellipse' | 'text' | 'camera';
+export type Point = { x: number; y: number; pressure?: number };
+export type Tool = 'select' | 'hand' | 'rig' | 'pen' | 'eraser' | 'bucket' | 'eyedropper' | 'rectangle' | 'ellipse' | 'text' | 'camera';
 export type Easing = 'linear' | 'ease-in-out' | 'ease-out' | 'ease-in' | 'hold' | 'back-out' | 'bounce-out' | 'elastic-out' | 'bezier';
 export type ShapeKind = 'rectangle' | 'ellipse' | 'star' | 'sparkle' | 'ground';
 export type Preset = 'wave' | 'bounce' | 'walk' | 'spin' | 'float' | 'pulse' | 'fade' | 'slide';
@@ -10,7 +10,19 @@ export type Template = 'character' | 'shapes' | 'blank' | 'title' | 'cutout';
 export interface Bone { id: string; name: string; parentId: string | null; length: number; angle: number; locked?: boolean; minAngle?: number; maxAngle?: number }
 export interface Rig { origin: Point; bones: Bone[] }
 export interface WorldBone extends Bone { start: Point; end: Point; worldAngle: number }
-export interface Stroke { points: Point[]; color: string; width: number }
+export type BrushKind = 'round' | 'ink' | 'airbrush' | 'pencil' | 'dry' | 'chalk' | 'marker' | 'flat' | 'pixel' | 'spray' | 'stipple' | 'glow';
+export interface BrushStyle {
+  kind: BrushKind; opacity: number; flow: number; hardness: number; spacing: number; smoothing: number;
+  sizePressure: boolean; opacityPressure: boolean; taper: number; angle: number; roundness: number;
+  scatter: number; grain: number; pixelSize: number; seed: number; blend: 'normal' | 'multiply' | 'screen';
+}
+export interface FillRegion { cellSize: number; runs: [number, number, number][] }
+export interface Stroke { points: Point[]; color: string; width: number; brush?: BrushStyle; mode?: 'paint' | 'erase'; fill?: FillRegion }
+export interface BrushPreset { id: string; name: string; category: 'Essentials' | 'Texture' | 'Pixel & FX' | 'Custom'; size: number; brush: BrushStyle; description: string }
+export interface PaintSettings {
+  updatedAt: number; foregroundColor?: string; brushSize?: number; brush: BrushStyle; presetId: string; backgroundColor: string; symmetry: 'none' | 'vertical' | 'horizontal' | 'both';
+  palette: string; recentColors: string[]; savedColors: string[]; customPresets: BrushPreset[]; fillTolerance: number;
+}
 export interface DrawingCel { frame: number; strokes: Stroke[] }
 export interface Attachment { characterId: string; boneId: string; anchor: number }
 export interface SceneItem {
@@ -18,7 +30,7 @@ export interface SceneItem {
   shape?: ShapeKind; parentId?: string | null; attachment?: Attachment;
   x: number; y: number; width: number; height: number; scaleX: number; scaleY: number;
   rotation: number; opacity: number; visible: boolean; locked: boolean; fill: string; stroke: string; strokeWidth: number;
-  points?: Point[]; imageData?: string; rig?: Rig; characterStyle?: 'milo' | 'skeleton';
+  points?: Point[]; brush?: BrushStyle; imageData?: string; rig?: Rig; characterStyle?: 'milo' | 'skeleton';
   text?: string; fontSize?: number; fontWeight?: number; textAlign?: 'start' | 'middle' | 'end';
   startFrame?: number; endFrame?: number; sourceStart?: number; videoAssetId?: string; linkedAudioId?: string;
   blur?: number; brightness?: number; saturation?: number;

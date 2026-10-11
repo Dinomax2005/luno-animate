@@ -1,3 +1,30 @@
+# Luno Animate v0.4.0 — Brushes & Paint
+
+A substantial painting update, not just a theme change. The professional blue workspace and separate small startup window remain.
+
+## Painting workspace
+
+- **Twelve procedural brushes:** Studio Round, Smooth Ink, Soft Airbrush, Felt Marker, Calligraphy, Graphite, Dry Bristle, Chalk, Pixel Square, Scatter Spray, Stipple and Neon Glow. Brush settings and texture seeds are captured per mark.
+- **Brush Studio:** searchable/category-filtered presets, scaled scratchpad, relevant tip/dynamics controls, stabilization, optional pressure/taper, flow, opacity, blend modes and two-/four-way symmetry. Open **Paint → Brush Studio** or **Ctrl/Cmd+Shift+B**.
+- **Color Studio:** HSV/HEX controls, native picker, foreground/background pair, four palettes, recent colors and saved swatches. **X/D** swap/reset; **[/]** change paint-tool size.
+- **Custom brushes:** saved presets and additive, validated `.lunobrush` packs containing presets and swatches. Settings are saved locally and in library backups, including native restarts.
+- **Tools:** **B** brush, **E** cel-only non-destructive eraser, **F** connected-area fill, **I** composited-stage eyedropper; **Alt** temporarily samples with the brush.
+- **Animated paint:** new paint layers in all three modes, editable/recolorable/restylable stroke stack, held-exposure-safe edits, F6/F7 manual cels, onion skins, atomic Undo/Redo and shared preview/export rendering. Vector brush strokes remain transformable in rig/motion and video projects.
+
+## Compatibility and limits
+
+Legacy projects keep their old stroke rendering and remain loadable. Advanced painting uses LAM feature flag `2` with compression (`3`), requiring **v0.4.0 or later**; old readers reject unsupported artwork rather than silently stripping it. The schema-2 project/container-v1 identity is retained.
+
+Fill works on the active cel, not all composited layers, at up to 1024 px on its longest side. Eyedropper rendering is capped at 2048 px. Painting uses bounded geometry/detail budgets and checks the existing 64 MB project limit before committing. Pressure depends on supported hardware/browser input; this is not a physical paint simulation, calibrated color-management system or Photoshop-equivalent raster engine. See [PAINTING.md](PAINTING.md).
+
+## Preserved workflows and updates
+
+Three document types, rigging/FK/IK/cutouts, precision motion channels, clip trim/split, camera, linked overwrite Save/Save As, library autosave/revisions, protected backups, portable `.lam` and MP4/audio export remain. Video still uses portable JPEG/WAV proxies up to 30 seconds and 960 px, not embedded full-source editing.
+
+Use **Updates & backups → Check GitHub** in updater-enabled installations. Newer stable releases only; checksum verification, durable save and a verified backup precede restart. Windows NSIS and writable Linux AppImage support in-place updates. Unsigned macOS and DEB installs require manual/package-manager updates. Keep independent `.lam` backups; physical Windows/macOS cross-version upgrade testing and signing are not claimed.
+
+---
+
 # Luno Animate v0.3.7 — Blueprint / Precision
 
 ## A small window first, then the studio

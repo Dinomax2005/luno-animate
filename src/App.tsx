@@ -7,6 +7,7 @@ import { CommandPalette } from './components/studio/CommandPalette';
 import { useWorkspace } from './store/workspace';
 import { ProjectHome } from './components/home/ProjectHome';
 import { UpdateBanner } from './components/Updates';
+import { usePaint } from './store/paint';
 import { useEditor, PREFS_KEY } from './store/editor';
 import { createItem, createProject } from './engine/project';
 import { readProjectData, MAX_LAM_BYTES } from './engine/lam';
@@ -146,11 +147,12 @@ export default function App() {
     const timer = setTimeout(() => { void flushProject().catch(error => useEditor.getState().notify(`${error.message || 'Local storage is unavailable.'} Export a .lam copy to keep your changes.`, 'error')); }, 700);
     return () => clearTimeout(timer);
   }, [project, ready, view]);
+  const paintUpdatedAt = usePaint(s => s.updatedAt);
   useEffect(() => {
     try { localStorage.setItem(PREFS_KEY, JSON.stringify(preferences)); } catch { /* Preferences also live in the durable library. */ }
     document.documentElement.dataset.theme = preferences.theme;
     if (ready) { const timer = setTimeout(() => { void flushProject().catch(() => {}); }, 300); return () => clearTimeout(timer); }
-  }, [preferences, ready]);
+  }, [preferences, ready, paintUpdatedAt]);
   useEffect(() => {
     const unload = (event: BeforeUnloadEvent) => { const s = useEditor.getState(); if (!window.luno && (hasUnsavedProject() || s.saveStatus === 'error' || !!s.blockReason || s.busy || s.interacting)) { event.preventDefault(); event.returnValue = ''; } };
     const visibility = () => { if (document.visibilityState === 'hidden') { useEditor.getState().setPlaying(false); if (useEditor.getState().libraryReady) void flushProject().catch(() => {}); } };
@@ -197,16 +199,17 @@ export default function App() {
   useEffect(() => { void window.luno?.updater.setAutomatic(preferences.automaticUpdates).catch(() => {}); }, [preferences.automaticUpdates]);
   useEffect(() => {
     const command = (value: string) => {
-      const s = useEditor.getState(); if (bootPhase || s.blockReason || s.busy || s.dialog) return;
+      const s = useEditor.getState(); if (bootPhase || s.blockReason || s.busy || s.interacting || s.dialog) return;
       if (['open', 'new', 'setup', 'export', 'save', 'save-as', 'save-copy'].includes(value)) (document.activeElement as HTMLElement | null)?.blur?.();
       if (value === 'open') void onOpen(); else if (value === 'new') s.setDialog('new'); else if (value === 'setup') s.setDialog('setup'); else if (value === 'help') s.setDialog('help'); else if (value === 'start') s.setDialog('start'); else if (value === 'whats-new') useLaunch.getState().openNews(); else if (value === 'updates') s.setDialog('updates');
-      else if (s.view === 'editor') { if (value === 'save') void onSave(); else if (value === 'save-as') void onSaveAs(); else if (value === 'save-copy') void onSaveCopy(); else if (value === 'export') s.setDialog('export'); else if (value === 'undo') s.undo(); else if (value === 'redo') s.redo(); }
+      else if (s.view === 'editor') { if (value === 'brush-studio') { s.setTool('pen'); useWorkspace.getState().setLayout({ showProperties: true }); useWorkspace.setState({ focused: false, popout: window.matchMedia('(max-width: 800px)').matches ? 'properties' : null }); usePaint.getState().requestStudio(); } else if (value === 'paint-layer') s.addPaintLayer(); else if (value === 'paint-swap') usePaint.getState().swapColors(); else if (['paint-brush', 'paint-eraser', 'paint-fill', 'paint-picker'].includes(value)) s.setTool(({ 'paint-brush': 'pen', 'paint-eraser': 'eraser', 'paint-fill': 'bucket', 'paint-picker': 'eyedropper' } as const)[value as 'paint-brush']); else if (value === 'save') void onSave(); else if (value === 'save-as') void onSaveAs(); else if (value === 'save-copy') void onSaveCopy(); else if (value === 'export') s.setDialog('export'); else if (value === 'undo') s.undo(); else if (value === 'redo') s.redo(); }
     };
     const unsubscribe = window.luno?.onCommand(command);
     const keys = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement, s = useEditor.getState();
       if (bootPhase || event.defaultPrevented || s.dialog || s.blockReason || s.busy || s.interacting) return;
       const key = event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === 'b' && s.view === 'editor') { event.preventDefault(); s.setTool('pen'); useWorkspace.getState().setLayout({ showProperties: true }); useWorkspace.setState({ focused: false, popout: window.matchMedia('(max-width: 800px)').matches ? 'properties' : null }); usePaint.getState().requestStudio(); return; }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === 'p') { event.preventDefault(); (document.activeElement as HTMLElement | null)?.blur?.(); s.setDialog('commands'); return; }
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) {
         if ((event.metaKey || event.ctrlKey) && key === 's' && s.view === 'editor') { event.preventDefault(); void (event.shiftKey ? onSaveAs() : onSave()); }
@@ -226,7 +229,7 @@ export default function App() {
       }
       if (key === '?' || key === 'f1') { event.preventDefault(); s.setDialog('help'); }
       if (s.view !== 'editor') return;
-      const tools: Record<string, Tool> = { v: 'select', h: 'hand', b: 'pen', r: 'rectangle', o: 'ellipse', g: 'rig', t: 'text', c: 'camera' };
+      const tools: Record<string, Tool> = { v: 'select', h: 'hand', b: 'pen', e: 'eraser', f: 'bucket', i: 'eyedropper', r: 'rectangle', o: 'ellipse', g: 'rig', t: 'text', c: 'camera' };
       if (tools[key]) { s.setTool(tools[key]); if (key === 'g') s.setPreference('showBones', true); }
       if (key === 'tab' && (target === document.body || !!target.closest('.stage-area'))) { event.preventDefault(); useWorkspace.getState().toggleFocus(); }
       if (key === '<' || key === '>' || key === ',' || key === '.') { event.preventDefault(); s.setPlaying(false); s.setFrame(s.frame + (key === '<' || key === ',' ? -1 : 1)); }
@@ -235,6 +238,8 @@ export default function App() {
       if (key === 'f6') { event.preventDefault(); s.project.animationMode === 'frame-by-frame' ? s.nextDrawingFrame('duplicate') : s.duplicateCel(); } if (key === 'f7') { event.preventDefault(); s.project.animationMode === 'frame-by-frame' ? s.nextDrawingFrame('blank') : s.blankCel(); }
       if (key === 'delete' || key === 'backspace') { event.preventDefault(); s.keySelection.length ? s.deleteKeys() : s.deleteSelected(); }
       if (key === 'arrowleft' || key === 'arrowright') { event.preventDefault(); s.setPlaying(false); s.setFrame(s.frame + (key === 'arrowleft' ? -1 : 1) * (event.shiftKey ? 12 : 1)); }
+      if (key === 'x') usePaint.getState().swapColors(); if (key === 'd') usePaint.getState().resetColors();
+      if ((key === '[' || key === ']') && ['pen', 'eraser'].includes(s.tool)) { event.preventDefault(); const step = s.preferences.brushSize < 10 ? 1 : 5; s.setPreference('brushSize', Math.max(1, Math.min(256, s.preferences.brushSize + (key === '[' ? -step : step)))); return; }
       if (key === '[') s.setWorkArea(s.frame, Math.max(s.frame, s.project.workArea.end)); if (key === ']') s.setWorkArea(Math.min(s.frame, s.project.workArea.start), s.frame);
       if (key === 'escape') { s.select(null); useEditor.setState({ keySelection: [] }); }
     };

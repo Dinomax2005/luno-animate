@@ -1,11 +1,13 @@
 import { create } from 'zustand';
+import { brushLabel, MAX_BRUSH_SIZE, MAX_CEL_PAINT_WORK, MAX_SCENE_PAINT_WORK, paintWork, scenePaintWork, strokeBounds } from '../engine/brushes';
+import { brushSchema, strokeSchema } from '../engine/paint-schema';
 import { channelValues, mergeChannelKey, moveKeyChannel, removeKeyChannel, sameKeyRef } from '../engine/keyframes';
 import { editClip, fadeClip, pruneMedia, type ClipEdit } from '../engine/clips';
 import { capturePose, createPreset, sampleCamera, sampleCel, sampleItem } from '../engine/animation';
-import { createCharacter, createProject, createDrawingLayer, createShape, createItem, createScene, activeScene, activateScene, createText, parseProject, uid } from '../engine/project';
+import { MAX_PROJECT_BYTES, createCharacter, createProject, createDrawingLayer, createShape, createItem, createScene, activeScene, activateScene, createText, parseProject, uid } from '../engine/project';
 import { sceneNodes, transformPoint, inverse, parentOf, isLayerLocked, multiply as multiplyForUngroup } from '../engine/geometry';
 import { clamp, createMiloRig } from '../engine/rig';
-import type { VideoAsset, MotionProperty, AudioClip, Camera, Dialog, Keyframe, KeyRef, KeyChannel, Point, Preferences, Preset, Project, ProjectRecord, Scene, SceneItem, ShapeKind, Tool, View } from '../engine/types';
+import type { BrushStyle, VideoAsset, MotionProperty, AudioClip, Camera, Dialog, Keyframe, KeyRef, KeyChannel, Point, Stroke, Preferences, Preset, Project, ProjectRecord, Scene, SceneItem, ShapeKind, Tool, View } from '../engine/types';
 
 export const STORAGE_KEY = 'luno.project.v1';
 export const PREFS_KEY = 'luno.preferences.v1';
@@ -30,7 +32,7 @@ function initialPreferences(): Preferences {
     }
     if (typeof value.brushColor === 'string' && /^#[0-9a-f]{6}$/i.test(value.brushColor)) defaults.brushColor = value.brushColor;
     if (value.drawingMode === 'cel') defaults.drawingMode = 'cel';
-    for (const key of ['onionBefore', 'onionAfter', 'gridSize', 'brushSize'] as const) if (typeof value[key] === 'number' && Number.isFinite(value[key])) defaults[key] = clamp(value[key], key.startsWith('onion') ? 0 : 1, key.startsWith('onion') ? 5 : 100);
+    for (const key of ['onionBefore', 'onionAfter', 'gridSize', 'brushSize'] as const) if (typeof value[key] === 'number' && Number.isFinite(value[key])) defaults[key] = clamp(value[key], key.startsWith('onion') ? 0 : 1, key.startsWith('onion') ? 5 : key === 'brushSize' ? MAX_BRUSH_SIZE : 100);
     if (value.theme === 'dark' || value.theme === 'light') defaults.theme = value.theme;
   } catch { /* Defaults are safe when storage is unavailable. */ }
   return defaults;
@@ -44,6 +46,7 @@ const clone = <T,>(object: T): T => {
   return structuredClone(object);
 };
 
+export interface PaintCommit { mode?: 'cel' | 'vector'; space?: 'world' | 'local'; targetId?: string | null; expectedProject?: Project; frame?: number }
 interface Toast { id: string; message: string; tone: 'success' | 'info' | 'error' }
 export interface EditorStore {
   view: View; libraryReady: boolean; projects: ProjectRecord[]; selectedIds: string[]; selectedCamera: boolean; selectedAudio: string | null;
@@ -55,6 +58,9 @@ export interface EditorStore {
   addText: () => void; addBlankRig: () => void; editBoneProperties: (itemId: string, boneId: string, patch: Partial<import('../engine/types').Bone>) => void;
   bindToBone: (itemId: string, characterId: string | null, boneId?: string) => void;
   groupSelected: () => void; ungroupSelected: () => void; alignSelected: (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void;
+  paintStrokeBatch: (strokes: Stroke[], options?: PaintCommit) => boolean;
+  addPaintLayer: () => void;
+  editPaintStroke: (id: string, frame: number, index: number, change: string | null | { brush: BrushStyle; width: number }) => void;
   addCelStroke: (points: Point[]) => void; blankCel: () => void; duplicateCel: () => void; nextDrawingFrame: (kind: 'blank' | 'duplicate') => void; removeCel: (id: string, frame: number) => void; moveCel: (id: string, from: number, to: number) => void;
   editCamera: (patch: Partial<Pick<Camera, 'x' | 'y' | 'zoom' | 'rotation'>>, record?: boolean) => void; resetCamera: () => void;
   addAudio: (clip: AudioClip) => void; editAudio: (id: string, patch: Partial<Pick<AudioClip, 'name' | 'startFrame' | 'trimStart' | 'volume' | 'muted'>>, record?: boolean) => void; removeAudio: (id: string) => void;
@@ -127,6 +133,12 @@ function writeKeyframe(project: Project, item: SceneItem, frame: number) {
   project.keyframes[item.id] = [...keys.filter(k => k.frame !== frame), key].sort((a, b) => a.frame - b.frame);
 }
 
+function paintCommitFits(project: Project, notify: (message: string, tone?: 'info' | 'error') => void): boolean {
+  if (scenePaintWork(project.items) > MAX_SCENE_PAINT_WORK) { notify('This scene is too detailed for more procedural paint. Simplify a layer or create another scene.', 'info'); return false; }
+  if (new TextEncoder().encode(JSON.stringify(project)).byteLength > MAX_PROJECT_BYTES) { notify('This painting would exceed the 64 MB project limit. No artwork was changed.', 'error'); return false; }
+  return true;
+}
+
 export const useEditor = create<EditorStore>((set, get) => ({
   project: initial, view: 'home', libraryReady: false, projects: [], selectedIds: [initial.items.find(i => i.type === 'character')?.id ?? initial.items.at(-1)?.id].filter((id): id is string => !!id), selectedCamera: false, selectedAudio: null,
   busy: false, interacting: false, blockReason: null, keySelection: [], keyClipboard: [],
@@ -161,12 +173,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
   setPan: pan => set({ pan }),
   setDialog: dialog => set({ dialog, playing: false }),
   setLeftTab: leftTab => set({ leftTab }),
-  setPreference: (key, value) => set(s => ({ preferences: { ...s.preferences, [key]: value } })),
+  setPreference: (key, value) => { if (key === 'brushSize' && (typeof value !== 'number' || !Number.isFinite(value) || value < 1 || value > MAX_BRUSH_SIZE)) return; set(s => ({ preferences: { ...s.preferences, [key]: value } })); },
   editItem: (id, patch, record = true) => {
     const state = get();
     const item = state.project.items.find(i => i.id === id);
     if (!item || (isLayerLocked(state.project.items, id) && Object.keys(patch).some(key => !['locked', 'visible'].includes(key)))) return;
-    if (record) state.checkpoint();
     const project = clone(state.project);
     const index = project.items.findIndex(i => i.id === id);
     const animatedKeys = ['x', 'y', 'scaleX', 'scaleY', 'rotation', 'opacity', 'blur', 'brightness', 'saturation'];
@@ -181,6 +192,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
       project.items[index] = { ...project.items[index], ...patch };
       // Rest-pose edits intentionally do not overwrite animation channels.
     }
+    if (patch.brush && !brushSchema.safeParse(patch.brush).success) return;
+    if ((patch.brush !== undefined || patch.cels !== undefined) && !paintCommitFits(project, state.notify)) return;
+    if (record) state.checkpoint();
     set({ project });
   },
   editBone: (id, angles, record = true) => {
@@ -448,17 +462,65 @@ export const useEditor = create<EditorStore>((set, get) => ({
       s.editItem(item.id, mode === 'left' ? { x: halfW } : mode === 'center' ? { x: s.project.width / 2 } : mode === 'right' ? { x: s.project.width - halfW } : mode === 'top' ? { y: halfH } : mode === 'middle' ? { y: s.project.height / 2 } : { y: s.project.height - halfH }, false);
     }
   },
-  addCelStroke: points => {
-    const s = get(); let item = s.project.items.find(i => i.id === s.selectedId && i.type === 'drawing') ?? [...s.project.items].reverse().find(i => i.type === 'drawing' && !isLayerLocked(s.project.items, i.id));
-    if (item && isLayerLocked(s.project.items, item.id)) return; if (!item && s.project.items.length >= 500) return; s.checkpoint(); const project = clone(s.project);
-    if (!item) { item = { ...createItem('drawing'), type: 'drawing', name: 'Frame-by-frame drawing', x: project.width / 2, y: project.height / 2, width: project.width, height: project.height, cels: [], holdCels: project.animationMode !== 'frame-by-frame' }; project.items.push(item); }
-    const target = project.items.find(i => i.id === item!.id)!; const sampledNode = sceneNodes(project, s.frame).find(n => n.item.id === item!.id)!;
-    const local = points.map(p => transformPoint(inverse(sampledNode.matrix), p)); const cels = [...(target.cels ?? [])]; let cel = cels.find(c => c.frame === s.frame);
-    if (!cel) { cel = { frame: s.frame, strokes: [] }; cels.push(cel); }
-    if (cel.strokes.length >= 500) { s.notify('This cel has reached its 500-stroke limit.', 'info'); return; }
-    cel.strokes.push({ points: local.slice(0, 20000), color: s.preferences.brushColor, width: s.preferences.brushSize }); target.cels = cels.sort((a, b) => a.frame - b.frame);
-    set({ project, selectedId: target.id, selectedIds: [target.id], selectedBone: null, selectedCamera: false, tool: 'pen' });
+  addPaintLayer: () => {
+    const s = get(); if (s.busy || s.blockReason || s.interacting) return;
+    const layer = createDrawingLayer(s.project.width, s.project.height, `Paint ${s.project.items.filter(i => i.type === 'drawing').length + 1}`);
+    layer.holdCels = s.project.animationMode !== 'frame-by-frame'; layer.cels = [{ frame: s.frame, strokes: [] }];
+    s.addItem(layer); s.setPreference('drawingMode', 'cel'); s.setTool('pen');
   },
+  paintStrokeBatch: (strokes, options = {}) => {
+    const s = get(); if (s.busy || s.blockReason || s.playing || !strokes.length || strokes.length > 4 || options.expectedProject && options.expectedProject !== s.project || options.frame !== undefined && options.frame !== s.frame) return false;
+    const mode = options.mode ?? 'cel';
+    if (mode === 'vector') {
+      if (strokes.some(stroke => stroke.mode === 'erase' || stroke.fill) || options.space === 'local') { s.notify('Eraser and bucket work on a drawing cel. Add or select a paint layer.', 'info'); return false; }
+      if (s.project.items.length + strokes.length > 500) { s.notify('This scene has reached its 500-layer limit.', 'info'); return false; }
+      const parsed = strokes.map(stroke => strokeSchema.safeParse(stroke)); if (parsed.some(result => !result.success)) return false;
+      const items = strokes.map(stroke => {
+        const b = strokeBounds(stroke), x = b.x + b.width / 2, y = b.y + b.height / 2;
+        return createItem('path', { name: stroke.brush ? brushLabel(stroke.brush.kind) : 'Drawing', x, y, width: b.width, height: b.height, points: stroke.points.map(p => ({ ...p, x: p.x - x, y: p.y - y })), stroke: stroke.color, strokeWidth: stroke.width, ...(stroke.brush ? { brush: clone(stroke.brush) } : {}) });
+      });
+      if (items.some(i => i.width > 10000 || i.height > 10000)) { s.notify('This stroke exceeds the supported artwork bounds.', 'info'); return false; }
+      const project = { ...s.project, items: [...s.project.items, ...items] }; if (!paintCommitFits(project, s.notify)) return false;
+      s.checkpoint(); set({ project, selectedId: items.at(-1)!.id, selectedIds: items.map(i => i.id), selectedCamera: false, selectedAudio: null, selectedBone: null }); return true;
+    }
+    const requested = options.targetId === undefined ? s.selectedId : options.targetId;
+    let item = s.project.items.find(i => i.id === requested && i.type === 'drawing');
+    if (requested && !item && options.targetId !== undefined) return false;
+    if (!item) item = [...s.project.items].reverse().find(i => i.type === 'drawing' && !isLayerLocked(s.project.items, i.id));
+    if (item && isLayerLocked(s.project.items, item.id)) { s.notify('Unlock the drawing layer and its parents before painting.', 'info'); return false; }
+    const node = item && sceneNodes(s.project, s.frame).find(n => n.item.id === item!.id);
+    if (node && !node.visible) { s.notify('Reveal the active drawing layer before painting.', 'info'); return false; }
+    if (!item && (s.project.items.length >= 500 || strokes.some(stroke => stroke.mode === 'erase') || options.space === 'local')) return false;
+    const base = item ? sampleCel(item, s.frame)?.strokes ?? [] : [];
+    if (strokes.every(stroke => stroke.mode === 'erase') && !base.some(stroke => stroke.mode !== 'erase')) return false;
+    if ([...base, ...strokes].reduce((sum, stroke) => sum + paintWork(stroke), 0) > MAX_CEL_PAINT_WORK) { s.notify('This cel is too detailed for more procedural paint. Add another paint layer.', 'info'); return false; }
+    if (base.length + strokes.length > 500) { s.notify('This cel has reached its 500-mark limit. Remove a mark or add another paint layer.', 'info'); return false; }
+    const matrix = node ? inverse(node.matrix) : [1, 0, 0, 1, -s.project.width / 2, -s.project.height / 2] as const;
+    const local = strokes.map(stroke => ({ ...clone(stroke), points: options.space === 'local' ? stroke.points.map(p => ({ ...p })) : stroke.points.map(p => ({ ...p, ...transformPoint([...matrix], p) })) }));
+    if (local.some(stroke => !strokeSchema.safeParse(stroke).success)) { s.notify('The stroke exceeds the supported drawing bounds.', 'info'); return false; }
+    const project = clone(s.project);
+    if (!item) { item = createDrawingLayer(project.width, project.height, 'Frame-by-frame drawing'); item.holdCels = project.animationMode !== 'frame-by-frame'; item.cels = []; project.items.push(item); }
+    const target = project.items.find(i => i.id === item!.id)!, cels = [...(target.cels ?? [])]; let cel = cels.find(c => c.frame === s.frame);
+    // Editing a held exposure forks it, rather than replacing the visible drawing or mutating earlier cels.
+    if (!cel) { cel = { frame: s.frame, strokes: clone(base) }; cels.push(cel); }
+    cel.strokes.push(...local); target.cels = cels.sort((a, b) => a.frame - b.frame);
+    if (!paintCommitFits(project, s.notify)) return false;
+    s.checkpoint(); set({ project, selectedId: target.id, selectedIds: [target.id], selectedBone: null, selectedCamera: false, selectedAudio: null }); return true;
+  },
+  editPaintStroke: (id, frame, index, change) => {
+    const s = get(), item = s.project.items.find(i => i.id === id && i.type === 'drawing');
+    if (!item || isLayerLocked(s.project.items, id) || s.busy || s.blockReason || s.interacting || frame !== s.frame) return;
+    const base = sampleCel(item, frame); if (!base?.strokes[index]) return;
+    const strokes = clone(base.strokes);
+    if (change === null) strokes.splice(index, 1);
+    else if (typeof change === 'string') { if (!/^#[a-f0-9]{6}$/i.test(change) || strokes[index].color === change) return; strokes[index].color = change; }
+    else { if (strokes[index].fill) return; strokes[index] = { ...strokes[index], brush: clone(change.brush), width: change.width }; if (!strokeSchema.safeParse(strokes[index]).success) return; }
+    if (strokes.reduce((sum, stroke) => sum + paintWork(stroke), 0) > MAX_CEL_PAINT_WORK) { s.notify('That brush exceeds this cel’s detail budget. Choose a simpler brush.', 'info'); return; }
+    const project = clone(s.project); project.items.find(i => i.id === id)!.cels = [...(item.cels ?? []).filter(c => c.frame !== frame), { frame, strokes }].sort((a, b) => a.frame - b.frame);
+    if (!paintCommitFits(project, s.notify)) return;
+    s.checkpoint(); set({ project });
+  },
+  addCelStroke: points => { const s = get(); if (points.length < 2) return; if (s.paintStrokeBatch([{ points: points.slice(0, 20000), color: s.preferences.brushColor, width: s.preferences.brushSize }])) s.setTool('pen'); },
   blankCel: () => { const s = get(), item = s.project.items.find(i => i.id === s.selectedId && i.type === 'drawing'); if (!item || isLayerLocked(s.project.items, item.id)) { s.notify('Select a frame-by-frame drawing first.', 'info'); return; } s.editItem(item.id, { cels: [...(item.cels ?? []).filter(c => c.frame !== s.frame), { frame: s.frame, strokes: [] }].sort((a, b) => a.frame - b.frame) }); },
   duplicateCel: () => { const s = get(), item = s.project.items.find(i => i.id === s.selectedId && i.type === 'drawing'); if (!item || isLayerLocked(s.project.items, item.id)) return; const previous = sampleCel(item, Math.max(0, s.frame - 1)); s.editItem(item.id, { cels: [...(item.cels ?? []).filter(c => c.frame !== s.frame), { frame: s.frame, strokes: clone(previous?.strokes ?? []) }].sort((a, b) => a.frame - b.frame) }); },
   nextDrawingFrame: kind => {
@@ -467,10 +529,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const next = s.frame + 1;
     if (next >= 1800) { s.notify('A scene supports at most 1800 frames.', 'info'); return; }
     if (item.cels?.some(c => c.frame === next)) { set({ frame: next, playing: false }); s.notify(`Frame ${next + 1} already has a cel. Its drawing was kept.`, 'info'); return; }
-    s.checkpoint(); const project = clone(s.project), drawing = project.items.find(i => i.id === item.id)!;
+    const project = clone(s.project), drawing = project.items.find(i => i.id === item.id)!;
     drawing.cels = [...(drawing.cels ?? []), { frame: next, strokes: kind === 'duplicate' ? clone(sampleCel(item, s.frame)?.strokes ?? []) : [] }].sort((a, b) => a.frame - b.frame);
     if (next >= project.duration) { if (project.workArea.end === project.duration - 1) project.workArea.end = next; project.duration = next + 1; }
-    set({ project, frame: next, playing: false });
+    if (!paintCommitFits(project, s.notify)) return;
+    s.checkpoint(); set({ project, frame: next, playing: false });
   },
   removeCel: (id, frame) => { const s = get(), item = s.project.items.find(i => i.id === id); if (!item || isLayerLocked(s.project.items, item.id)) return; s.editItem(id, { cels: (item.cels ?? []).filter(c => c.frame !== frame) }); },
   moveCel: (id, from, to) => { const s = get(), item = s.project.items.find(i => i.id === id), cel = item?.cels?.find(c => c.frame === from); if (!item || isLayerLocked(s.project.items, item.id) || !cel || from === to) return; const frame = clamp(to, 0, s.project.duration - 1); s.editItem(id, { cels: [...(item.cels ?? []).filter(c => c.frame !== from && c.frame !== frame), { ...cel, frame }].sort((a, b) => a.frame - b.frame) }); },

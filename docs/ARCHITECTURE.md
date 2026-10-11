@@ -1,4 +1,4 @@
-# Architecture · v0.3.7
+# Architecture · v0.4.0
 
 ## Local-first boundaries
 
@@ -86,3 +86,13 @@ Schema-2 `animationMode` is backward compatible with a default of `rigged`. Hand
 The main BrowserWindow is created hidden; painting HTML alone no longer shows it. `startup-window.cjs` owns a separate frameless 460 × 282 sandboxed window with a nonpersistent partition and strict local CSP. Its dedicated preload exposes only status subscription, retry, and quit. Launcher IPC requires its exact sender and main frame; studio IPC requires the separate studio sender/main frame. Native ready-to-show and a trusted post-library/association/workspace-paint completion handshake jointly gate reveal. The launcher is destroyed first, then the main window is shown/focused. Error states cancel pending reveal; disposal removes action listeners/timers. Retry reruns renderer boot or reloads a failed renderer. Browser boot uses a compact card and hidden/inert app shell instead of a fullscreen screen. Start/What’s New remain ordinary optional/version-aware app dialogs.
 
 Active layout storage remains `luno.workspace.pro.v1` for compatibility. `luno.workspace.pro.profiles.v1` keeps sanitized per-mode dock dimensions, visibility, timeline zoom, and snapping. Switching stores the current profile and restores the target; Reset affects only that profile. Focus/popouts/cursor stay transient. Layout persistence is independent of document history and the existing vault backup/settings schema, and must never block artwork saving.
+
+## Brushes & Paint (v0.4.0)
+
+`engine/brushes.ts` contains the twelve preset families, deterministic geometry, smoothing/stabilization, pressure helpers, symmetry, color conversion and painting-work bounds. `engine/paint-schema.ts` is the shared finite-data validator used by browser and native libraries. `engine/painting.ts` provides bounded, non-mutating four-connected fill and sampling.
+
+`PaintGraphic.tsx` (`PaintStroke`/`CelPaint`) is the shared SVG renderer for stage, onion skins, previews and all exports. Ordered cel-local eraser masks wrap earlier marks only. Legacy strokes bypass the advanced brush math. Geometry expansion is bounded; canvas image decode has a timeout with Blob URL cleanup.
+
+`store/paint.ts` holds tool settings, custom presets and colors (never scratchpad artwork), with local persistence and a monotonic modification time. `services/library.ts` includes validated paint settings in durable saves/backups; a stale library snapshot cannot override newer local settings at ordinary startup. Explicit backup restore hydrates its saved painting configuration. `BrushStudio.tsx` connects preset controls, Color Studio, packs, scratchpad, cel controls and mark-stack editing. The Paint menu, command palette and native menus use the same editor actions.
+
+Stage gestures capture target/project/frame/settings, consume pressure/coalesced input and preview without history mutations. `editor.paintStrokeBatch` validates and atomically commits up to four mirrored marks, preserves held exposures, and refuses locks, stale destinations or detail/64 MB overflow before adding history. Recolor/restyle/delete use the same safe cel fork semantics. LAM flag `2` prevents older readers from silently dropping these optional schema-2 features.

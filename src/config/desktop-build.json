@@ -1,10 +1,10 @@
 {
-  "version": "0.3.7",
+  "version": "0.4.0",
   "distribution": "github-release",
-  "releaseUrl": "https://github.com/Dinomax2005/luno-animate/releases/tag/v0.3.7",
+  "releaseUrl": "https://github.com/Dinomax2005/luno-animate/releases/tag/v0.4.0",
   "installers": [
-    { "platform": "Windows", "files": ["Luno-Animate-0.3.7-win-x64.exe"], "inPlaceUpdate": true },
-    { "platform": "macOS", "files": ["Luno-Animate-0.3.7-mac-x64.dmg", "Luno-Animate-0.3.7-mac-arm64.dmg"], "inPlaceUpdate": false },
-    { "platform": "Linux", "files": ["Luno-Animate-0.3.7-linux-x86_64.AppImage", "Luno-Animate-0.3.7-linux-amd64.deb"], "inPlaceUpdate": "AppImage only" }
+    { "platform": "Windows", "files": ["Luno-Animate-0.4.0-win-x64.exe"], "inPlaceUpdate": true },
+    { "platform": "macOS", "files": ["Luno-Animate-0.4.0-mac-x64.dmg", "Luno-Animate-0.4.0-mac-arm64.dmg"], "inPlaceUpdate": false },
+    { "platform": "Linux", "files": ["Luno-Animate-0.4.0-linux-x86_64.AppImage", "Luno-Animate-0.4.0-linux-amd64.deb"], "inPlaceUpdate": "AppImage only" }
   ]
 }

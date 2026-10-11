@@ -14,7 +14,7 @@ async function studio(page: Page) {
 async function reopen(page: Page) { await page.reload(); await page.locator('.project-open').first().click(); await expect(page.locator('.app-shell')).toHaveAttribute('aria-busy', 'false'); }
 
 test('professional chrome, docked panels, and timeline share aligned frame geometry', async ({ page }) => {
-  await studio(page); await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark'); await expect(page.getByRole('menubar')).toBeVisible(); await expect(page.locator('.menu-trigger')).toHaveCount(8);
+  await studio(page); await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark'); await expect(page.getByRole('menubar')).toBeVisible(); await expect(page.locator('.menu-trigger')).toHaveCount(9);
   const heading = await page.locator('.timeline-layer-heading').boundingBox(), ruler = await page.getByRole('slider', { name: 'Timeline playhead' }).boundingBox(), track = await page.locator('.timeline-track').first().boundingBox(), playhead = await page.locator('.timeline-playhead').boundingBox();
   expect(heading && ruler && track && playhead).toBeTruthy(); expect(Math.abs(heading!.x + heading!.width - ruler!.x)).toBeLessThan(1); expect(Math.abs(track!.x - ruler!.x)).toBeLessThan(1); expect(Math.abs(playhead!.x - track!.x)).toBeLessThan(1);
   await page.getByRole('slider', { name: 'Timeline playhead' }).focus(); await page.keyboard.press('ArrowRight'); await expect(page.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('aria-valuenow', '2');

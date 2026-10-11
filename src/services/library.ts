@@ -1,3 +1,4 @@
+import { usePaint } from '../store/paint';
 import { useEditor, STORAGE_KEY, PREFS_KEY } from '../store/editor';
 import { uid, activateScene } from '../engine/project';
 import type { Project } from '../engine/types';
@@ -21,8 +22,12 @@ export function initializeLibrary() {
       localStorage.removeItem(STORAGE_KEY);
     }
     const settings = await repo.getSettings();
-    const state = useEditor.getState();
+    const state = useEditor.getState(), localPaint = usePaint.getState().settings();
+    // Compare before hydrating preferences, whose foreground/size fields also update the painting store.
+    const newerLocalPaint = localPaint.updatedAt > (settings.paint?.updatedAt ?? 0);
     if (settings.preferences) useEditor.setState({ preferences: { ...state.preferences, ...settings.preferences } });
+    if (newerLocalPaint) usePaint.getState().loadSettings(localPaint);
+    else if (settings.paint) usePaint.getState().loadSettings(settings.paint);
     if (settings.lastProjectId && records.some(r => r.id === settings.lastProjectId && !r.deletedAt)) {
       try { const p = await repo.load(settings.lastProjectId); state.replaceProject(p, false); lastSaved = p; state.markSaved(); state.setView('home'); }
       catch { state.notify('Your last project could not be opened. Use Recover prior save in its project menu.', 'error'); }
@@ -47,7 +52,7 @@ export function flushProject(withThumbnail = false): Promise<void> {
       }
       if (useEditor.getState().project === p) s.markSaved();
     }
-    await repository().saveSettings({ lastProjectId: snapshot.view === 'editor' ? p.id : (await repository().getSettings()).lastProjectId, preferences: useEditor.getState().preferences });
+    await repository().saveSettings({ lastProjectId: snapshot.view === 'editor' ? p.id : (await repository().getSettings()).lastProjectId, preferences: useEditor.getState().preferences, paint: usePaint.getState().settings() });
     try { localStorage.setItem(PREFS_KEY, JSON.stringify(useEditor.getState().preferences)); } catch { /* Durable preferences are also kept in the library. */ }
   };
   const result = saveQueue.then(action); saveQueue = result.catch(() => {});
@@ -73,7 +78,7 @@ export async function openLibraryProject(id: string) {
   try {
   await flushProject(true); const project = await repository().load(id);
   documentWorkspace(project); useEditor.getState().replaceProject(project, false); lastSaved = project; useEditor.getState().markSaved();
-  await repository().saveSettings({ lastProjectId: id, preferences: useEditor.getState().preferences });
+  await repository().saveSettings({ lastProjectId: id, preferences: useEditor.getState().preferences, paint: usePaint.getState().settings() });
   } finally { useEditor.getState().setBlocked(null); }
 }
 export async function openDocument(project: Project, imported = false, preserveName = false) {
@@ -84,7 +89,7 @@ export async function openDocument(project: Project, imported = false, preserveN
   const records = await repository().list();
   if (imported && records.some(r => r.id === project.id)) project = { ...project, id: uid(), name: preserveName ? project.name : `${project.name} (imported)`.slice(0, 100) };
   await repository().save(project); documentWorkspace(project, !imported); useEditor.getState().replaceProject(project, false); lastSaved = project; useEditor.getState().markSaved();
-  await repository().saveSettings({ lastProjectId: project.id, preferences: useEditor.getState().preferences });
+  await repository().saveSettings({ lastProjectId: project.id, preferences: useEditor.getState().preferences, paint: usePaint.getState().settings() });
   } finally { useEditor.getState().setBlocked(null); }
 }
 export async function changeRecord(id: string, patch: RecordPatch) { await repository().patch(id, patch); await refreshLibrary(); }
