@@ -1,3 +1,4 @@
+# Verify the published v0.3.6 feeds; installer source remains pinned to 3bfdcfc.
 name: Verify the published stable updater feed
 on:
   workflow_dispatch:
