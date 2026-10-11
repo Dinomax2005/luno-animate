@@ -12,8 +12,15 @@ async function studioWindow(app: ElectronApplication) {
   await expect.poll(() => app.windows().some(page => /\/dist\/index\.html$/.test(page.url()))).toBe(true);
   const page = app.windows().find(page => /\/dist\/index\.html$/.test(page.url()))!;
   const native = await app.browserWindow(page);
-  await expect.poll(() => native.evaluate(window => window.isVisible())).toBe(true);
-  await native.dispose(); await expect(page.locator('.startup-screen')).toHaveCount(0); return page;
+  // Cold packaged starts can exceed Playwright's 5s assertion default on shared runners.
+  // Keep the real visible-window invariant, within the startup controller's readiness budget.
+  try { await expect.poll(() => native.evaluate(window => window.isVisible()), { timeout: 30_000 }).toBe(true); }
+  catch (error) {
+    const windows = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map(window => ({ visible: window.isVisible(), destroyed: window.isDestroyed(), url: window.webContents.getURL() }))).catch(() => []);
+    const body = await page.locator('body').innerText().catch(() => 'Renderer unavailable');
+    throw new Error(`Studio readiness failed. Windows: ${JSON.stringify(windows)}. Renderer: ${body.slice(0, 3000)}`, { cause: error });
+  } finally { await native.dispose(); }
+  await expect(page.locator('.startup-screen')).toHaveCount(0); return page;
 }
 
 test('packaged app: safe bridge, native library, LAM association, backups, real MP4 audio, and restart', async () => {
