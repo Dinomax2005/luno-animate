@@ -1,62 +1,54 @@
-name: Build desktop installers
+name: Studio installers
 on:
   workflow_dispatch:
   push:
-    branches:
-      - 'arena/**'
+    branches: ["arena/**"]
     paths:
-      - 'src/**'
-      - 'scripts/**'
-      - 'electron/**'
-      - 'native-tests/**'
-      - 'desktop-tests/**'
-      - 'tests/**'
-      - 'playwright.desktop.config.ts'
-      - 'assets/**'
-      - 'public/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'electron-builder.yml'
-      - 'vite.config.ts'
-      - 'tsconfig.json'
-      - 'index.html'
-      - '.github/workflows/installers.yml'
-      - '!src/config/desktop-build.json'
+      - "src/**"
+      - "desktop/**"
+      - "desktop-tests/**"
+      - "native-tests/**"
+      - "scripts/**"
+      - "public/**"
+      - "assets/**"
+      - "tests/**"
+      - "package*.json"
+      - "LICENSE"
+      - "electron-builder.yml"
+      - "playwright.desktop.config.ts"
+      - ".github/workflows/installers.yml"
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: desktop-installers-${{ github.ref }}
+  group: installers-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build:
-    name: Installer · ${{ matrix.name }}
+    name: Package ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
             name: Windows
-            command: node scripts/ci-build.mjs Windows
             files: |
               release/*.exe
               release/*.exe.blockmap
-              release/latest.yml
+              release/*.yml
           - os: macos-latest
             name: macOS
-            command: node scripts/ci-build.mjs macOS
             files: |
-              release/*.dmg
               release/*.zip
+              release/*.dmg
               release/*.blockmap
-              release/latest-mac*.yml
+              release/*.yml
           - os: ubuntu-latest
             name: Linux
-            command: node scripts/ci-build.mjs Linux
             files: |
               release/*.AppImage
               release/*.deb
-              release/latest-linux*.yml
+              release/*.yml
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -66,31 +58,33 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Build installers
-        run: ${{ matrix.command }}
+      - name: Build native installers
+        run: node scripts/ci-package.mjs ${{ matrix.name }}
         env:
           CSC_LINK: ${{ matrix.name == 'Windows' && secrets.WINDOWS_CERTIFICATE || matrix.name == 'macOS' && secrets.MACOS_CERTIFICATE || '' }}
           CSC_KEY_PASSWORD: ${{ matrix.name == 'Windows' && secrets.WINDOWS_CERTIFICATE_PASSWORD || matrix.name == 'macOS' && secrets.MACOS_CERTIFICATE_PASSWORD || '' }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MACOS_CERTIFICATE && 'true' || 'false' }}
-          APPLE_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
       - run: npm run test:native
-      - name: Smoke test the packaged Linux desktop app
+      - name: Packaged desktop acceptance
         if: matrix.name == 'Linux'
         run: xvfb-run -a npm run test:desktop
         env:
-          PLAYWRIGHT_ELECTRON_EXECUTABLE: release/linux-unpacked/luno-animate
+          PLAYWRIGHT_ELECTRON_EXECUTABLE: release/linux-unpacked/luno-studio
       - uses: actions/upload-artifact@v7
         with:
-          name: Luno-Animate-${{ matrix.name }}
+          name: Studio-${{ matrix.name }}
           path: ${{ matrix.files }}
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
-
-  verify-release-assets:
-    name: Verify installers and all update feeds
+      - uses: actions/upload-artifact@v7
+        if: failure() && matrix.name == 'Linux'
+        with:
+          name: Desktop-diagnostics
+          path: test-results/
+          retention-days: 7
+  verify:
+    name: Verify release assets
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -101,28 +95,24 @@ jobs:
           cache: npm
       - run: npm ci
         env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       - uses: actions/download-artifact@v7
         with:
-          pattern: Luno-Animate-*
-          path: installers
-      - run: node scripts/prepare-release.mjs installers release-assets
-      - name: Record the verified installer checksums
+          pattern: Studio-*
+          path: artifacts
+      - run: node scripts/verify-artifacts.mjs artifacts verified-assets
+      - name: Preserve verification report
         run: |
-          echo '## Verified desktop installers and stable update feeds' >> "$GITHUB_STEP_SUMMARY"
-          echo 'These are unpublished build artifacts. Publishing a reviewed GitHub release is required for automatic updates.' >> "$GITHUB_STEP_SUMMARY"
-          echo '```text' >> "$GITHUB_STEP_SUMMARY"
-          cat release-assets/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-  prepare-draft-release:
-    name: Stage the verified stable release
-    needs: verify-release-assets
+          echo '## Exact-source Studio installers and Studio 1.x manifests verified' >> "$GITHUB_STEP_SUMMARY"
+          cat verified-assets/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+  draft:
+    name: Stage owner-review draft
+    needs: verify
     if: github.event_name == 'push' && contains(github.event.head_commit.message, '[prepare-release]')
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -131,18 +121,17 @@ jobs:
           cache: npm
       - run: npm ci
         env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       - uses: actions/download-artifact@v7
         with:
-          pattern: Luno-Animate-*
-          path: installers
-      - run: node scripts/prepare-release.mjs installers release-assets
-      - name: Create an exact-source draft, never an automatic public release
+          pattern: Studio-*
+          path: artifacts
+      - run: node scripts/verify-artifacts.mjs artifacts verified-assets
+      - name: Stage exact source, never auto-publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG=$(node -p '`v${require("./package.json").version}`')
-          node scripts/release-report.mjs release-assets .cache/release-notes.md
-          gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Luno Animate $TAG" --notes-file .cache/release-notes.md
-          gh release upload "$TAG" release-assets/*
-          echo 'A draft with verified installers and all stable feeds is ready for review. It is not discoverable by installed applications until published.' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/release-report.mjs verified-assets .cache/release.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Luno Studio $TAG — Animation, with intent" --notes-file .cache/release.md
+          gh release upload "$TAG" verified-assets/*

@@ -1,121 +1,995 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, ArrowUpRight, Bone, Check, ChevronRight, Code2, Download, FileArchive, FileJson, Film, Music2, FolderOpen, Heart, Image, Laptop, LockKeyhole, Monitor, MousePointer2, Play, Settings2, ShieldCheck, Sparkles } from 'lucide-react';
-import { useEditor, trimScene } from '../store/editor';
-import { adaptCanvas, createDrawingLayer, createProject, parseProject } from '../engine/project';
-import { saveExport, saveProject } from '../engine/files';
-import { openDocument } from '../services/library';
-import { starter } from './home/ProjectHome';
-import { framePlan } from '../engine/frame-plan';
-import type { AnimationMode, Template } from '../engine/types';
-import type { VideoCapabilities } from '../engine/video';
-import { UpdatesDialog } from './Updates';
-import { SceneArtwork } from './SceneGraphics';
-import { useLaunch } from '../services/launch';
-import { AnimationTypePicker, StartDialog, WhatsNewDialog } from './LaunchDialogs';
-import { Modal } from './Modal';
-import { SetupWizard } from './SetupWizard';
-import desktopBuild from '../config/desktop-build.json';
-import { APP_VERSION, RELEASE_URL } from '../config/version';
-import thirdPartyNotices from '../config/third-party-notices.txt?raw';
-
-const close = () => useEditor.getState().setDialog(null);
-export function Dialogs({ onOpen }: { onOpen: () => void }) {
-  const dialog = useEditor(s => s.dialog);
-  if (dialog === 'start') return <StartDialog onOpen={onOpen} />;
-  if (dialog === 'whats-new') return <WhatsNewDialog />;
-  if (dialog === 'setup') return <SetupWizard />;
-  if (dialog === 'export') return <ExportDialog />;
-  if (dialog === 'new') return <NewProjectDialog />;
-  if (dialog === 'settings') return <SettingsDialog />;
-  if (dialog === 'help') return <HelpDialog />;
-  if (dialog === 'updates') return <UpdatesDialog />;
-  if (dialog === 'download') return <DownloadDialog />;
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowDownToLine,
+  ArrowRight,
+  Bone,
+  Clapperboard,
+  Code2,
+  FileArchive,
+  Film,
+  Image,
+  Keyboard,
+  Pencil,
+  RefreshCw,
+  Search,
+  Shield,
+} from "lucide-react";
+import { useStudio } from "../state/studio";
+import { VERSION, type Workspace } from "../core/model";
+import { encode } from "../core/codec";
+import {
+  exportImage,
+  exportMp4,
+  exportSequence,
+  exportSvg,
+  mp4Capabilities,
+  plan,
+} from "../core/export";
+import { saveMedia } from "../services/files";
+import { commands, execute } from "../services/commands";
+import { flush, refresh } from "../services/library";
+import licence from "../../LICENSE?raw";
+import notices from "../../public/legal/NOTICE.txt?raw";
+import { Modal, NumberField, Section } from "./Common";
+const close = () => useStudio.setState({ dialog: null });
+export function Dialogs({ onImport }: { onImport: () => void }) {
+  const dialog = useStudio((s) => s.dialog);
+  if (dialog === "new") return <NewProject />;
+  if (dialog === "export") return <Export />;
+  if (dialog === "commands") return <CommandSearch onImport={onImport} />;
+  if (dialog === "settings") return <Settings />;
+  if (dialog === "about") return <About />;
+  if (dialog === "setup") return <Setup />;
+  if (dialog === "help") return <Help />;
+  if (dialog === "updates") return <Updates />;
   return null;
 }
-function ExportDialog() {
-  const project = useEditor(s => s.project), frame = useEditor(s => s.frame);
-  const [format, setFormat] = useState<'mp4' | 'gif' | 'png' | 'svg' | 'lam' | 'spritesheet'>('mp4');
-  const [scale, setScale] = useState(1), [resolution, setResolution] = useState(1920), [transparent, setTransparent] = useState(false), [audio, setAudio] = useState(true);
-  const [scope, setScope] = useState<'all' | 'scene'>(project.sceneOrder.length > 1 ? 'all' : 'scene'), [workArea, setWorkArea] = useState(false), [name, setName] = useState(project.name);
-  const [busy, setBusy] = useState(false), [progress, setProgress] = useState(0), [error, setError] = useState(''), [capability, setCapability] = useState<VideoCapabilities | null>(null);
-  const abort = useRef<AbortController | null>(null);
-  useEffect(() => { if (format !== 'mp4') return; let active = true; setCapability(null); void import('../engine/video').then(m => m.mp4Capabilities(project, resolution)).then(c => { if (active) setCapability(c); }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [format, project, resolution]);
+function NewProject() {
+  const s = useStudio(),
+    [workspace, setWorkspace] = useState(s.workspace),
+    [title, setTitle] = useState("Untitled"),
+    [width, setWidth] = useState(1280),
+    [height, setHeight] = useState(720),
+    [fps, setFps] = useState(24);
+  const valid =
+    Number.isInteger(width) &&
+    Number.isInteger(height) &&
+    width >= 64 &&
+    height >= 64 &&
+    width <= 4096 &&
+    height <= 4096 &&
+    title.trim();
+  return (
+    <Modal title="New project" close={close}>
+      <div className="dialog-intro">
+        <span className="eyebrow">A NEW DOCUMENT</span>
+        <h1>What will you make?</h1>
+        <p>One project format. Three focused ways to work.</p>
+      </div>
+      <div className="document-types">
+        {[
+          { w: "Draw" as const, icon: Pencil, text: "Manual drawing cels." },
+          {
+            w: "Motion" as const,
+            icon: Bone,
+            text: "Rigging and keyed movement.",
+          },
+          {
+            w: "Edit" as const,
+            icon: Clapperboard,
+            text: "Footage, audio and layers.",
+          },
+        ].map((item) => (
+          <button
+            key={item.w}
+            aria-pressed={workspace === item.w}
+            onClick={() => setWorkspace(item.w)}
+          >
+            <item.icon size={20} />
+            <strong>{item.w}</strong>
+            <small>{item.text}</small>
+          </button>
+        ))}
+      </div>
+      <label className="text-field">
+        <span>Project name</span>
+        <input
+          aria-label="Project name"
+          autoFocus
+          maxLength={100}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </label>
+      <div className="field-grid">
+        <NumberField
+          label="New canvas width"
+          min={64}
+          max={4096}
+          value={width}
+          onChange={setWidth}
+        />
+        <NumberField
+          label="New canvas height"
+          min={64}
+          max={4096}
+          value={height}
+          onChange={setHeight}
+        />
+      </div>
+      <div className="size-presets">
+        {[
+          { name: "HD", w: 1920, h: 1080 },
+          { name: "Square", w: 1080, h: 1080 },
+          { name: "Portrait", w: 1080, h: 1920 },
+          { name: "Studio", w: 1280, h: 720 },
+        ].map((size) => (
+          <button
+            key={size.name}
+            onClick={() => {
+              setWidth(size.w);
+              setHeight(size.h);
+            }}
+          >
+            {size.name}
+          </button>
+        ))}
+        <select
+          aria-label="New document frame rate"
+          value={fps}
+          onChange={(e) => setFps(Number(e.target.value))}
+        >
+          {[12, 24, 25, 30, 60].map((f) => (
+            <option value={f} key={f}>
+              {f} fps
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="dialog-note">
+        RGB · embedded assets · local autosave · Luno Studio 1.0 .lam
+      </p>
+      <div className="dialog-footer">
+        <button className="button secondary" onClick={close}>
+          Cancel
+        </button>
+        <button
+          className="button primary"
+          disabled={!valid || s.busy}
+          onClick={() => {
+            s.create(workspace, title.trim(), { width, height, fps });
+            s.pref("onion", workspace === "Draw");
+          }}
+        >
+          Create project
+          <ArrowRight size={13} />
+        </button>
+      </div>
+    </Modal>
+  );
+}
+function Export() {
+  const s = useStudio(),
+    doc = s.document!,
+    scene = doc.scenes.find((sc) => sc.id === s.sceneId)!,
+    [format, setFormat] = useState<"mp4" | "png" | "svg" | "sequence" | "lam">(
+      "mp4",
+    ),
+    [all, setAll] = useState(doc.scenes.length > 1),
+    [work, setWork] = useState(false),
+    [resolution, setResolution] = useState(1280),
+    [audio, setAudio] = useState(true),
+    [transparent, setTransparent] = useState(false),
+    [name, setName] = useState(doc.title),
+    [progress, setProgress] = useState(0),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [cap, setCap] = useState<Awaited<
+      ReturnType<typeof mp4Capabilities>
+    > | null>(null),
+    abort = useRef<AbortController | null>(null),
+    preview = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    let active = true;
+    if (format === "mp4") {
+      setCap(null);
+      mp4Capabilities(doc, resolution)
+        .then((value) => {
+          if (active) setCap(value);
+        })
+        .catch((e) => {
+          if (active) setError(e.message);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [doc, resolution, format]);
+  useEffect(() => {
+    let active = true;
+    void import("../core/render")
+      .then(async (r) => {
+        await r.preload(doc, scene, s.frame);
+        if (active && preview.current)
+          r.render(preview.current, doc, scene, s.frame, { transparent });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [doc, scene, s.frame, transparent]);
   useEffect(() => () => abort.current?.abort(), []);
-  const requestClose = () => { if (busy) abort.current?.abort(); else close(); };
-  const animated = format === 'mp4' || format === 'gif' || format === 'spritesheet', extension = format === 'spritesheet' ? 'zip' : format;
-  const plan = framePlan(project, { scope, workArea });
-  const runExport = async () => {
-    setBusy(true); useEditor.getState().setBusy(true); setError(''); setProgress(0); abort.current = new AbortController();
-    try {
-      let saved: boolean;
-      if (format === 'lam') saved = await saveProject({ ...project, name: name.trim() || project.name });
-      else {
-        const { exportGif, exportPng, exportSvg, exportSpritesheet } = await import('../engine/export');
-        const options = { scope, workArea, longSide: format === 'spritesheet' ? 480 : resolution, includeAudio: audio };
-        const blob = format === 'mp4' ? await (await import('../engine/video')).exportMp4(project, options, setProgress, abort.current.signal)
-          : format === 'gif' ? await exportGif(project, setProgress, abort.current.signal, options)
-          : format === 'spritesheet' ? await exportSpritesheet(project, options, setProgress, abort.current.signal)
-          : format === 'png' ? await exportPng(project, frame, scale, transparent) : exportSvg(project, frame, transparent);
-        abort.current.signal.throwIfAborted(); setProgress(1); saved = await saveExport(blob, name.trim() || project.name, extension);
+  const requestClose = () => {
+      if (busy) abort.current?.abort();
+      else close();
+    },
+    options = { all, work, longSide: resolution, audio, transparent },
+    frames = plan(doc, scene.id, options),
+    run = async () => {
+      setBusy(true);
+      s.set({ busy: true, playing: false });
+      setError("");
+      setProgress(0);
+      abort.current = new AbortController();
+      try {
+        let output: Blob, ext: string;
+        if (format === "lam") {
+          output = new Blob([encode(doc) as Uint8Array<ArrayBuffer>]);
+          ext = "lam";
+        } else if (format === "png") {
+          output = await exportImage(
+            doc,
+            scene,
+            s.frame,
+            resolution,
+            transparent,
+          );
+          ext = "png";
+        } else if (format === "svg") {
+          output = await exportSvg(
+            doc,
+            scene,
+            s.frame,
+            resolution,
+            transparent,
+          );
+          ext = "svg";
+        } else if (format === "sequence") {
+          output = await exportSequence(
+            doc,
+            scene.id,
+            options,
+            setProgress,
+            abort.current.signal,
+          );
+          ext = "zip";
+        } else {
+          output = await exportMp4(
+            doc,
+            scene.id,
+            options,
+            setProgress,
+            abort.current.signal,
+          );
+          ext = "mp4";
+        }
+        abort.current.signal.throwIfAborted();
+        if (await saveMedia(output, name, ext)) {
+          s.notify(
+            `Exported ${ext.toUpperCase()}. Your editable document is unchanged.`,
+          );
+          close();
+        }
+      } catch (e) {
+        if (abort.current.signal.aborted) {
+          s.notify("Export cancelled. No document changes.");
+          close();
+        } else setError(e instanceof Error ? e.message : "Export failed.");
+      } finally {
+        setBusy(false);
+        s.set({ busy: false });
       }
-      if (saved) { useEditor.getState().notify(`Your ${format === 'lam' ? 'editable .lam project' : format === 'spritesheet' ? 'sprite sheet and frame metadata' : format.toUpperCase()} is saved. Ready for its next adventure.`); close(); }
-    } catch (err) { if (abort.current.signal.aborted) { useEditor.getState().notify('Export cancelled. Your project is safe.', 'info'); close(); } else setError(err instanceof Error ? err.message : 'The export could not be completed.'); }
-    finally { setBusy(false); useEditor.getState().setBusy(false); }
+    };
+  return (
+    <Modal title="Export animation" close={requestClose} wide>
+      <div className="dialog-intro">
+        <span className="eyebrow">DELIVERY / LOCAL RENDER</span>
+        <h1>Give it an audience.</h1>
+        <p>No watermarks. No unlocks. Your work, in the format you need.</p>
+      </div>
+      <div className="export-layout">
+        <div className="export-preview">
+          <canvas
+            ref={preview}
+            width={480}
+            height={Math.round((480 * doc.canvas.height) / doc.canvas.width)}
+          />
+          <span>
+            {format === "png" || format === "svg"
+              ? `Frame ${s.frame + 1}`
+              : `${frames.length} frames · ${(frames.length / doc.canvas.fps).toFixed(2)} seconds`}
+          </span>
+          <p>
+            {format === "svg"
+              ? "SVG is a flattened raster snapshot. Editable vector data remains in .lam."
+              : format === "sequence"
+                ? "Individual transparent PNG files, with frame metadata, in one ZIP."
+                : "Guides, selection handles and reference-board images are excluded."}
+          </p>
+        </div>
+        <div className="export-options">
+          <div className="export-formats">
+            {[
+              { id: "mp4", name: "MP4", icon: Film },
+              { id: "png", name: "PNG", icon: Image },
+              { id: "svg", name: "SVG", icon: Code2 },
+              { id: "sequence", name: "Sequence", icon: FileArchive },
+              { id: "lam", name: ".LAM", icon: FileArchive },
+            ].map((f) => (
+              <button
+                key={f.id}
+                aria-pressed={format === f.id}
+                disabled={busy}
+                onClick={() => {
+                  setFormat(f.id as typeof format);
+                  setError("");
+                }}
+              >
+                <f.icon size={18} />
+                <strong>{f.name}</strong>
+              </button>
+            ))}
+          </div>
+          <label className="text-field">
+            <span>File name</span>
+            <input
+              aria-label="Export file name"
+              value={name}
+              maxLength={100}
+              disabled={busy}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          {format !== "lam" && (
+            <label className="text-field">
+              <span>Resolution / longest side</span>
+              <select
+                aria-label="Export resolution"
+                value={resolution}
+                disabled={busy}
+                onChange={(e) => setResolution(Number(e.target.value))}
+              >
+                <option value={960}>960 px</option>
+                <option value={1280}>1280 px</option>
+                <option value={1920}>1920 px</option>
+                <option value={4096}>4096 px</option>
+              </select>
+            </label>
+          )}
+          {(format === "mp4" || format === "sequence") && (
+            <>
+              <label className="text-field">
+                <span>Scenes</span>
+                <select
+                  aria-label="Export scene scope"
+                  value={all ? "all" : "scene"}
+                  disabled={busy}
+                  onChange={(e) => setAll(e.target.value === "all")}
+                >
+                  <option value="scene">Current scene</option>
+                  <option value="all">All scenes, in document order</option>
+                </select>
+              </label>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={work}
+                  disabled={busy}
+                  onChange={(e) => setWork(e.target.checked)}
+                />
+                Only the work area
+              </label>
+            </>
+          )}
+          {format === "mp4" && (
+            <>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={audio}
+                  disabled={busy}
+                  onChange={(e) => setAudio(e.target.checked)}
+                />
+                Include audio
+              </label>
+              <p className="codec-note">
+                {cap
+                  ? cap.video
+                    ? `H.264 ready · ${cap.audio === "aac" ? "AAC" : cap.audio === "opus" ? "Opus" : "no"} audio encoder`
+                    : "H.264 unavailable. Try desktop or PNG sequence."
+                  : "Checking encoders on this device…"}
+              </p>
+            </>
+          )}
+          {format === "png" || format === "svg" || format === "sequence" ? (
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={transparent}
+                disabled={busy}
+                onChange={(e) => setTransparent(e.target.checked)}
+              />
+              Transparent background
+            </label>
+          ) : null}
+          {format === "lam" && (
+            <p className="dialog-note">
+              A portable copy of every scene, layer, key, drawing, sound and
+              reference. Does not change your linked Save destination.
+            </p>
+          )}
+        </div>
+      </div>
+      {error && (
+        <div className="form-error" role="alert">
+          {error}
+        </div>
+      )}
+      {busy && (
+        <div className="export-progress">
+          <span>Rendering {Math.round(progress * 100)}%</span>
+          <progress value={progress} max={1} />
+        </div>
+      )}
+      <div className="dialog-footer">
+        <span className="local-note">
+          <Shield size={12} />
+          Rendered on this device
+        </span>
+        <button className="button secondary" onClick={requestClose}>
+          {busy ? "Cancel render" : "Cancel"}
+        </button>
+        <button
+          className="button primary"
+          disabled={busy || !name.trim() || (format === "mp4" && !cap?.video)}
+          onClick={() => void run()}
+        >
+          {busy
+            ? "Rendering…"
+            : `Export ${format === "lam" ? "project" : format === "sequence" ? "sequence" : format.toUpperCase()}`}
+          <ArrowDownToLine size={13} />
+        </button>
+      </div>
+    </Modal>
+  );
+}
+function Settings() {
+  const s = useStudio(),
+    d = s.document!,
+    scene = d.scenes.find((sc) => sc.id === s.sceneId)!,
+    [title, setTitle] = useState(d.title),
+    [length, setLength] = useState(scene.length),
+    [fps, setFps] = useState(d.canvas.fps);
+  return (
+    <Modal title="Document settings" close={close}>
+      <div className="dialog-intro">
+        <span className="eyebrow">DOCUMENT & WORKSPACE</span>
+        <h1>Set the rhythm.</h1>
+      </div>
+      <label className="text-field">
+        <span>Document title</span>
+        <input
+          value={title}
+          maxLength={100}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </label>
+      <div className="field-grid">
+        <NumberField
+          label="Scene duration in frames"
+          min={2}
+          max={1800}
+          value={length}
+          onChange={setLength}
+        />
+        <NumberField
+          label="Frame rate"
+          min={1}
+          max={60}
+          value={fps}
+          onChange={setFps}
+        />
+      </div>
+      <p className="dialog-note">
+        Shortening removes out-of-range keys, cels and clips. Undo restores the
+        complete edit. Limits bound memory and rendering, not paid features.
+      </p>
+      <Section title="Interface">
+        <label className="switch-line">
+          <span>Light interface</span>
+          <input
+            type="checkbox"
+            checked={s.preferences.theme === "light"}
+            onChange={(e) =>
+              s.pref("theme", e.target.checked ? "light" : "dark")
+            }
+          />
+        </label>
+        <label className="switch-line">
+          <span>Snap to 20 px grid</span>
+          <input
+            type="checkbox"
+            checked={s.preferences.snap}
+            onChange={(e) => s.pref("snap", e.target.checked)}
+          />
+        </label>
+      </Section>
+      <div className="dialog-footer">
+        <button className="button secondary" onClick={close}>
+          Cancel
+        </button>
+        <button
+          className="button primary"
+          disabled={!title.trim()}
+          onClick={() => {
+            s.commit("Document settings", (doc, sc) => {
+              doc.title = title.trim();
+              doc.canvas.fps = Math.round(fps);
+              sc.length = Math.round(length);
+              sc.work = [
+                Math.min(sc.work[0], sc.length - 1),
+                Math.min(sc.work[1], sc.length - 1),
+              ];
+              for (const l of sc.layers) {
+                l.end = Math.min(l.end, sc.length);
+                l.start = Math.min(l.start, l.end - 1);
+                l.keys = l.keys.filter((k) => k.frame < sc.length);
+                if (l.cels) l.cels = l.cels.filter((c) => c.frame < sc.length);
+              }
+              sc.sounds = sc.sounds
+                .filter((a) => a.start < sc.length)
+                .map((a) => ({ ...a, end: Math.min(a.end, sc.length) }));
+            });
+            close();
+          }}
+        >
+          Apply settings
+        </button>
+      </div>
+    </Modal>
+  );
+}
+function CommandSearch({ onImport }: { onImport: () => void }) {
+  const [query, setQuery] = useState(""),
+    [index, setIndex] = useState(0),
+    list = commands(onImport).filter((c) =>
+      `${c.label} ${c.group}`.toLowerCase().includes(query.toLowerCase()),
+    );
+  return (
+    <Modal title="Command search" close={close}>
+      <div className="command-input">
+        <Search size={18} />
+        <input
+          autoFocus
+          aria-label="Search commands"
+          value={query}
+          placeholder="What do you want to do?"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setIndex(0);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setIndex(
+                (i) =>
+                  (i + (e.key === "ArrowDown" ? 1 : list.length - 1)) %
+                  Math.max(1, list.length),
+              );
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const chosen = list[index];
+              if (chosen && chosen.enabled?.() !== false) {
+                close();
+                execute(chosen);
+              }
+            }
+          }}
+        />
+      </div>
+      <div
+        className="command-list"
+        role="listbox"
+        aria-label="Matching commands"
+      >
+        {list.map((c, i) => (
+          <button
+            role="option"
+            aria-selected={i === index}
+            key={c.id}
+            disabled={c.enabled?.() === false}
+            onMouseEnter={() => setIndex(i)}
+            onClick={() => {
+              close();
+              execute(c);
+            }}
+          >
+            <small>{c.group}</small>
+            <span>{c.label}</span>
+            <kbd>{c.shortcut}</kbd>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+function Setup() {
+  const s = useStudio(),
+    [step, setStep] = useState(0),
+    [workspace, setWorkspace] = useState<Workspace>("Draw");
+  return (
+    <Modal title="Workspace setup" close={close}>
+      <div className="setup-brand">
+        <img src="./mark.svg" alt="" />
+        <span>
+          LUNO STUDIO <small>1.0.0</small>
+        </span>
+      </div>
+      <div className="dialog-intro">
+        <span className="eyebrow">YOUR WORKSPACE / {step + 1} OF 3</span>
+        <h1>
+          {step === 0
+            ? "Choose your focus."
+            : step === 1
+              ? "Make yourself at home."
+              : "Ready for the first frame."}
+        </h1>
+        <p>
+          {step === 0
+            ? "Workspaces rearrange your focus, not your document format."
+            : step === 1
+              ? "Graphite and iris, or a light surface. Every tool stays available."
+              : "Local-first means you choose where your work goes. No account is required."}
+        </p>
+      </div>
+      {step === 0 ? (
+        <div className="document-types">
+          {(["Draw", "Motion", "Edit"] as Workspace[]).map((w) => (
+            <button
+              key={w}
+              aria-pressed={workspace === w}
+              onClick={() => setWorkspace(w)}
+            >
+              <strong>{w}</strong>
+              <small>
+                {w === "Draw"
+                  ? "Painting & drawing cels"
+                  : w === "Motion"
+                    ? "Rigging & motion keys"
+                    : "Video & sound"}
+              </small>
+            </button>
+          ))}
+        </div>
+      ) : step === 1 ? (
+        <div className="theme-options">
+          <button
+            aria-pressed={s.preferences.theme === "dark"}
+            onClick={() => s.pref("theme", "dark")}
+          >
+            <div className="theme-preview dark" />
+            Graphite
+          </button>
+          <button
+            aria-pressed={s.preferences.theme === "light"}
+            onClick={() => s.pref("theme", "light")}
+          >
+            <div className="theme-preview light" />
+            Porcelain
+          </button>
+        </div>
+      ) : (
+        <div className="setup-summary">
+          <Shield size={25} />
+          <p>
+            All tools are free. Your creative output is yours.
+            <br />
+            Application redistribution requires permission.
+            <br />
+            Luno Studio 1.0 replaces unsupported legacy releases.
+          </p>
+          <button className="subtle" onClick={() => s.set({ dialog: "about" })}>
+            Read the application licence
+          </button>
+        </div>
+      )}
+      <div className="dialog-footer">
+        <button
+          className="button secondary"
+          onClick={() => {
+            if (step) setStep(step - 1);
+            else {
+              s.pref("newsSeen", VERSION);
+              close();
+            }
+          }}
+        >
+          {step ? "Back" : "Skip setup"}
+        </button>
+        <button
+          className="button primary"
+          onClick={() => {
+            if (step < 2) setStep(step + 1);
+            else {
+              s.set({ workspace, dialog: "new" });
+              s.pref("newsSeen", VERSION);
+            }
+          }}
+        >
+          {step < 2 ? "Continue" : "Create first project"}
+          <ArrowRight size={13} />
+        </button>
+      </div>
+    </Modal>
+  );
+}
+function About() {
+  const [tab, setTab] = useState("product");
+  return (
+    <Modal title="About Luno Studio" close={close} wide>
+      <div className="about-brand">
+        <img src="./mark.svg" alt="" />
+        <div>
+          <h1>Luno Studio</h1>
+          <p>
+            Animation, with intent. <span>Version {VERSION}</span>
+          </p>
+        </div>
+      </div>
+      <div className="about-tabs">
+        {["product", "licence", "components"].map((name) => (
+          <button
+            key={name}
+            aria-pressed={tab === name}
+            onClick={() => setTab(name)}
+          >
+            {name === "product"
+              ? "About"
+              : name === "licence"
+                ? "Application licence"
+                : "Third-party notices"}
+          </button>
+        ))}
+      </div>
+      {tab === "product" ? (
+        <div className="about-copy">
+          <p>
+            A clean, independent 1.0 architecture: drawing, motion and editing
+            on one unified document. New branding, a new engine and a new
+            project format. Entirely free, with no subscription or paid feature
+            tier.
+          </p>
+          <p>
+            <strong>Only Luno Studio 1.0 is supported.</strong> Earlier Luno
+            Animate formats do not open in this application. Keep their original
+            files and exported media. Old public downloads may remain as
+            unsupported archives; they are not migrated.
+          </p>
+          <p className="dialog-note">
+            The proprietary application licence does not establish
+            Arena/provider permission or guarantee exclusive rights in
+            AI-generated code. The distributor must review applicable rights and
+            the legal entity before a public/company distribution.
+          </p>
+        </div>
+      ) : (
+        <pre className="legal-text" tabIndex={0}>
+          {tab === "licence" ? licence : notices}
+        </pre>
+      )}
+      {tab === "components" && (
+        <a
+          className="button secondary"
+          href="./legal/mediabunny-source.zip"
+          download
+        >
+          Mediabunny source & licence
+          <FileArchive size={13} />
+        </a>
+      )}
+      <div className="dialog-footer">
+        <span className="local-note">No telemetry. No account.</span>
+        <button className="button primary" onClick={close}>
+          Close
+        </button>
+      </div>
+    </Modal>
+  );
+}
+function Help() {
+  return (
+    <Modal title="Tools and shortcuts" close={close} wide>
+      <div className="dialog-intro">
+        <span className="eyebrow">STUDIO REFERENCE</span>
+        <h1>Learn the instrument.</h1>
+        <p>Precise tools reward a deliberate workflow.</p>
+      </div>
+      <div className="help-grid">
+        {[
+          {
+            title: "Draw",
+            text: "B brush · E eraser · F fill · I eyedropper. Eight procedural brush families retain pressure and settings in every mark. F6 duplicates the next cel; F7 makes it blank. Hold exposures is optional.",
+          },
+          {
+            title: "Motion",
+            text: "V selects. Drag to move; use corner handles to scale and the upper handle to rotate. K inserts keys. Auto-key records changed properties after frame one. Expand timeline rows to inspect individual channels.",
+          },
+          {
+            title: "Rig",
+            text: "Insert an armature, then G for rig pose. Drag a joint endpoint with constrained cyclic-coordinate IK. Adjust bone lengths and angles in Inspector. Attach your own shapes and images to joints.",
+          },
+          {
+            title: "Edit",
+            text: "Import video up to 30 seconds / 100 MB. It becomes a bounded 960px/20fps JPEG proxy with decoded audio where supported. Drag clip edges to trim, move the bar, or press S to split a selected video clip.",
+          },
+          {
+            title: "Navigate",
+            text: "H pans. Ctrl-wheel zooms. Tab focuses the canvas. Shift-drag the timeline ruler sets the work area. Space plays that range. U toggles onion skins. References are embedded but never exported.",
+          },
+          {
+            title: "Save & deliver",
+            text: "Ctrl S updates a linked .lam file; Ctrl Shift S changes the destination. Without file-system access, browser Save downloads a copy. Ctrl E exports; Ctrl Shift P searches commands. Local autosave is separate from external file Save.",
+          },
+        ].map((item) => (
+          <section key={item.title}>
+            <h3>{item.title}</h3>
+            <p>{item.text}</p>
+          </section>
+        ))}
+      </div>
+      <div className="dialog-footer">
+        <Keyboard size={15} />
+        <span className="local-note">Ctrl is ⌘ on macOS where applicable.</span>
+        <button className="button primary" onClick={close}>
+          Back to studio
+        </button>
+      </div>
+    </Modal>
+  );
+}
+function Updates() {
+  const [state, setState] = useState({
+      phase: "disabled",
+      message:
+        "Browser builds do not install updates. Download desktop builds from the official release. Back up projects as portable .lam files.",
+      version: null as string | null,
+      percent: 0,
+    }),
+    [backups, setBackups] = useState<{ id: string; date: number }[]>([]),
+    [working, setWorking] = useState(false),
+    [error, setError] = useState("");
+  useEffect(() => {
+    const api = window.studio;
+    if (!api) return;
+    void api.updates.state().then(setState);
+    void api.library.backups().then(setBackups);
+    return api.updates.listen(setState);
+  }, []);
+  const operation = async (action: () => Promise<void>) => {
+    setWorking(true);
+    useStudio.setState({ busy: true });
+    setError("");
+    try {
+      await flush();
+      await action();
+      await refresh();
+      if (window.studio) setBackups(await window.studio.library.backups());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Maintenance failed.");
+    } finally {
+      setWorking(false);
+      useStudio.setState({ busy: false });
+    }
   };
-  return <Modal title="Export your animation" onClose={requestClose} className="export-modal"><div className="dialog-heading"><span className="dialog-icon"><ArrowUpRight size={21} /></span><span className="eyebrow">OUTPUT / DELIVERY</span><h1>Export animation</h1><p>Render media or save a portable editable document.</p></div><div className="export-layout"><div className="export-preview"><SceneArtwork project={project} frame={frame} transparent={transparent && !animated} /><span className="export-preview-caption">{animated ? `${plan.length} frames · ${(plan.length / project.fps).toFixed(2)} seconds` : format === 'lam' ? `${project.sceneOrder.length} scenes · editable document` : `Current frame · ${frame + 1}`}</span><span className="preview-label">DOCUMENT PREVIEW</span>{format === 'mp4' && <div className="codec-note">{capability?.note ?? 'Checking the video encoders on your device…'}</div>}</div><div className="export-options"><div className="form-label">Export as</div><div className="format-grid">{[{ id: 'mp4', label: 'MP4', caption: 'Video & sound', icon: Film }, { id: 'gif', label: 'GIF', caption: 'Looping animation', icon: Play }, { id: 'png', label: 'PNG', caption: 'Raster image', icon: Image }, { id: 'svg', label: 'SVG', caption: 'Vector image', icon: Code2 }, { id: 'spritesheet', label: 'Sprites', caption: 'PNG + frame data', icon: FileArchive }, { id: 'lam', label: '.LAM', caption: 'Editable document', icon: FileJson }].map(({ id, label, caption, icon: Icon }) => <button key={id} className={`format-button ${format === id ? 'active' : ''}`} disabled={busy} onClick={() => { setFormat(id as typeof format); setError(''); }}><Icon size={18} /><strong>{label}</strong><span>{caption}</span>{format === id && <Check size={11} />}</button>)}</div><label className="form-label">File name<div className="filename-field"><input value={name} maxLength={100} disabled={busy} onChange={e => setName(e.target.value)} /><span>.{extension}</span></div></label>{animated && <><label className="form-label">Scenes<select aria-label="Export scenes" disabled={busy} value={scope} onChange={e => setScope(e.target.value as 'all' | 'scene')}><option value="scene">Current scene · {project.sceneName}</option><option value="all">All {project.sceneOrder.length} scenes, in order</option></select></label><label className="checkbox-label"><input type="checkbox" checked={workArea} disabled={busy} onChange={e => setWorkArea(e.target.checked)} /><span>Only the work area</span></label></>}{format === 'mp4' && <><label className="form-label">Resolution<select aria-label="Video resolution" disabled={busy} value={resolution} onChange={e => setResolution(Number(e.target.value))}><option value={1920}>Up to 1080p · original aspect ratio</option><option value={1280}>Up to 720p · smaller file</option><option value={960}>960px · reduced resolution</option><option value={4096}>Original size · up to 4096px</option></select></label><label className="checkbox-label"><input type="checkbox" checked={audio} disabled={busy} onChange={e => setAudio(e.target.checked)} /><span><Music2 size={12} /> Include sound</span></label></>}{format === 'png' && <label className="form-label">Resolution<select disabled={busy} value={scale} onChange={e => setScale(Number(e.target.value))}><option value={1}>1× · {project.width} × {project.height}</option><option value={2}>2× · {project.width * 2} × {project.height * 2}</option></select></label>}{(format === 'png' || format === 'svg') && <label className="checkbox-label"><input type="checkbox" checked={transparent} disabled={busy} onChange={e => setTransparent(e.target.checked)} /><span>Transparent background</span></label>}{format === 'lam' && <div className="export-info"><FolderOpen size={14} /><span>Every scene, drawing, rig, keyframe & sound.<br /><small>Compressed Luno binary, with integrity checking. Compatible with Luno Animate.</small></span></div>}{format === 'spritesheet' && <div className="export-info"><FileArchive size={14} /><span>Transparent PNG atlas + JSON metadata.<br /><small>Up to 256 frames, scaled to 480px. No editor guides.</small></span></div>}{format === 'gif' && <div className="export-info"><Film size={14} /><span>{project.fps} fps · looping · no sound.<br /><small>Up to 300 frames. No bones or editor guides.</small></span></div>}</div></div>{error && <div className="form-error" role="alert">{error}</div>}{busy && <div className="export-progress"><span>Rendering frames… <strong>{Math.round(progress * 100)}%</strong></span><progress max={1} value={progress} /></div>}<div className="dialog-footer"><span className="local-note"><ShieldCheck size={14} /> Local rendering</span><button className="button secondary" onClick={requestClose}>{busy ? 'Stop export' : 'Cancel'}</button><button className="button primary" disabled={busy || format === 'mp4' && (!capability || !capability.video)} onClick={() => void runExport()}>{busy ? 'Exporting…' : `Export ${format === 'lam' ? 'project' : format === 'spritesheet' ? 'sprites' : format.toUpperCase()}`}<ArrowDownToLine size={15} /></button></div></Modal>;
-}
-function NewProjectDialog() {
-  const [mode, setMode] = useState<AnimationMode>(useLaunch.getState().newMode);
-  const [template, setTemplate] = useState<Template>('blank'), [name, setName] = useState('Untitled-1');
-  const [width, setWidth] = useState(mode === 'video-editing' ? 1920 : 960), [height, setHeight] = useState(mode === 'video-editing' ? 1080 : 600), [fps, setFps] = useState(mode === 'video-editing' ? 30 : 24);
-  const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const valid = [width, height].every(value => Number.isInteger(value) && value >= 64 && value <= 4096);
-  const create = async () => {
-    if (!valid || !name.trim()) return;
-    setBusy(true); setError('');
-    try { let project = adaptCanvas(mode === 'rigged' ? starter(template) : createProject('blank', mode), width, height); if (mode === 'frame-by-frame') project.items = [createDrawingLayer(width, height)]; project.name = name.trim(); project.fps = fps; await openDocument(project); close(); useEditor.getState().notify('Document created.'); }
-    catch (error) { setError(error instanceof Error ? error.message : 'Document creation failed.'); }
-    finally { setBusy(false); }
-  };
-  return <Modal title="Create a new project" onClose={() => { if (!busy) close(); }} className="new-project-modal production-new-document"><div className="dialog-heading"><span className="eyebrow">FILE / NEW</span><h1>New document</h1></div>
-    <div className="form-label">Animation type</div><AnimationTypePicker value={mode} disabled={busy} onChange={value => { setMode(value); useLaunch.getState().setNewMode(value); if (value !== 'rigged') setTemplate('blank'); if (value === 'video-editing') { setWidth(1920); setHeight(1080); setFps(30); } }} />
-    <label className="form-label">Project name<input autoFocus value={name} onChange={e => setName(e.target.value)} maxLength={100} disabled={busy} /></label>
-    <label className="form-label">Document source<select aria-label="New document template" value={template} disabled={busy || mode !== 'rigged'} onChange={e => setTemplate(e.target.value as Template)}><option value="blank">Blank document</option><option value="character">Character rig</option><option value="shapes">Vector animation</option><option value="title">Animated title</option><option value="cutout">Cutout rig</option></select></label>
-    <div className="form-grid new-project-format"><label className="form-label">Width<input aria-label="New document width" type="number" min={64} max={4096} step={1} value={width} disabled={busy} onChange={e => setWidth(Number(e.target.value))} /></label><label className="form-label">Height<input aria-label="New document height" type="number" min={64} max={4096} step={1} value={height} disabled={busy} onChange={e => setHeight(Number(e.target.value))} /></label></div>
-    <div className="document-size-presets"><span>STAGE PRESETS</span>{[{ label: 'HD', w: 1920, h: 1080 }, { label: 'Square', w: 1080, h: 1080 }, { label: 'Portrait', w: 1080, h: 1920 }, { label: '960 × 600', w: 960, h: 600 }].map(preset => <button key={preset.label} disabled={busy} onClick={() => { setWidth(preset.w); setHeight(preset.h); }}>{preset.label}</button>)}</div>
-    <label className="form-label">Frame rate<select aria-label="New project frame rate" value={fps} disabled={busy} onChange={e => setFps(Number(e.target.value))}>{[12, 24, 25, 30, 60].map(value => <option value={value} key={value}>{value} fps</option>)}</select></label>
-    <p className="document-specification">{mode === 'frame-by-frame' ? 'Individual drawing cels · no automatic in-betweens' : mode === 'video-editing' ? 'Video sequence · trimmed footage · sound · animated overlays' : 'Layer-based motion · rigs · effects · property keyframes'} · RGB · .lam · local autosave</p>{!valid && <div className="form-error" role="alert">Stage dimensions must be whole numbers between 64 and 4096 pixels.</div>}{error && <div className="form-error" role="alert">{error}</div>}
-    <div className="dialog-footer"><button className="button secondary" disabled={busy} onClick={close}>Cancel</button><button className="button primary" disabled={busy || !valid || !name.trim()} onClick={() => void create()}>{busy ? 'Creating…' : 'Create project'}</button></div>
-  </Modal>;
-}
-function SettingsDialog() {
-  const project = useEditor(s => s.project);
-  const preferences = useEditor(s => s.preferences);
-  const [width, setWidth] = useState(project.width);
-  const [height, setHeight] = useState(project.height);
-  const [fps, setFps] = useState(project.fps);
-  const [seconds, setSeconds] = useState(project.duration / project.fps);
-  const [background, setBackground] = useState(project.background);
-  const [error, setError] = useState('');
-  const apply = () => {
-    const duration = Math.round(seconds * fps);
-    if (![width, height, fps, duration].every(Number.isInteger) || width < 64 || height < 64 || width > 4096 || height > 4096 || fps < 1 || fps > 60 || duration < 2 || duration > 1800) { setError('Canvas: 64–4096 px. Frame rate: 1–60 fps. Duration: 2–1800 frames.'); return; }
-    const p = adaptCanvas(project, width, height); p.fps = fps; p.background = background;
-    trimScene(p, duration);
-    try { parseProject(JSON.stringify(p)); } catch { setError('This resize would exceed a layer or animation limit. Choose a smaller size; your project has not been changed.'); return; }
-    useEditor.getState().replaceProject(p); close(); useEditor.getState().notify('Your studio, just the way you like it.');
-  };
-  return <Modal title="Project and studio settings" onClose={close} className="settings-modal"><div className="dialog-heading"><span className="dialog-icon"><Settings2 size={21} /></span><span className="eyebrow">DOCUMENT & STUDIO</span><h1>Document settings</h1><p>Canvas, timing, and workspace preferences.</p></div><h3 className="settings-section-label">Canvas & timing</h3><div className="form-grid"><label className="form-label">Width<input aria-label="Canvas width" type="number" value={width} min={64} max={4096} onChange={e => setWidth(Number(e.target.value))} /></label><label className="form-label">Height<input aria-label="Canvas height" type="number" value={height} min={64} max={4096} onChange={e => setHeight(Number(e.target.value))} /></label><label className="form-label">Frame rate<input aria-label="Project frame rate" type="number" value={fps} min={1} max={60} onChange={e => setFps(Number(e.target.value))} /></label><label className="form-label">Duration (seconds)<input aria-label="Project duration" type="number" step="0.1" value={Math.round(seconds * 100) / 100} min={0.1} max={1800 / fps} onChange={e => setSeconds(Number(e.target.value))} /></label></div><label className="background-picker"><span>Canvas background</span><input type="color" aria-label="Canvas background" value={background} onChange={e => setBackground(e.target.value)} /><span>{background.toUpperCase()}</span></label><h3 className="settings-section-label">Studio preferences</h3><div className="form-grid"><label className="form-label">Onion drawings before<input aria-label="Onion drawings before" type="number" min={0} max={5} value={preferences.onionBefore} onChange={e => useEditor.getState().setPreference('onionBefore', Math.max(0, Math.min(5, Math.round(Number(e.target.value) || 0))))} /></label><label className="form-label">Onion drawings after<input aria-label="Onion drawings after" type="number" min={0} max={5} value={preferences.onionAfter} onChange={e => useEditor.getState().setPreference('onionAfter', Math.max(0, Math.min(5, Math.round(Number(e.target.value) || 0))))} /></label><label className="form-label">Grid size (px)<input aria-label="Grid size" type="number" min={1} max={100} value={preferences.gridSize} onChange={e => useEditor.getState().setPreference('gridSize', Math.max(1, Math.min(100, Math.round(Number(e.target.value) || 1))))} /></label></div><div className="settings-toggles"><label><span><strong>Show character bones</strong><small>FK / IK overlays for selected character layers.</small></span><input type="checkbox" role="switch" checked={preferences.showBones} onChange={e => useEditor.getState().setPreference('showBones', e.target.checked)} /></label><label><span><strong>Show canvas grid</strong><small>Display the stage alignment grid.</small></span><input type="checkbox" role="switch" checked={preferences.showGrid} onChange={e => useEditor.getState().setPreference('showGrid', e.target.checked)} /></label><label><span><strong>Dark interface</strong><small>Charcoal panels with blue selection accents.</small></span><input type="checkbox" role="switch" checked={preferences.theme === 'dark'} onChange={e => useEditor.getState().setPreference('theme', e.target.checked ? 'dark' : 'light')} /></label></div><p className="settings-hint">Changing canvas size also scales your artwork. Shortening the active scene removes keys, cels, and sound starts outside the new range (Undo to restore).</p>{error && <div className="form-error" role="alert">{error}</div>}<div className="dialog-footer"><button className="text-button" onClick={close}>Cancel</button><button className="button primary" onClick={apply}>Save settings <Check size={15} /></button></div></Modal>;
-}
-function HelpDialog() {
-  const [tab, setTab] = useState<'basics' | 'painting' | 'shortcuts' | 'about' | 'notices'>('basics');
-  return <Modal title="Tools and keyboard reference" onClose={close} className="help-modal"><div className="dialog-heading"><span className="dialog-icon"><Heart size={21} /></span><span className="eyebrow">LUNO ANIMATE / REFERENCE</span><h1>Tools & keyboard reference</h1><p>Stage navigation, timeline editing, and character workflows.</p></div><div className="help-tabs">{(['basics', 'painting', 'shortcuts', 'about', 'notices'] as const).map(value => <button key={value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}>{value === 'basics' ? 'Basics' : value === 'painting' ? 'Painting' : value === 'shortcuts' ? 'Shortcuts' : value === 'about' ? 'About Luno' : 'Third-party notices'}</button>)}</div>{tab === 'basics' && <div className="help-basics"><div><span><MousePointer2 size={22} /></span><div><h3>Stage & layers</h3><p>Select an object to move it. Draw with the pen, rectangle, or circle tools. Insert a character from the Library, or import your own image.</p></div></div><div><span><Bone size={22} /></span><div><h3>Character rigging</h3><p>Milo comes with a connected 15-bone rig. Drag a hand or foot: the limb follows with inverse kinematics. Hold Shift for direct joint rotation. Add your own bones with the inspector.</p></div></div><div><span><Play size={22} /></span><div><h3>Timeline & interpolation</h3><p>Move the playhead to a new frame and pose your character. Auto-key saves the pose. Press K to add a key manually. Edit easing in the Motion tab or apply a transform preset.</p></div></div><div><span><Download size={22} /></span><div><h3>Media & project delivery</h3><p>Save overwrites the opened .lam; Save As chooses a new destination. Library autosave and copy export are separate. Export MP4 with sound, a looping GIF, a PNG/SVG still, or a sprite atlas. Separate imported body parts can be attached to rig joints; automatic mesh deformation is not included.</p></div></div></div>}{tab === 'painting' && <div className="help-basics"><div><span><MousePointer2 size={22} /></span><div><h3>Brush Studio</h3><p>Open Paint → Brush Studio or Ctrl/⌘ Shift B. Twelve procedural brushes cover smooth ink, airbrush, textured pencil/chalk/dry paint, marker, flat nib, pixel grid, spray, stipple and glow. Each mark keeps its own settings. Stabilization, pressure, taper and symmetry are optional. Test changes in the scratchpad without changing the document.</p></div></div><div><span><MousePointer2 size={22} /></span><div><h3>Paint, erase, fill & sample</h3><p>B selects the brush; E erases earlier paint on the active cel, not lower layers or vector objects. F fills a connected region of the active drawing only, rasterized at up to 1024 px on its longest side. I—or hold Alt with the brush—samples the composited stage. Transparent areas sample the document background.</p></div></div><div><span><MousePointer2 size={22} /></span><div><h3>Colors, pixels & presets</h3><p>Use HSV/HEX, named palettes, recent colors and saved swatches. X swaps foreground/background; D resets them; [/] resize the brush. Pixel Grid produces crisp, document-grid-aligned cells. Save custom brushes and export/import a .lunobrush pack of presets and saved colors.</p></div></div><div><span><Play size={22} /></span><div><h3>Manual cels & editable marks</h3><p>Frame-by-frame mode always paints cels. F7 creates a blank cel and F6 duplicates the previous drawing; onion skins compare neighboring drawings. Select a paint layer to recolor, restyle or delete marks in the current cel’s stroke stack. Editing a held exposure creates a new cel rather than changing its source. Symmetrical gestures Undo as one action.</p></div></div><div><span><Download size={22} /></span><div><h3>Portable painting</h3><p>Brush settings, pressure, fill geometry and eraser order are included in .lam, thumbnails, onion skins and export. Older projects still open, but advanced painting files require v0.4.0 or later. In rig/motion and video mode, Drawing mode can create transformable vector brush strokes instead of cels. The pen-pressure response depends on your device/browser.</p></div></div></div>}{tab === 'shortcuts' && <div className="shortcut-grid">{[['Select tool', 'V'], ['Pan canvas', 'H'], ['Brush', 'B'], ['Cel eraser', 'E'], ['Area fill', 'F'], ['Eyedropper', 'I'], ['Swap / reset colors', 'X / D'], ['Brush size (paint tools)', '[ / ]'], ['Brush Studio', 'Ctrl / ⌘ Shift B'], ['Rectangle', 'R'], ['Ellipse', 'O'], ['Pose a rig', 'G'], ['Editable text', 'T'], ['Animate camera', 'C'], ['Onion skin', 'U'], ['Next blank frame / insert cel', 'F7'], ['Duplicate next frame / previous cel', 'F6'], ['Group layers', 'Ctrl / ⌘ G'], ['Copy / paste keys', 'Ctrl / ⌘ C / V'], ['Work area in / out', '[ / ]'], ['Project home', 'Ctrl / ⌘ Home'], ['Play / pause', 'Space'], ['Add a keyframe', 'K'], ['Step a frame', ', / .'], ['Nudge selection (stage)', '← ↑ ↓ →'], ['Nudge 10 px (stage)', 'Shift + arrow'], ['Command search', 'Ctrl / ⌘ Shift P'], ['Focus / restore panels', 'Tab on stage'], ['Fit stage', 'Ctrl / ⌘ 0'], ['Zoom stage', 'Ctrl / ⌘ + / −'], ['Document settings', 'Ctrl / ⌘ ,'], ['Arrange layer', 'Ctrl / ⌘ [ / ]'], ['Undo', 'Ctrl / ⌘ Z'], ['Redo', 'Ctrl / ⌘ Shift Z'], ['Save to opened .lam', 'Ctrl / ⌘ S'], ['Save As…', 'Ctrl / ⌘ Shift S'], ['Open project', 'Ctrl / ⌘ O'], ['New project', 'Ctrl / ⌘ N'], ['Duplicate object', 'Ctrl / ⌘ D'], ['Delete object', 'Delete']].map(([label, key]) => <div key={label}><span>{label}</span><kbd>{key}</kbd></div>)}</div>}{tab === 'about' && <div className="about-content"><img src="./favicon.svg" alt="Luno logo" /><h2>luno animate.</h2><span className="version-tag">2D PRODUCTION · v{APP_VERSION}</span><p>An independent, local-first 2D animation studio.<br />Professional 2D animation. Character rigging, vector motion, and frame-by-frame drawing.</p><div><span><LockKeyhole size={15} /> No account. No cloud.</span><span><Heart size={15} /> Your ideas stay yours.</span></div><a href="https://github.com/Dinomax2005/luno-animate" target="_blank" rel="noopener noreferrer" className="button secondary">Explore the source <ArrowUpRight size={14} /></a><small>Desktop packaging: Windows setup, macOS DMG, Linux AppImage/DEB. This is an early editor, not full Adobe Animate feature parity.</small></div>}{tab === 'notices' && <div><button className="button secondary third-party-source" onClick={() => void fetch('./third-party/mediabunny-sources.zip').then(r => { if (!r.ok) throw new Error('Source archive is unavailable. Run npm run build first.'); return r.blob(); }).then(b => saveExport(b, 'Mediabunny source and MPL license', 'zip')).catch(e => useEditor.getState().notify(e.message, 'error'))}>Media toolkit source (MPL) <Download size={13} /></button><pre className="license-notices">{thirdPartyNotices}</pre></div>}<div className="dialog-footer"><button className="text-button" onClick={() => useEditor.getState().setDialog('setup')}><Sparkles size={14} /> Configure workspace</button><button className="button primary" onClick={close}>Close reference <ChevronRight size={14} /></button></div></Modal>;
-}
-function DownloadDialog() {
-  const current = desktopBuild.version === APP_VERSION;
-  return <Modal title="Desktop installation" onClose={close} className="download-modal"><div className="dialog-heading"><span className="eyebrow">LUNO ANIMATE / {APP_VERSION}</span><h1>Desktop installation</h1><p>Use the installed application's Updates & backups panel to check for stable releases.</p></div>
-    <div className="desktop-platforms">{[{ name: 'Windows', format: 'NSIS · x64 · .exe', icon: Monitor }, { name: 'macOS', format: 'Intel / Apple silicon · .dmg', icon: Laptop }, { name: 'Linux', format: 'x64 · AppImage / .deb', icon: Code2 }].map(({ name, format, icon: Icon }) => <div key={name}><Icon size={24} /><strong>{name}</strong><span>{format}</span><a className="button platform-download" href={current ? RELEASE_URL : 'https://github.com/Dinomax2005/luno-animate/releases'} target="_blank" rel="noopener noreferrer">Release downloads <ArrowUpRight size={12} /></a></div>)}</div>
-    <div className="privacy-note"><ShieldCheck size={17} /><p><strong>Update compatibility</strong>Updater-enabled Windows installations and Linux AppImages can update in place from a published stable release. Work is saved and a verified backup is made before replacement. Unsigned macOS builds and Linux DEB packages require manual replacement; their libraries are retained. A v0.1 installation has no built-in updater.</p></div>
-    <div className="dialog-footer"><button className="button secondary" onClick={close}>Close</button><a className="button primary" href="https://github.com/Dinomax2005/luno-animate/releases" target="_blank" rel="noopener noreferrer">GitHub releases <ArrowUpRight size={13} /></a></div>
-  </Modal>;
+  return (
+    <Modal
+      title="Updates and backups"
+      close={() => {
+        if (!working) close();
+      }}
+    >
+      <div className="dialog-intro">
+        <span className="eyebrow">APPLICATION / MAINTENANCE</span>
+        <h1>Keep your work safe.</h1>
+        <p>
+          Official Studio 1.0 releases. Your library stays on this computer.
+        </p>
+      </div>
+      <div className="update-state">
+        <RefreshCw size={22} />
+        <div>
+          <strong>{state.phase}</strong>
+          <p>{state.message}</p>
+          <small>
+            Installed {VERSION}
+            {state.version ? ` / available ${state.version}` : ""}
+          </small>
+        </div>
+      </div>
+      {state.phase === "downloading" && (
+        <progress max={100} value={state.percent} />
+      )}
+      <div className="property-actions">
+        <button
+          disabled={!window.studio || working}
+          onClick={() => void window.studio?.updates.check()}
+        >
+          Check updates
+        </button>
+        {state.phase === "available" && (
+          <button onClick={() => void window.studio?.updates.download()}>
+            Download
+          </button>
+        )}
+        {state.phase === "ready" && (
+          <button onClick={() => void window.studio?.updates.install()}>
+            Save, back up & restart
+          </button>
+        )}
+      </div>
+      <Section title="Verified library backups">
+        <button
+          className="button secondary"
+          disabled={!window.studio || working}
+          onClick={() => void operation(() => window.studio!.library.backup())}
+        >
+          <Shield size={13} />
+          Back up this library
+        </button>
+        {!window.studio && (
+          <p className="dialog-note">
+            Browser storage is not a backup. Save independent .lam copies of
+            important projects.
+          </p>
+        )}
+        {backups.map((b) => (
+          <div className="backup-row" key={b.id}>
+            <span>{new Date(b.date).toLocaleString()}</span>
+            <button
+              disabled={working}
+              onClick={() => {
+                if (
+                  confirm(
+                    "Restore this complete library? A backup of the current library is made first.",
+                  )
+                )
+                  void operation(async () => {
+                    await window.studio!.library.restore(b.id);
+                    useStudio.setState({
+                      document: null,
+                      view: "home",
+                      selected: [],
+                      playing: false,
+                    });
+                  });
+              }}
+            >
+              Restore
+            </button>
+          </div>
+        ))}
+      </Section>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="dialog-footer">
+        <button className="button primary" onClick={close} disabled={working}>
+          Close
+        </button>
+      </div>
+    </Modal>
+  );
 }

@@ -1,94 +1,73 @@
-appId: studio.luno.animate
-productName: Luno Animate
-copyright: Copyright © 2026 Luno Animate contributors
-artifactName: Luno-Animate-${version}-${os}-${arch}.${ext}
+appId: studio.luno.studio
+productName: Luno Studio
+copyright: Copyright © 2026 Luno Studio rights holders
+executableName: luno-studio
+artifactName: Luno-Studio-${version}-${os}-${arch}.${ext}
 directories:
   output: release
   buildResources: assets
 files:
   - dist/**/*
-  - electron/**/*
+  - desktop/**/*
   - assets/icon.png
+  - LICENSE
   - package.json
-  - '!node_modules/**/*'
+  - "!node_modules/**/*"
 asar: true
 npmRebuild: false
+generateUpdatesFilesForAllChannels: false
 fileAssociations:
   - ext: lam
-    name: Luno Animate Project
-    description: Portable Luno animation project (binary)
+    name: Luno Studio 1.0 Project
+    description: Luno Studio unified animation document
     role: Editor
-    mimeType: application/vnd.luno.lam
-  - ext: luno
-    name: Luno Animate Project
-    description: Legacy Luno animation project
-    role: Editor
-    mimeType: application/x-luno-project
+    mimeType: application/vnd.luno.studio
 win:
   icon: assets/icon.ico
   target:
     - target: nsis
-      arch:
-        - x64
+      arch: [x64]
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Luno Animate
-  uninstallDisplayName: Luno Animate
-  runAfterFinish: true
+  shortcutName: Luno Studio
+  uninstallDisplayName: Luno Studio
   deleteAppDataOnUninstall: false
+  runAfterFinish: true
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
-  installerSidebar: assets/installer-sidebar.bmp
-  uninstallerSidebar: assets/installer-sidebar.bmp
-  installerHeader: assets/installer-header.bmp
-  include: assets/installer.nsh
+  license: LICENSE
 mac:
   icon: assets/icon.png
   category: public.app-category.graphics-design
   hardenedRuntime: true
-  entitlements: assets/entitlements.mac.plist
-  entitlementsInherit: assets/entitlements.mac.plist
+  entitlements: assets/entitlements.plist
+  entitlementsInherit: assets/entitlements.plist
   target:
     - target: dmg
       arch: [x64, arm64]
     - target: zip
       arch: [x64, arm64]
 dmg:
-  title: Luno Animate
-  window:
-    width: 540
-    height: 380
-  contents:
-    - x: 145
-      y: 175
-      type: file
-    - x: 395
-      y: 175
-      type: link
-      path: /Applications
+  title: Luno Studio
 linux:
   icon: assets/icon.png
   category: Graphics
-  synopsis: Vector animation and character production workspace
-  description: A local-first 2D animation workspace with vector drawing, FK / IK character rigging, frame-by-frame cels, keyframes, and media exports.
-  maintainer: Luno Animate contributors
+  synopsis: Local-first animation, painting and motion studio
+  description: Free proprietary animation software with drawing cels, pressure brushes, keyframes, FK/IK armatures, media proxies and local exports.
+  maintainer: Luno Studio
   target:
     - target: AppImage
       arch: [x64]
     - target: deb
       arch: [x64]
-  desktop:
-    entry:
-      Name: Luno Animate
-      StartupWMClass: luno-animate
-      Keywords: Animation;Rigging;Drawing;2D;
 publish:
   provider: github
   owner: Dinomax2005
   repo: luno-animate
+  channel: studio-v1
   releaseType: release
   private: false

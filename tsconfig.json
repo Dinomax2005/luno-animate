@@ -1,36 +1,25 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "useDefineForClassFields": true,
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "skipLibCheck": true,
     "moduleResolution": "Bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "esModuleInterop": true,
     "jsx": "react-jsx",
     "strict": true,
     "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "types": ["vite/client", "node"],
     "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "types": [
-      "vite/client",
-      "node"
-    ]
+    "noUnusedParameters": true
   },
   "include": [
     "src",
-    "vite.config.ts",
-    "playwright.config.ts",
     "tests",
-    "vitest.config.ts",
-    "playwright.desktop.config.ts",
-    "desktop-tests"
+    "desktop-tests",
+    "vite.config.ts",
+    "vitest.config.ts"
   ]
 }

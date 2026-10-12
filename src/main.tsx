@@ -1,11 +1,9 @@
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import '@fontsource-variable/inter';
-import App from './App';
-import './styles.css';
-import './professional.css';
-import './launch.css';
-import './blueprint.css';
-import './paint.css';
-
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+import "./ui.css";
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);

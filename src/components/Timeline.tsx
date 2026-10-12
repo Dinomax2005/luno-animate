@@ -1,66 +1,672 @@
-import { MotionClip } from './MotionClip';
-import { Fragment, useEffect, useRef, useState } from 'react';
-import { animatedChannels } from '../engine/keyframes';
-import type { KeyChannel } from '../engine/types';
-import type { PointerEvent } from 'react';
-import { Bone, Camera, ChevronRight, ChevronDown, ChevronUp, CircleDot, Copy, DiamondPlus, Film, Minus, Music2, Pause, Play, Plus, Repeat2, SkipBack, SkipForward, ClipboardPaste, Volume2, VolumeX, ScanLine, Magnet, Diamond } from 'lucide-react';
-import { useWorkspace } from '../store/workspace';
-import { useEditor } from '../store/editor';
-import { isLayerLocked, orderedItems } from '../engine/geometry';
-import { clamp } from '../engine/rig';
-import { LayerIcon } from './Library';
-
-const timecode = (frame: number, fps: number) => `${String(Math.floor(frame / fps / 60)).padStart(2, '0')}:${String(Math.floor(frame / fps) % 60).padStart(2, '0')}:${String(frame % fps).padStart(2, '0')}`;
-export function Timeline({ onImportAudio, onImportVideo }: { onImportAudio: () => void; onImportVideo?: () => void }) {
-  const project = useEditor(s => s.project), frame = useEditor(s => s.frame), playing = useEditor(s => s.playing), selectedId = useEditor(s => s.selectedId), selectedCamera = useEditor(s => s.selectedCamera), selectedAudio = useEditor(s => s.selectedAudio), keySelection = useEditor(s => s.keySelection), clipboard = useEditor(s => s.keyClipboard), preferences = useEditor(s => s.preferences);
-  const manual = project.animationMode === 'frame-by-frame', drawing = project.items.find(i => i.id === selectedId && i.type === 'drawing');
-  const canDrawFrame = !!drawing && !drawing.locked && !useEditor.getState().busy && frame < 1799;
-  const frameWidth = useWorkspace(s => s.frameWidth); const setFrameWidth = (value: number) => useWorkspace.getState().setLayout({ frameWidth: value });
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const timelineSnap = useWorkspace(s => s.timelineSnap);
-  const [collapsed, setCollapsed] = useState(false), [drag, setDrag] = useState<{ itemId: string; from: number; to: number; cel: boolean; channel?: KeyChannel } | null>(null);
-  const dragRef = useRef<typeof drag>(null), scrollRef = useRef<HTMLDivElement>(null), audioDrag = useRef<{ id: string; start: number; pointer: number; checkpointed: boolean } | null>(null);
-  const labelWidth = () => scrollRef.current?.querySelector<HTMLElement>('.timeline-layer-heading')?.offsetWidth ?? 202;
-  const position = (v: number) => `${v / (project.duration - 1) * 100}%`;
-  const frameAt = (e: PointerEvent, element: Element) => { const rect = element.getBoundingClientRect(); return clamp(Math.round((e.clientX - rect.left) / rect.width * (project.duration - 1)), 0, project.duration - 1); };
-  const scrub = (e: PointerEvent) => { const s = useEditor.getState(); s.setPlaying(false); s.setFrame(frameAt(e, e.currentTarget)); };
-  const nextKey = (direction: number) => {
-    const drawing = project.items.find(i => i.id === selectedId);
-    const keys = selectedCamera ? project.camera.keys.map(k => k.frame) : selectedId ? [...(project.keyframes[selectedId] ?? []).map(k => k.frame), ...(drawing?.cels?.map(c => c.frame) ?? [])] : [...Object.values(project.keyframes).flat().map(k => k.frame), ...project.camera.keys.map(k => k.frame), ...project.items.flatMap(i => i.cels?.map(c => c.frame) ?? [])]; keys.sort((a, b) => a - b);
-    useEditor.getState().setPlaying(false); useEditor.getState().setFrame(direction > 0 ? keys.find(f => f > frame) ?? project.duration - 1 : keys.filter(f => f < frame).at(-1) ?? 0);
+import { Fragment, useRef, useState, type PointerEvent } from "react";
+import {
+  ChevronDown,
+  Copy,
+  Diamond,
+  DiamondPlus,
+  Film,
+  Minus,
+  Music2,
+  Pause,
+  Play,
+  Plus,
+  Repeat2,
+  SkipBack,
+  SkipForward,
+  Scissors,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+import { useStudio } from "../state/studio";
+import { clamp, locked } from "../core/motion";
+import type { Layer } from "../core/model";
+const tc = (frame: number, fps: number) =>
+  `${String(Math.floor(frame / fps)).padStart(2, "0")}:${String(frame % fps).padStart(2, "0")}`;
+interface Drag {
+  kind: "key" | "cel" | "clip" | "trim-in" | "trim-out";
+  id: string;
+  key?: string;
+  from: number;
+  to: number;
+  pointer: number;
+  start: number;
+  end: number;
+  source: number;
+}
+export function Timeline({ onSound }: { onSound: () => void }) {
+  const s = useStudio(),
+    doc = s.document!,
+    scene = doc.scenes.find((sc) => sc.id === s.sceneId)!,
+    fw = s.frameWidth;
+  const scroll = useRef<HTMLDivElement>(null),
+    range = useRef<{ start: number; end: number } | null>(null),
+    drag = useRef<Drag | null>(null),
+    [ghost, setGhost] = useState<Drag | null>(null),
+    [selectedRange, setRange] = useState<[number, number] | null>(null),
+    [expanded, setExpanded] = useState<string[]>([]);
+  const frameAt = (e: PointerEvent) =>
+    clamp(
+      Math.round(
+        (e.clientX - e.currentTarget.getBoundingClientRect().left) / fw,
+      ),
+      0,
+      scene.length - 1,
+    );
+  const finish = (e: PointerEvent) => {
+    s.set({ interacting: false });
+    if (range.current) {
+      s.workArea(
+        Math.min(range.current.start, range.current.end),
+        Math.max(range.current.start, range.current.end),
+      );
+      range.current = null;
+    }
+    if (e.currentTarget.hasPointerCapture(e.pointerId))
+      e.currentTarget.releasePointerCapture(e.pointerId);
   };
-  useEffect(() => { if (!scrollRef.current) return; const scroller = scrollRef.current; const content = scroller.firstElementChild as HTMLElement | null; if (!content) return; const label = labelWidth(); const x = label + frame / (project.duration - 1) * (content.clientWidth - label - 22); if (x > scroller.scrollLeft + scroller.clientWidth - 30) scroller.scrollLeft = x - scroller.clientWidth + 50; if (x < scroller.scrollLeft + label + 4) scroller.scrollLeft = Math.max(0, x - label - 4); }, [frame, playing, project.duration]);
-  const selectTrack = (id: string) => useEditor.setState({ selectedId: id === '@camera' ? null : id, selectedIds: id === '@camera' ? [] : [id], selectedCamera: id === '@camera', selectedAudio: null, selectedBone: null });
-  const keyButton = (id: string, name: string, at: number, keyId: string, locked: boolean, cel = false, channel?: KeyChannel) => <button disabled={locked} key={keyId} aria-label={`${name} ${cel ? 'cel' : 'keyframe'} ${at + 1}`} title={`Frame ${at + 1} · drag to move · Shift-click to multiselect keys · double-click to remove${channel ? ' this channel only' : ''} · ←/→ moves by a frame`} className={`timeline-key ${cel ? 'timeline-cel' : ''} ${at === frame ? 'current' : ''} ${!cel && keySelection.some(k => k.itemId === id && k.frame === at && (!k.channel || k.channel === channel)) ? 'key-selected' : ''}`} style={{ left: position(drag?.itemId === id && drag.from === at && drag.cel === cel && drag.channel === channel ? drag.to : at) }} onClick={e => e.stopPropagation()} onDoubleClick={e => { e.stopPropagation(); cel ? useEditor.getState().removeCel(id, at) : useEditor.getState().removeKeyframe(id, at, channel); }} onPointerDown={e => {
-    e.stopPropagation(); const s = useEditor.getState(); if (locked || e.button !== 0 || s.busy || s.blockReason) return; e.currentTarget.setPointerCapture(e.pointerId); s.setInteracting(true);
-    selectTrack(id);
-    if (cel) { s.setFrame(at); s.setPlaying(false); useEditor.setState({ keySelection: [] }); } else s.selectKey(id, at, e.shiftKey, channel);
-    const value = { itemId: id, from: at, to: at, cel, channel }; dragRef.current = value; setDrag(value);
-  }} onPointerMove={e => { e.stopPropagation(); if (!dragRef.current) return; const scroller = scrollRef.current; if (scroller) { const r = scroller.getBoundingClientRect(); if (e.clientX > r.right - 24) scroller.scrollLeft += 24; if (e.clientX < r.left + labelWidth() + 4) scroller.scrollLeft -= 24; } const next = { ...dragRef.current, to: frameAt(e, e.currentTarget.parentElement!) }; dragRef.current = next; setDrag(next); }} onPointerUp={e => {
-    e.stopPropagation(); const value = dragRef.current; if (value) { value.cel ? useEditor.getState().moveCel(value.itemId, value.from, value.to) : useEditor.getState().moveKeyframe(value.itemId, value.from, value.to, value.channel); useEditor.getState().setFrame(value.to); if (!value.cel && value.to !== value.from) useEditor.getState().selectKey(value.itemId, value.to, false, value.channel); }
-    dragRef.current = null; setDrag(null); useEditor.getState().setInteracting(false); if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-  }} onPointerCancel={() => { dragRef.current = null; setDrag(null); useEditor.getState().setInteracting(false); }} onLostPointerCapture={() => { if (dragRef.current) { dragRef.current = null; setDrag(null); useEditor.getState().setInteracting(false); } }} onKeyDown={e => {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); const to = clamp(at + (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1), 0, project.duration - 1), s = useEditor.getState(); selectTrack(id); cel ? s.moveCel(id, at, to) : s.moveKeyframe(id, at, to, channel); s.setFrame(to); if (!cel) s.selectKey(id, to, false, channel); }
-    else if (!cel && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.stopPropagation(); selectTrack(id); useEditor.getState().selectKey(id, at, e.shiftKey, channel); }
-  }} />;
-  const tickCount = Math.min(20, Math.max(3, Math.ceil(project.duration / 12) + 1)), ticks = [...new Set(Array.from({ length: tickCount }, (_, n) => Math.round(n / (tickCount - 1) * (project.duration - 1))))];
-  const rowDown = (e: PointerEvent, id: string) => { const s = useEditor.getState(); id === '@camera' ? s.selectCamera() : s.select(id); s.setInteracting(true); e.currentTarget.setPointerCapture(e.pointerId); scrub(e); };
-  const rowUp = (e: PointerEvent) => { useEditor.getState().setInteracting(false); if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); };
-  return <section className={`timeline ${manual ? '' : 'motion-sequence'} ${collapsed ? 'collapsed' : ''}`} aria-label="Animation timeline"><div className="timeline-toolbar"><div className="timeline-title"><button className="icon-button small" aria-label={collapsed ? 'Expand timeline' : 'Collapse timeline'} onClick={() => setCollapsed(!collapsed)}>{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button><Film size={15} /><strong>{manual ? 'Drawing frames' : project.animationMode === 'video-editing' ? 'Video sequence' : 'Motion layers'}</strong><span className="scene-number">{String(project.sceneOrder.indexOf(project.sceneId) + 1).padStart(2, '0')}</span><button className="timeline-duration" onClick={() => useEditor.getState().setDialog('settings')} title="Scene duration">{(project.duration / project.fps).toFixed(1)}s</button><div className="timeline-zoom"><button aria-label="Zoom timeline out" className="icon-button small" disabled={frameWidth <= 4} onClick={() => setFrameWidth(Math.max(4, frameWidth / 2))}><Minus size={11} /></button><button aria-label="Zoom timeline in" className="icon-button small" disabled={frameWidth >= 32} onClick={() => setFrameWidth(Math.min(32, frameWidth * 2))}><Plus size={11} /></button></div></div><div className="playback-controls"><button className="icon-button" aria-label="Previous keyframe" onClick={() => nextKey(-1)}><SkipBack size={14} /></button><button className={`play-button ${playing ? 'playing' : ''}`} aria-label={playing ? 'Pause animation' : 'Play animation'} onClick={() => useEditor.getState().setPlaying(!playing)}>{playing ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}</button><button className="icon-button" aria-label="Next keyframe" onClick={() => nextKey(1)}><SkipForward size={14} /></button><span className="timecode">{timecode(frame, project.fps)}</span><span className="control-divider" /><button className={`icon-button loop-button ${preferences.loop ? 'active' : ''}`} aria-label="Loop playback" aria-pressed={preferences.loop} onClick={() => useEditor.getState().setPreference('loop', !preferences.loop)}><Repeat2 size={16} /></button></div><div className="timeline-actions">{!manual && <button className={`icon-button timeline-snap-button ${timelineSnap ? 'active' : ''}`} aria-label="Snap clips" aria-pressed={timelineSnap} title="Snap clips to playhead, neighboring clips, and work area · Alt bypasses" onClick={() => useWorkspace.getState().setLayout({ timelineSnap: !timelineSnap })}><Magnet size={14} /></button>}{!manual && <button className="button sequence-import-button" aria-label="Import video" onClick={onImportVideo}><Film size={13} /><span>Import video</span></button>}<button className="icon-button" aria-label="Import sound" title="Import MP3, WAV, OGG, M4A, AAC, FLAC, WebM" onClick={onImportAudio}><Music2 size={15} /></button>{manual ? <><button className="button manual-frame-button" aria-label="New blank frame" title="Create a blank cel on the next frame · F7" disabled={!canDrawFrame} onClick={() => useEditor.getState().nextDrawingFrame('blank')}><Plus size={13} /><span>Blank frame</span><kbd>F7</kbd></button><button className="button manual-frame-button" aria-label="Duplicate to next frame" title="Copy the current drawing to the next frame · F6" disabled={!canDrawFrame} onClick={() => useEditor.getState().nextDrawingFrame('duplicate')}><Copy size={13} /><span>Duplicate frame</span><kbd>F6</kbd></button></> : <><button className="icon-button" aria-label="Copy selected keyframes" title="Copy keyframes · Ctrl/⌘ C" onClick={() => useEditor.getState().copyKeys()}><Copy size={14} /></button><button className="icon-button" aria-label="Paste keyframes at playhead" title="Paste keyframes · Ctrl/⌘ V" disabled={!clipboard.length} onClick={() => useEditor.getState().pasteKeys()}><ClipboardPaste size={14} /></button><button className={`auto-key-button ${preferences.autoKey ? 'active' : ''}`} aria-label="Automatic keyframes" aria-pressed={preferences.autoKey} title="Automatically record pose, transform, and camera changes at the playhead" onClick={() => useEditor.getState().setPreference('autoKey', !preferences.autoKey)}><CircleDot size={13} /><span>Auto-key</span></button><button className="button keyframe-button" onClick={() => useEditor.getState().addKeyframe()}><DiamondPlus size={14} /><span>Add keyframe</span><kbd>K</kbd></button></>}<select className="fps-select" aria-label="Frame rate" value={project.fps} onChange={e => useEditor.getState().resizeProject({ fps: Number(e.target.value) })}>{[12, 15, 24, 25, 30, 60].map(fps => <option key={fps} value={fps}>{fps} fps</option>)}{![12, 15, 24, 25, 30, 60].includes(project.fps) && <option value={project.fps}>{project.fps} fps</option>}</select></div></div>
-    {!collapsed && <><div className="workarea-toolbar"><span><ScanLine size={11} /> Work area</span><label>In <input aria-label="Work area start" type="number" value={project.workArea.start + 1} min={1} max={project.workArea.end + 1} onChange={e => useEditor.getState().setWorkArea(Number(e.target.value) - 1, project.workArea.end)} /></label><label>Out <input aria-label="Work area end" type="number" value={project.workArea.end + 1} min={project.workArea.start + 1} max={project.duration} onChange={e => useEditor.getState().setWorkArea(project.workArea.start, Number(e.target.value) - 1)} /></label><button className="text-link" onClick={() => useEditor.getState().setWorkArea(0, project.duration - 1)}>Full scene</button><span className="workarea-hint">[ set in · ] set out</span>{keySelection.length > 0 && <span className="selected-key-count">{keySelection.length} key{keySelection.length === 1 ? '' : 's'} selected</span>}</div><div className="timeline-scroll" ref={scrollRef}><div className="timeline-content" style={{ minWidth: `calc(var(--timeline-label-width, 202px) + 22px + ${(project.duration - 1) * frameWidth}px)` }}><div className="timeline-ruler-row"><div className="timeline-layer-heading"><span>OBJECTS & SOUND</span><span>{project.items.length} layers</span></div><div className="timeline-ruler" onPointerDown={e => { useEditor.setState({ keySelection: [] }); useEditor.getState().setInteracting(true); e.currentTarget.setPointerCapture(e.pointerId); scrub(e); }} onPointerMove={e => { if (e.buttons === 1) scrub(e); }} onPointerUp={rowUp} onPointerCancel={rowUp} role="slider" aria-label="Timeline playhead" aria-valuemin={1} aria-valuemax={project.duration} aria-valuenow={frame + 1} tabIndex={0} onKeyDown={e => {
-      const s = useEditor.getState(), step = e.shiftKey ? 10 : 1;
-      const target = e.key === 'Home' ? 0 : e.key === 'End' ? project.duration - 1 : e.key === 'ArrowLeft' ? frame - step : e.key === 'ArrowRight' ? frame + step : e.key === 'PageUp' ? frame - project.fps : e.key === 'PageDown' ? frame + project.fps : null;
-      if (target !== null) { e.stopPropagation(); e.preventDefault(); s.setPlaying(false); s.setFrame(target); }
-    }}><div className="workarea-range" style={{ left: position(project.workArea.start), width: `${(project.workArea.end - project.workArea.start) / (project.duration - 1) * 100}%` }} />{ticks.map(t => <span className="timeline-tick" key={t} style={{ left: position(t) }}><span>{String(t + 1).padStart(2, '0')}</span></span>)}<span className="playhead-handle" style={{ left: position(frame) }} /></div></div><div className="timeline-rows">
-      {orderedItems(project.items, true).map(item => { const keys = project.keyframes[item.id] ?? [], cels = item.cels ?? [], channels = manual ? [] : animatedChannels(keys), locked = isLayerLocked(project.items, item.id); return <Fragment key={item.id}><div className={`timeline-row ${item.type === 'drawing' ? 'drawing-row' : ''} ${selectedId === item.id ? 'selected' : ''} ${!item.visible ? 'muted' : ''}`}><div className="timeline-layer-entry">{channels.length ? <button className="track-disclosure" aria-label={`${expanded.has(item.id) ? 'Collapse' : 'Expand'} ${item.name} property tracks`} aria-expanded={expanded.has(item.id)} title="Show individual position, rotation, opacity, effects, and rig keys" onClick={() => setExpanded(previous => { const next = new Set(previous); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}>{expanded.has(item.id) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</button> : <span className="track-disclosure-placeholder" />}<button className="timeline-layer-label" onClick={e => e.shiftKey ? useEditor.getState().toggleSelect(item.id) : useEditor.getState().select(item.id)}><LayerIcon item={item} size={13} /><span>{item.name}</span>{item.type === 'character' && <span className="timeline-rig-label"><Bone size={10} /> RIG</span>}</button></div><div className="timeline-track" style={{ backgroundSize: `${100 / (project.duration - 1)}% 100%` }} onPointerDown={e => rowDown(e, item.id)} onPointerMove={e => { if (e.buttons === 1 && !dragRef.current) scrub(e); }} onPointerUp={rowUp} onPointerCancel={rowUp}>
-      {!manual && item.type !== 'drawing' ? <MotionClip item={item} project={project} /> : item.type === 'drawing' ? <>{cels.map((c, n) => { const end = item.holdCels === false ? c.frame + 1 : cels[n + 1]?.frame ?? project.duration; return <div key={c.frame} className={`cel-exposure ${!c.strokes.length ? 'blank' : ''}`} style={{ left: position(c.frame), width: `${Math.min(project.duration - 1 - c.frame, end - c.frame) / (project.duration - 1) * 100}%` }}><span>{c.strokes.length ? 'Drawing' : 'Blank cel'}</span></div>; })}</> : keys.length ? <div className={`animation-clip ${item.type === 'character' ? 'character-clip' : 'shape-clip'}`} style={{ left: position(keys[0].frame), width: `${(keys.at(-1)!.frame - keys[0].frame) / (project.duration - 1) * 100}%` }}><span>{item.type === 'character' ? 'Pose animation' : item.type === 'group' ? 'Group animation' : 'Transform animation'}</span></div> : <div className="static-clip"><span>Static exposure</span></div>}
-      {keys.map(k => keyButton(item.id, item.name, k.frame, k.id, locked))}{cels.map(c => keyButton(item.id, item.name, c.frame, `${item.id}-cel-${c.frame}`, locked, true))}</div></div>{expanded.has(item.id) && channels.map(channel => {
-        const channelKeys = keys.filter(k => k.values[channel.property] !== undefined);
-        return <div className={`timeline-row timeline-property-row ${selectedId === item.id ? 'selected' : ''}`} key={channel.property} data-channel={channel.property}><div className="timeline-property-label">{channel.property === 'bones' ? <Bone size={11} /> : <Diamond size={9} />}<span>{channel.label}</span><small>{channelKeys.length}</small></div><div className="timeline-track" onPointerDown={e => rowDown(e, item.id)} onPointerMove={e => { if (e.buttons === 1 && !dragRef.current) scrub(e); }} onPointerUp={rowUp} onPointerCancel={rowUp}><span className="channel-span" style={{ left: position(channelKeys[0].frame), width: `${(channelKeys.at(-1)!.frame - channelKeys[0].frame) / (project.duration - 1) * 100}%` }} />{channelKeys.map(k => keyButton(item.id, `${item.name} ${channel.label}`, k.frame, `${k.id}-${channel.property}`, locked, false, channel.property))}</div></div>;
-      })}</Fragment>; })}
-      <div className={`timeline-row camera-row ${selectedCamera ? 'selected' : ''}`}><button className="timeline-layer-label" onClick={() => useEditor.getState().selectCamera()}><Camera size={13} /><span>Scene camera</span><span className="timeline-rig-label">VIEW</span></button><div className="timeline-track" style={{ backgroundSize: `${100 / (project.duration - 1)}% 100%` }} onPointerDown={e => rowDown(e, '@camera')} onPointerMove={e => { if (e.buttons === 1 && !dragRef.current) scrub(e); }} onPointerUp={rowUp} onPointerCancel={rowUp}><div className="static-clip camera-clip"><span>{project.camera.keys.length ? 'Camera animation' : 'Static view'}</span></div>{project.camera.keys.map(k => keyButton('@camera', 'Camera', k.frame, k.id, false))}</div></div>
-      {project.audio.map(clip => { const start = clip.startFrame / (project.duration - 1), duration = Math.min(clip.duration - clip.trimStart, ((clip.endFrame ?? project.duration) - clip.startFrame) / project.fps), width = Math.min(1 - start, duration * project.fps / (project.duration - 1)); const wave = Array.from({ length: 128 }, (_, n) => { const value = clip.waveform[Math.min(clip.waveform.length - 1, Math.floor((clip.trimStart + n / 128 * duration) / clip.duration * clip.waveform.length))] ?? 0; return `M${n / 128 * 100} ${50 - value * 43}v${value * 86}`; }).join(' '); return <div className={`timeline-row audio-row ${selectedAudio === clip.id ? 'selected' : ''} ${clip.muted ? 'muted' : ''}`} key={clip.id}><div className="timeline-layer-label"><button onClick={() => useEditor.getState().selectAudio(clip.id)}><Music2 size={13} /><span>{clip.name}</span></button><button className="icon-button small" aria-label={`${clip.muted ? 'Unmute' : 'Mute'} ${clip.name}`} onClick={() => useEditor.getState().editAudio(clip.id, { muted: !clip.muted })}>{clip.muted ? <VolumeX size={12} /> : <Volume2 size={12} />}</button></div><div className="timeline-track" style={{ backgroundSize: `${100 / (project.duration - 1)}% 100%` }} onPointerDown={scrub}><button className="audio-clip" aria-label={`${clip.name} audio clip`} title="Drag to change the sound’s start frame" style={{ left: `${start * 100}%`, width: `${Math.max(0.001, width) * 100}%` }} onPointerDown={e => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); useEditor.getState().selectAudio(clip.id); useEditor.getState().setInteracting(true); audioDrag.current = { id: clip.id, start: clip.startFrame, pointer: frameAt(e, e.currentTarget.parentElement!), checkpointed: false }; }} onPointerMove={e => { const drag = audioDrag.current; if (!drag || drag.id !== clip.id) return; const at = frameAt(e, e.currentTarget.parentElement!); if (at === drag.pointer) return; if (!drag.checkpointed) { useEditor.getState().checkpoint(); drag.checkpointed = true; } useEditor.getState().editAudio(clip.id, { startFrame: drag.start + at - drag.pointer }, false); }} onPointerUp={e => { audioDrag.current = null; rowUp(e); }} onPointerCancel={e => { audioDrag.current = null; rowUp(e); }}><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={wave} fill="none" stroke="currentColor" strokeWidth="0.4" /></svg><span>{clip.name}</span></button></div></div>; })}
-      <div className="timeline-playhead-area"><div className="timeline-playhead" style={{ left: position(frame) }} /></div></div></div></div></>}
-    <div className="timeline-footer"><span><span className="green-dot" /> {playing ? 'Playback' : 'Stopped'}</span><span className="timeline-tip">{manual ? <>F7: next blank frame <span>·</span> F6: duplicate to next frame <span>·</span> Empty frames stay blank</> : <>Space to play <span>·</span> K: keyframe <span>·</span> Edges restore source <span>·</span> Alt: no snapping</>}</span><span>Frame <strong>{String(frame + 1).padStart(3, '0')}</strong> <span className="muted-text">/ {String(project.duration).padStart(3, '0')}</span></span></div>
-  </section>;
+  const dragStart = (
+    e: PointerEvent,
+    l: Layer,
+    kind: Drag["kind"],
+    key?: string,
+    frame = 0,
+  ) => {
+    if (e.button || locked(l, scene.layers) || s.busy) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    s.set({ playing: false });
+    drag.current = {
+      kind,
+      id: l.id,
+      key,
+      from: frame,
+      to: frame,
+      pointer: e.clientX,
+      start: l.start,
+      end: l.end,
+      source: l.sourceIn,
+    };
+    s.beginGesture();
+    setGhost({ ...drag.current });
+  };
+  const dragMove = (e: PointerEvent) => {
+    const g = drag.current;
+    if (!g) return;
+    const delta = Math.round((e.clientX - g.pointer) / fw);
+    g.to = clamp(g.from + delta, 0, scene.length - 1);
+    setGhost({ ...g });
+    if (g.kind === "clip" || g.kind.startsWith("trim")) {
+      const length = g.end - g.start;
+      let start = g.start,
+        end = g.end,
+        source = g.source;
+      if (g.kind === "clip") {
+        start = clamp(g.start + delta, 0, scene.length - length);
+        end = start + length;
+      }
+      if (g.kind === "trim-in") {
+        start = clamp(
+          g.start + delta,
+          Math.max(0, g.start - Math.floor(g.source * doc.canvas.fps)),
+          g.end - 1,
+        );
+        source = g.source + (start - g.start) / doc.canvas.fps;
+      }
+      if (g.kind === "trim-out")
+        end = clamp(g.end + delta, g.start + 1, scene.length);
+      s.set({
+        document: {
+          ...doc,
+          scenes: doc.scenes.map((sc) =>
+            sc.id === scene.id
+              ? {
+                  ...sc,
+                  layers: sc.layers.map((l) =>
+                    l.id === g.id ? { ...l, start, end, sourceIn: source } : l,
+                  ),
+                  sounds: sc.sounds.map((a) =>
+                    a.id === sc.layers.find((l) => l.id === g.id)?.sound
+                      ? { ...a, start, end, trim: source }
+                      : a,
+                  ),
+                }
+              : sc,
+          ),
+        },
+      });
+    }
+  };
+  const dragEnd = (e: PointerEvent, cancel = false) => {
+    const g = drag.current;
+    drag.current = null;
+    setGhost(null);
+    if (e.currentTarget.hasPointerCapture(e.pointerId))
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    if (!g) return;
+    if (cancel) {
+      s.cancelGesture();
+      return;
+    }
+    s.endGesture();
+    if (g.kind === "key" && g.key && g.to !== g.from)
+      s.moveKey(g.id, g.key, g.to);
+    if (g.kind === "cel" && g.to !== g.from)
+      s.editCel(g.id, g.from, "move", g.to);
+  };
+  return (
+    <section
+      className="timeline"
+      style={{ height: s.preferences.timeline }}
+      aria-label="Animation timeline"
+    >
+      <div className="timeline-toolbar">
+        <div className="timeline-title">
+          <Film size={14} />
+          <strong>Timeline</strong>
+          <span>{scene.name}</span>
+          <button
+            title="Scene duration"
+            onClick={() => s.set({ dialog: "settings" })}
+          >
+            {(scene.length / doc.canvas.fps).toFixed(2)}s
+          </button>
+        </div>
+        <div className="transport">
+          <button
+            aria-label="First frame"
+            onClick={() => s.set({ frame: scene.work[0], playing: false })}
+          >
+            <SkipBack size={14} />
+          </button>
+          <button
+            className="play"
+            aria-label={s.playing ? "Pause playback" : "Play animation"}
+            onClick={() => s.set({ playing: !s.playing })}
+          >
+            {s.playing ? <Pause size={14} /> : <Play size={14} />}
+          </button>
+          <button
+            aria-label="Last frame"
+            onClick={() => s.set({ frame: scene.work[1], playing: false })}
+          >
+            <SkipForward size={14} />
+          </button>
+          <span className="timecode">{tc(s.frame, doc.canvas.fps)}</span>
+          <button
+            aria-label="Loop playback"
+            aria-pressed={s.preferences.loop}
+            onClick={() => s.pref("loop", !s.preferences.loop)}
+          >
+            <Repeat2 size={14} />
+          </button>
+        </div>
+        <div className="timeline-actions">
+          {s.workspace === "Draw" ? (
+            <>
+              <button
+                title="Duplicate next cel · F6"
+                aria-label="Duplicate next cel"
+                onClick={() => s.newCel(true)}
+              >
+                <Copy size={12} />
+                <span>Duplicate</span>
+              </button>
+              <button
+                title="Blank next cel · F7"
+                aria-label="Blank next cel"
+                onClick={() => s.newCel(false)}
+              >
+                <Plus size={12} />
+                <span>Blank</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                title="Insert keyframe · K"
+                aria-label="Insert keyframe"
+                onClick={() => s.addKey()}
+              >
+                <DiamondPlus size={14} />
+              </button>
+              <button
+                aria-label="Auto-key"
+                aria-pressed={s.preferences.autoKey}
+                onClick={() => s.pref("autoKey", !s.preferences.autoKey)}
+              >
+                Auto-key
+              </button>
+            </>
+          )}
+          <button aria-label="Import sound" onClick={onSound}>
+            <Music2 size={14} />
+          </button>
+          <select
+            aria-label="Timeline frame rate"
+            value={doc.canvas.fps}
+            onChange={(e) => s.timing(scene.length, Number(e.target.value))}
+          >
+            {[12, 15, 24, 25, 30, 60].map((f) => (
+              <option key={f} value={f}>
+                {f} fps
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="timeline-work">
+        <span>WORK AREA</span>
+        <input
+          type="number"
+          aria-label="Work area in"
+          value={scene.work[0] + 1}
+          min={1}
+          max={scene.work[1] + 1}
+          onChange={(e) =>
+            s.workArea(Number(e.target.value) - 1, scene.work[1])
+          }
+        />
+        <i>→</i>
+        <input
+          type="number"
+          aria-label="Work area out"
+          value={scene.work[1] + 1}
+          min={scene.work[0] + 1}
+          max={scene.length}
+          onChange={(e) =>
+            s.workArea(scene.work[0], Number(e.target.value) - 1)
+          }
+        />
+        <button onClick={() => s.workArea(0, scene.length - 1)}>
+          Full scene
+        </button>
+        <button
+          aria-label="Reverse drawing exposures in work area"
+          title="Reverse exposed drawing frames in this range"
+          onClick={() => s.reverseCels(scene.work[0], scene.work[1])}
+        >
+          <Scissors size={11} />
+          Reverse exposures
+        </button>
+        <span className="work-hint">Shift-drag ruler to set range</span>
+        <div />
+        <button
+          aria-label="Zoom timeline out"
+          disabled={fw <= 4}
+          onClick={() =>
+            s.set({ frameWidth: Math.max(4, Math.round(fw / 1.4)) })
+          }
+        >
+          <Minus size={12} />
+        </button>
+        <button
+          aria-label="Zoom timeline in"
+          disabled={fw >= 32}
+          onClick={() =>
+            s.set({ frameWidth: Math.min(32, Math.round(fw * 1.4)) })
+          }
+        >
+          <Plus size={12} />
+        </button>
+      </div>
+      <div className="timeline-scroll" ref={scroll}>
+        <div
+          className="timeline-sheet"
+          style={{
+            width: `calc(var(--track-label-width, 200px) + ${scene.length * fw}px)`,
+          }}
+        >
+          <div className="ruler-row">
+            <div className="timeline-label-heading">
+              LAYERS & SOUND <small>{scene.layers.length}</small>
+            </div>
+            <div
+              className="timeline-ruler"
+              role="slider"
+              aria-label="Timeline playhead"
+              aria-valuemin={1}
+              aria-valuemax={scene.length}
+              aria-valuenow={s.frame + 1}
+              tabIndex={0}
+              onPointerDown={(e) => {
+                if (e.button) return;
+                s.set({ playing: false, frame: frameAt(e), interacting: true });
+                e.currentTarget.setPointerCapture(e.pointerId);
+                if (e.shiftKey) {
+                  range.current = { start: frameAt(e), end: frameAt(e) };
+                  setRange([frameAt(e), frameAt(e)]);
+                }
+              }}
+              onPointerMove={(e) => {
+                if (e.buttons !== 1) return;
+                const frame = frameAt(e);
+                s.set({ frame });
+                if (range.current) {
+                  range.current.end = frame;
+                  setRange([range.current.start, frame]);
+                }
+              }}
+              onPointerUp={finish}
+              onPointerCancel={(e) => {
+                range.current = null;
+                setRange(null);
+                finish(e);
+              }}
+              onKeyDown={(e) => {
+                const f =
+                  e.key === "Home"
+                    ? 0
+                    : e.key === "End"
+                      ? scene.length - 1
+                      : e.key === "ArrowLeft"
+                        ? s.frame - 1
+                        : e.key === "ArrowRight"
+                          ? s.frame + 1
+                          : null;
+                if (f !== null) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  s.set({
+                    frame: clamp(f, 0, scene.length - 1),
+                    playing: false,
+                  });
+                }
+              }}
+            >
+              <div
+                className="work-band"
+                style={{
+                  left: scene.work[0] * fw,
+                  width: (scene.work[1] - scene.work[0] + 1) * fw,
+                }}
+              />
+              {selectedRange && (
+                <div
+                  className="range-band"
+                  style={{
+                    left: Math.min(...selectedRange) * fw,
+                    width:
+                      (Math.abs(selectedRange[1] - selectedRange[0]) + 1) * fw,
+                  }}
+                />
+              )}
+              {Array.from(
+                {
+                  length: Math.ceil(
+                    scene.length / Math.max(6, Math.round(72 / fw)),
+                  ),
+                },
+                (_, i) => i * Math.max(6, Math.round(72 / fw)),
+              ).map((f) => (
+                <span className="ruler-tick" key={f} style={{ left: f * fw }}>
+                  {f + 1}
+                </span>
+              ))}
+              <span className="ruler-playhead" style={{ left: s.frame * fw }} />
+            </div>
+          </div>
+          {[...scene.layers].reverse().map((l) => (
+            <Fragment key={l.id}>
+              <div
+                className={`track-row ${s.selected.includes(l.id) ? "selected" : ""}`}
+              >
+                <div className="track-label">
+                  <button
+                    className="track-disclosure"
+                    aria-label={`Expand ${l.name} channels`}
+                    onClick={() =>
+                      setExpanded((old) =>
+                        old.includes(l.id)
+                          ? old.filter((v) => v !== l.id)
+                          : [...old, l.id],
+                      )
+                    }
+                  >
+                    {l.keys.length ? <ChevronDown size={10} /> : null}
+                  </button>
+                  <button
+                    className="track-select"
+                    onClick={(e) => s.select(l.id, e.shiftKey)}
+                  >
+                    {l.kind === "paint" ? (
+                      <PencilIcon />
+                    ) : l.kind === "video" ? (
+                      <Film size={11} />
+                    ) : (
+                      <Diamond size={10} />
+                    )}
+                    <span>{l.name}</span>
+                    {l.locked && <small>LOCK</small>}
+                  </button>
+                </div>
+                <div
+                  className="track-content"
+                  style={{ backgroundSize: `${fw}px 100%` }}
+                  onPointerDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    s.select(l.id);
+                    s.set({ frame: frameAt(e), playing: false });
+                  }}
+                >
+                  {l.kind === "video" || l.kind === "image" ? (
+                    <div
+                      className={`media-clip ${l.kind}`}
+                      style={{
+                        left: l.start * fw,
+                        width: Math.max(4, (l.end - l.start) * fw),
+                      }}
+                      onPointerDown={(e) => {
+                        s.select(l.id);
+                        dragStart(e, l, "clip");
+                      }}
+                      onPointerMove={dragMove}
+                      onPointerUp={(e) => dragEnd(e)}
+                      onPointerCancel={(e) => dragEnd(e, true)}
+                    >
+                      <span
+                        className="clip-trim left"
+                        role="slider"
+                        aria-label={`Trim in ${l.name}`}
+                        aria-valuenow={l.start + 1}
+                        aria-valuemin={1}
+                        aria-valuemax={l.end}
+                        onPointerDown={(e) => dragStart(e, l, "trim-in")}
+                        onPointerMove={dragMove}
+                        onPointerUp={(e) => dragEnd(e)}
+                      />
+                      <small>{l.name}</small>
+                      <span
+                        className="clip-trim right"
+                        role="slider"
+                        aria-label={`Trim out ${l.name}`}
+                        aria-valuenow={l.end}
+                        aria-valuemin={l.start + 1}
+                        aria-valuemax={scene.length}
+                        onPointerDown={(e) => dragStart(e, l, "trim-out")}
+                        onPointerMove={dragMove}
+                        onPointerUp={(e) => dragEnd(e)}
+                      />
+                    </div>
+                  ) : null}
+                  {l.cels?.map((c, index) => (
+                    <button
+                      key={c.frame}
+                      className={`cel ${c.marks.length ? "filled" : "blank"}`}
+                      aria-label={`${l.name} cel at frame ${c.frame + 1}`}
+                      style={{
+                        left: c.frame * fw,
+                        width: Math.max(
+                          5,
+                          (l.held
+                            ? (l.cels?.[index + 1]?.frame ?? scene.length) -
+                              c.frame
+                            : 1) * fw,
+                        ),
+                      }}
+                      onClick={() => {
+                        s.select(l.id);
+                        s.set({ frame: c.frame, playing: false });
+                      }}
+                      onPointerDown={(e) =>
+                        dragStart(e, l, "cel", undefined, c.frame)
+                      }
+                      onPointerMove={dragMove}
+                      onPointerUp={(e) => dragEnd(e)}
+                      onPointerCancel={(e) => dragEnd(e, true)}
+                    >
+                      <span>{c.marks.length ? "●" : "○"}</span>
+                    </button>
+                  ))}
+                  {l.keys.map((k) => (
+                    <button
+                      key={k.id}
+                      className={`key-diamond ${s.keySelection.some((v) => v.id === k.id) ? "selected" : ""}`}
+                      aria-label={`${l.name} keyframe ${k.frame + 1}`}
+                      style={{ left: k.frame * fw }}
+                      onClick={(e) => {
+                        const previous = s.keySelection;
+                        const chosen = e.shiftKey
+                          ? previous.some((v) => v.id === k.id)
+                            ? previous.filter((v) => v.id !== k.id)
+                            : [...previous, { layer: l.id, id: k.id }]
+                          : [{ layer: l.id, id: k.id }];
+                        s.set({
+                          selected: [l.id],
+                          frame: k.frame,
+                          keySelection: chosen,
+                          playing: false,
+                        });
+                      }}
+                      onPointerDown={(e) =>
+                        dragStart(e, l, "key", k.id, k.frame)
+                      }
+                      onPointerMove={dragMove}
+                      onPointerUp={(e) => dragEnd(e)}
+                      onPointerCancel={(e) => dragEnd(e, true)}
+                    >
+                      <Diamond size={10} fill="currentColor" />
+                    </button>
+                  ))}
+                  {ghost?.id === l.id &&
+                    (ghost.kind === "key" || ghost.kind === "cel") &&
+                    ghost.from !== ghost.to && (
+                      <span
+                        className="key-ghost"
+                        style={{ left: ghost.to * fw }}
+                      />
+                    )}
+                  <div
+                    className="track-playhead"
+                    style={{ left: s.frame * fw }}
+                  />
+                </div>
+              </div>
+              {expanded.includes(l.id) &&
+                [...new Set(l.keys.flatMap((k) => Object.keys(k.values)))].map(
+                  (channel) => (
+                    <div className="track-row channel-row" key={channel}>
+                      <div className="track-label">
+                        <span>
+                          {channel.startsWith("bone:")
+                            ? l.bones?.find((b) => b.id === channel.slice(5))
+                                ?.name
+                            : channel}
+                        </span>
+                      </div>
+                      <div
+                        className="track-content"
+                        style={{ backgroundSize: `${fw}px 100%` }}
+                      >
+                        {l.keys
+                          .filter(
+                            (k) =>
+                              k.values[channel as keyof typeof k.values] !==
+                              undefined,
+                          )
+                          .map((k) => (
+                            <span
+                              className="channel-key"
+                              key={k.id}
+                              style={{ left: k.frame * fw }}
+                            />
+                          ))}
+                        <div
+                          className="track-playhead"
+                          style={{ left: s.frame * fw }}
+                        />
+                      </div>
+                    </div>
+                  ),
+                )}
+            </Fragment>
+          ))}
+          {scene.sounds.map((sound) => {
+            const a = doc.assets.find((a) => a.id === sound.asset);
+            return (
+              <div className="track-row audio-row" key={sound.id}>
+                <div className="track-label">
+                  <Music2 size={11} />
+                  <span>{sound.name}</span>
+                  <button
+                    aria-label={`${sound.muted ? "Unmute" : "Mute"} ${sound.name}`}
+                    onClick={() =>
+                      s.editSound(sound.id, { muted: !sound.muted })
+                    }
+                  >
+                    {sound.muted ? (
+                      <VolumeX size={11} />
+                    ) : (
+                      <Volume2 size={11} />
+                    )}
+                  </button>
+                </div>
+                <div
+                  className="track-content"
+                  style={{ backgroundSize: `${fw}px 100%` }}
+                >
+                  <div
+                    className={`audio-clip ${sound.muted ? "muted" : ""}`}
+                    style={{
+                      left: sound.start * fw,
+                      width: (sound.end - sound.start) * fw,
+                    }}
+                  >
+                    <svg viewBox="0 0 256 25" preserveAspectRatio="none">
+                      {a?.waveform.map((peak, i) => (
+                        <path
+                          key={i}
+                          d={`M${i} ${12.5 - peak * 11}V${12.5 + peak * 11}`}
+                          stroke="currentColor"
+                          strokeWidth="1"
+                        />
+                      ))}
+                    </svg>
+                  </div>
+                  <div
+                    className="track-playhead"
+                    style={{ left: s.frame * fw }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="timeline-footer">
+        <span>
+          {s.workspace === "Draw"
+            ? "F6 duplicate · F7 blank · U onion"
+            : "K insert key · Ctrl C/V keyframes · Delete selected keys"}
+        </span>
+        <span>
+          Frame {String(s.frame + 1).padStart(3, "0")} / {scene.length}
+          <i>·</i>
+          {doc.canvas.fps} fps
+        </span>
+      </div>
+    </section>
+  );
+}
+function PencilIcon() {
+  return <span className="tiny-paint-icon">╱</span>;
 }

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'"
+    />
+    <title>Starting Luno Studio</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #191b22;
+        color: #e5e5ed;
+        font: 12px system-ui;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .card {
+        text-align: center;
+      }
+      img {
+        width: 46px;
+        height: 46px;
+        margin-bottom: 10px;
+      }
+      h1 {
+        font-size: 17px;
+        font-weight: 500;
+        letter-spacing: -0.3px;
+        margin: 0 0 9px;
+      }
+      p {
+        font-size: 10px;
+        color: #8d91a6;
+        margin: 0;
+      }
+      .line {
+        height: 2px;
+        width: 150px;
+        margin: 17px auto 0;
+        background: #34303f;
+        overflow: hidden;
+        border-radius: 2px;
+      }
+      .line:after {
+        content: "";
+        display: block;
+        height: 2px;
+        width: 55px;
+        background: #b0a4ff;
+        animation: move 1.5s ease-in-out infinite;
+      }
+      @keyframes move {
+        0% {
+          transform: translateX(-60px);
+        }
+        100% {
+          transform: translateX(160px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .line:after {
+          animation: none;
+          width: 150px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img src="../assets/icon.png" alt="" />
+      <h1>Luno Studio</h1>
+      <p>Preparing your creative workspace…</p>
+      <div class="line"></div>
+    </div>
+  </body>
+</html>

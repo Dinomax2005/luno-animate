@@ -1,101 +1,216 @@
-import { usePaint } from '../store/paint';
-import { useEditor, STORAGE_KEY, PREFS_KEY } from '../store/editor';
-import { uid, activateScene } from '../engine/project';
-import type { Project } from '../engine/types';
-import { repository, type RecordPatch } from './repository';
-import { useDocumentFiles } from './document-files';
-import { useWorkspace, WORKSPACE_KEY } from '../store/workspace';
-
-let boot: Promise<void> | null = null;
-let saveQueue: Promise<unknown> = Promise.resolve();
-let lastSaved: Project | null = null;
-export function hasUnsavedProject() { const s = useEditor.getState(); return s.view === 'editor' && s.project !== lastSaved; }
-export async function refreshLibrary() { useEditor.getState().setLibrary(await repository().list()); }
-export function initializeLibrary() {
-  return boot ??= (async () => {
-    const repo = repository(); let records = await repo.list();
-    if (localStorage.getItem(STORAGE_KEY)) {
-      const old = useEditor.getState().project;
-      if (!records.some(r => r.id === old.id)) { await repo.save(old); records = await repo.list(); }
-      // Preserve the original as a migration recovery copy, remove only after durable save.
-      if (!localStorage.getItem('luno.migrated.v1')) localStorage.setItem('luno.migrated.v1', localStorage.getItem(STORAGE_KEY)!);
-      localStorage.removeItem(STORAGE_KEY);
-    }
-    const settings = await repo.getSettings();
-    const state = useEditor.getState(), localPaint = usePaint.getState().settings();
-    // Compare before hydrating preferences, whose foreground/size fields also update the painting store.
-    const newerLocalPaint = localPaint.updatedAt > (settings.paint?.updatedAt ?? 0);
-    if (settings.preferences) useEditor.setState({ preferences: { ...state.preferences, ...settings.preferences } });
-    if (newerLocalPaint) usePaint.getState().loadSettings(localPaint);
-    else if (settings.paint) usePaint.getState().loadSettings(settings.paint);
-    if (settings.lastProjectId && records.some(r => r.id === settings.lastProjectId && !r.deletedAt)) {
-      try { const p = await repo.load(settings.lastProjectId); state.replaceProject(p, false); lastSaved = p; state.markSaved(); state.setView('home'); }
-      catch { state.notify('Your last project could not be opened. Use Recover prior save in its project menu.', 'error'); }
-    }
-    state.setLibrary(records);
-    // Request persistent browser storage where supported. This never sends artwork over the network.
-    if (!window.luno) void navigator.storage?.persist?.().catch(() => {});
-  })().catch(error => { boot = null; useEditor.getState().notify(error instanceof Error ? error.message : 'Could not open your project library.', 'error'); throw error; });
-}
-export function flushProject(withThumbnail = false): Promise<void> {
-  const snapshot = useEditor.getState();
-  const action = async () => {
-    const s = useEditor.getState(); const p = snapshot.project;
-    if (snapshot.view === 'editor') {
-      if (p !== lastSaved || withThumbnail) {
-        s.setSaveStatus('saving'); let thumbnail: string | undefined;
-        if (withThumbnail) {
-          try { const { exportPng } = await import('../engine/export'); const blob = await exportPng(activateScene(p, p.sceneOrder[0]), 0, Math.min(0.5, 480 / p.width, 300 / p.height)); thumbnail = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob); }); }
-          catch { /* A failed preview must never block the document save. */ }
-        }
-        await repository().save(p, thumbnail); lastSaved = p;
-      }
-      if (useEditor.getState().project === p) s.markSaved();
-    }
-    await repository().saveSettings({ lastProjectId: snapshot.view === 'editor' ? p.id : (await repository().getSettings()).lastProjectId, preferences: useEditor.getState().preferences, paint: usePaint.getState().settings() });
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify(useEditor.getState().preferences)); } catch { /* Durable preferences are also kept in the library. */ }
+import { openDB, type DBSchema } from "idb";
+import { decode, encode, fingerprint } from "../core/codec";
+import { thumbnail } from "../core/render";
+import type { Document, Workspace } from "../core/model";
+import { useStudio, type LibraryEntry } from "../state/studio";
+interface DB extends DBSchema {
+  projects: { key: string; value: { entry: LibraryEntry; bytes: Uint8Array } };
+  revisions: {
+    key: number;
+    value: { id?: number; project: string; bytes: Uint8Array; date: number };
+    indexes: { project: string };
   };
-  const result = saveQueue.then(action); saveQueue = result.catch(() => {});
-  return result.catch(error => { useEditor.getState().setSaveStatus('error'); throw error; });
 }
-export async function goHome() {
-  (document.activeElement as HTMLElement | null)?.blur?.();
-  useEditor.getState().setBlocked('Saving your project library…');
-  try { await flushProject(true); useEditor.getState().setView('home'); await refreshLibrary(); }
-  catch (error) { useEditor.getState().notify(`${error instanceof Error ? error.message : 'Save failed.'} Your canvas is still open. Export a .lam copy before leaving.`, 'error'); }
-  finally { useEditor.getState().setBlocked(null); }
+let database: ReturnType<typeof openDB<DB>> | undefined;
+function db() {
+  return (database ??= openDB<DB>("luno-studio-library", 1, {
+    upgrade(db) {
+      db.createObjectStore("projects", { keyPath: "entry.id" });
+      db.createObjectStore("revisions", {
+        keyPath: "id",
+        autoIncrement: true,
+      }).createIndex("project", "project");
+    },
+  }));
 }
-function documentWorkspace(project: Project, newDocument = false) {
-  const recommend = (p: Project) => p.animationMode === 'frame-by-frame' ? 'Drawing' as const : p.animationMode === 'video-editing' ? 'Video editing' as const : 'Motion' as const;
-  const previous = useEditor.getState().project, workspace = useWorkspace.getState();
-  let savedLayout = false; try { savedLayout = !!localStorage.getItem(WORKSPACE_KEY); } catch { /* Preferences must not block opening work. */ }
-  // New document types get contextual defaults. Reopening work must not erase
-  // the user's dock dimensions, visibility choices, or explicit workspace.
-  if (newDocument || !savedLayout || previous.animationMode !== project.animationMode && workspace.workspace === recommend(previous)) workspace.preset(recommend(project));
+let queue: Promise<unknown> = Promise.resolve();
+let scheduled: ReturnType<typeof setTimeout> | undefined,
+  last: Document | null = null;
+async function list() {
+  if (window.studio) return window.studio.library.list();
+  return (await (await db()).getAll("projects")).map((v) => v.entry);
 }
-export async function openLibraryProject(id: string) {
-  useEditor.getState().setBlocked('Opening document…');
+export async function refresh() {
+  useStudio.setState({
+    library: (await list()).sort((a, b) => b.modified - a.modified),
+    ready: true,
+  });
+}
+export async function initialize() {
+  await refresh();
+  last = null;
+}
+export async function loadProject(id: string) {
+  const s = useStudio.getState();
+  if (s.busy || s.interacting) return;
+  s.set({ busy: true });
   try {
-  await flushProject(true); const project = await repository().load(id);
-  documentWorkspace(project); useEditor.getState().replaceProject(project, false); lastSaved = project; useEditor.getState().markSaved();
-  await repository().saveSettings({ lastProjectId: id, preferences: useEditor.getState().preferences, paint: usePaint.getState().settings() });
-  } finally { useEditor.getState().setBlocked(null); }
+    await flush();
+    const bytes = window.studio
+      ? await window.studio.library.load(id)
+      : (await (await db()).get("projects", id))?.bytes;
+    if (!bytes) throw new Error("Project not found.");
+    const entry = s.library.find((e) => e.id === id);
+    s.open(decode(bytes), entry?.workspace);
+    last = useStudio.getState().document;
+  } catch (e) {
+    s.notify(e instanceof Error ? e.message : "Open failed.", true);
+  } finally {
+    s.set({ busy: false });
+  }
 }
-export async function openDocument(project: Project, imported = false, preserveName = false) {
-  (document.activeElement as HTMLElement | null)?.blur?.();
-  useEditor.getState().setBlocked('Giving your next idea a safe home…');
+async function save(snapshot: Document, workspace: Workspace) {
+  const bytes = encode(snapshot);
+  let preview = "";
   try {
-  await flushProject(true);
-  const records = await repository().list();
-  if (imported && records.some(r => r.id === project.id)) project = { ...project, id: uid(), name: preserveName ? project.name : `${project.name} (imported)`.slice(0, 100) };
-  await repository().save(project); documentWorkspace(project, !imported); useEditor.getState().replaceProject(project, false); lastSaved = project; useEditor.getState().markSaved();
-  await repository().saveSettings({ lastProjectId: project.id, preferences: useEditor.getState().preferences, paint: usePaint.getState().settings() });
-  } finally { useEditor.getState().setBlocked(null); }
+    preview = await thumbnail(snapshot);
+  } catch {
+    /* Missing media cannot destroy the document save. */
+  }
+  let entry: LibraryEntry;
+  if (window.studio)
+    entry = await window.studio.library.save(bytes, preview, workspace);
+  else {
+    const d = await db(),
+      old = await d.get("projects", snapshot.id);
+    entry = {
+      id: snapshot.id,
+      title: snapshot.title,
+      created: old?.entry.created ?? snapshot.created,
+      modified: Date.now(),
+      thumbnail: preview || old?.entry.thumbnail || "",
+      starred: old?.entry.starred ?? false,
+      workspace,
+      scenes: snapshot.scenes.length,
+      seconds:
+        snapshot.scenes.reduce((n, s) => n + s.length, 0) / snapshot.canvas.fps,
+    };
+    const tx = d.transaction(["projects", "revisions"], "readwrite");
+    try {
+      if (old) {
+        await tx
+          .objectStore("revisions")
+          .add({ project: snapshot.id, bytes: old.bytes, date: Date.now() });
+        const keys = await tx
+          .objectStore("revisions")
+          .index("project")
+          .getAllKeys(snapshot.id);
+        for (const key of keys.slice(0, -3))
+          await tx.objectStore("revisions").delete(key);
+      }
+      await tx.objectStore("projects").put({ entry, bytes });
+      await tx.done;
+    } catch (e) {
+      try {
+        tx.abort();
+      } catch {
+        /* Already closed. */
+      }
+      await tx.done.catch(() => {});
+      throw e;
+    }
+  }
+  useStudio.setState((s) => ({
+    library: [entry, ...s.library.filter((e) => e.id !== entry.id)].sort(
+      (a, b) => b.modified - a.modified,
+    ),
+    saveState: s.document === snapshot ? "saved" : s.saveState,
+  }));
+  last = snapshot;
 }
-export async function changeRecord(id: string, patch: RecordPatch) { await repository().patch(id, patch); await refreshLibrary(); }
+export async function flush() {
+  clearTimeout(scheduled);
+  const s = useStudio.getState();
+  if (s.document && s.document !== last) {
+    const snapshot = s.document;
+    queue = queue.catch(() => {}).then(() => save(snapshot, s.workspace));
+  }
+  try {
+    await queue;
+  } catch (e) {
+    useStudio.getState().set({ saveState: "error" });
+    throw e;
+  }
+}
+export async function home() {
+  const s = useStudio.getState();
+  if (s.busy || s.interacting) return;
+  s.set({ busy: true });
+  try {
+    await flush();
+    s.set({ view: "home", playing: false, dialog: null });
+    await refresh();
+  } catch (e) {
+    s.notify(
+      `Could not finish the local save: ${e instanceof Error ? e.message : "storage error"}. Export a .lam copy before closing.`,
+      true,
+    );
+  } finally {
+    s.set({ busy: false });
+  }
+}
+export async function deleteProject(id: string) {
+  const s = useStudio.getState();
+  if (window.studio) await window.studio.library.delete(id);
+  else {
+    const d = await db(),
+      tx = d.transaction(["projects", "revisions"], "readwrite");
+    await tx.objectStore("projects").delete(id);
+    for (const key of await tx
+      .objectStore("revisions")
+      .index("project")
+      .getAllKeys(id))
+      await tx.objectStore("revisions").delete(key);
+    await tx.done;
+  }
+  if (s.document?.id === id) s.set({ document: null, view: "home" });
+  await refresh();
+}
 export async function duplicateProject(id: string) {
-  const original = await repository().load(id); const project = { ...original, id: uid(), name: `${original.name} copy`.slice(0, 100) };
-  const originalRecord = useEditor.getState().projects.find(r => r.id === id);
-  await repository().save(project, originalRecord?.thumbnail); await refreshLibrary(); useEditor.getState().notify('A separate project copy is ready.');
+  const bytes = window.studio
+    ? await window.studio.library.load(id)
+    : (await (await db()).get("projects", id))?.bytes;
+  if (!bytes) throw new Error("Project not found.");
+  const d = decode(bytes);
+  d.id = crypto.randomUUID();
+  d.title += " copy";
+  d.created = Date.now();
+  await save(
+    d,
+    useStudio.getState().library.find((p) => p.id === id)?.workspace ?? "Draw",
+  );
 }
-export async function recoverProject(id: string) { useDocumentFiles.getState().forget(id); const p = await repository().recover(id); await refreshLibrary(); useEditor.getState().replaceProject(p, false); lastSaved = p; useEditor.getState().markSaved(); useEditor.getState().notify('Recovered a prior save. Your other projects are unchanged.'); }
+useStudio.subscribe((s, old) => {
+  if (
+    !s.document ||
+    (s.document === old.document && !(old.interacting && !s.interacting))
+  )
+    return;
+  clearTimeout(scheduled);
+  if (s.interacting) return;
+  scheduled = setTimeout(
+    () =>
+      void flush().catch((e) =>
+        s.notify(`Library save failed: ${e.message}. Save a .lam copy.`, true),
+      ),
+    700,
+  );
+});
+
+export async function adoptDocument(incoming: Document): Promise<Document> {
+  const existing = useStudio
+    .getState()
+    .library.find((p) => p.id === incoming.id);
+  if (!existing) return incoming;
+  const data = window.studio
+    ? await window.studio.library.load(incoming.id)
+    : (await (await db()).get("projects", incoming.id))?.bytes;
+  if (data && fingerprint(data) === fingerprint(encode(incoming)))
+    return incoming;
+  return {
+    ...incoming,
+    id: crypto.randomUUID(),
+    title: incoming.title.slice(0, 85) + " · imported",
+    created: Date.now(),
+  };
+}

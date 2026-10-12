@@ -1,270 +1,711 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
-import { StartupPopup } from './components/StartupPopup';
-import { Header, Toast } from './components/Header';
-import { StudioWorkspace, StudioStatus } from './components/studio/Workspace';
-import { CommandPalette } from './components/studio/CommandPalette';
-import { useWorkspace } from './store/workspace';
-import { ProjectHome } from './components/home/ProjectHome';
-import { UpdateBanner } from './components/Updates';
-import { usePaint } from './store/paint';
-import { useEditor, PREFS_KEY } from './store/editor';
-import { createItem, createProject } from './engine/project';
-import { readProjectData, MAX_LAM_BYTES } from './engine/lam';
-import { imageFromFile, saveProject } from './engine/files';
-import { flushProject, goHome, hasUnsavedProject, initializeLibrary, openDocument } from './services/library';
-import { AudioPlayback, audioFromFile } from './services/audio';
-import { browserCanOpenFiles, openBrowserFile, saveDocument, useDocumentFiles, fileIsDirty, type FileSource, type NativeOpenedFile } from './services/document-files';
-import { presentLaunch, useLaunch } from './services/launch';
-import type { Tool } from './engine/types';
-const Dialogs = lazy(() => import('./components/Dialogs').then(module => ({ default: module.Dialogs })));
-
+import { useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  Check,
+  Circle,
+  LoaderCircle,
+  PanelLeft,
+  PanelRight,
+  X,
+} from "lucide-react";
+import { useStudio } from "./state/studio";
+import { type Asset, type Tool } from "./core/model";
+import { decode } from "./core/codec";
+import { clamp, pose } from "./core/motion";
+import { importAudio, importImage, importVideo } from "./core/media";
+import { initialize, adoptDocument, flush } from "./services/library";
+import {
+  bind,
+  dirty,
+  importProject,
+  openFile,
+  saveFile,
+  useFile,
+} from "./services/files";
+import { commands, execute } from "./services/commands";
+import { PlaybackAudio } from "./services/audio";
+import { Home } from "./components/Home";
+import { Header } from "./components/Header";
+import { Toolbox } from "./components/Toolbox";
+import { Navigator } from "./components/Navigator";
+import { Inspector } from "./components/Inspector";
+import { Timeline } from "./components/Timeline";
+import { Stage } from "./components/Stage";
+import { Dialogs } from "./components/Dialogs";
+import { UpdateNotice } from "./components/UpdateNotice";
+import { Modal } from "./components/Common";
 export default function App() {
-  const project = useEditor(s => s.project), preferences = useEditor(s => s.preferences), playing = useEditor(s => s.playing);
-  const busy = useEditor(s => s.busy);
-  const dialog = useEditor(s => s.dialog), view = useEditor(s => s.view), ready = useEditor(s => s.libraryReady), blocked = useEditor(s => s.blockReason);
-  const [bootPhase, setBootPhase] = useState<string | null>('Opening your local project library…'), [bootError, setBootError] = useState<string | null>(null), [bootAttempt, setBootAttempt] = useState(0);
-  const booting = useRef(true); booting.current = !!bootPhase;
-  const [videoProgress, setVideoProgress] = useState<{ value: number; message: string } | null>(null), videoAbort = useRef<AbortController | null>(null);
-  const inputVideo = useRef<HTMLInputElement>(null);
-  const inputProject = useRef<HTMLInputElement>(null), inputImage = useRef<HTMLInputElement>(null), inputAudio = useRef<HTMLInputElement>(null);
-  const lastActivity = useRef(Date.now());
-  const associationTask = useRef<Promise<boolean> | null>(null), associationSeen = useRef(false);
-  const performSave = useCallback(async (kind: 'save' | 'save-as' | 'copy') => {
-    const s = useEditor.getState(); if (s.view !== 'editor' || s.busy || s.blockReason || s.interacting) return;
-    (document.activeElement as HTMLElement | null)?.blur?.(); s.setBusy(true);
-    const snapshot = useEditor.getState().project; useDocumentFiles.getState().setSaving(snapshot.id); s.clearToast();
-    try {
-      if (kind === 'copy') {
-        s.notify(await saveProject(snapshot) ? 'Exported a .lam copy. Your linked Save destination is unchanged.' : 'Copy export cancelled. Your original file is unchanged.', 'info');
-      } else {
-        // An unavailable autosave store must not prevent an explicit portable save of the canvas.
-        let localError: unknown; try { await flushProject(); } catch (error) { localError = error; }
-        const result = await saveDocument(snapshot, kind === 'save-as');
-        if (result.kind === 'saved') s.notify(localError ? `Saved ${result.name}, but library autosave failed. Keep this .lam file and check available storage.` : `Saved ${result.name}.`, localError ? 'error' : 'success');
-        else if (result.kind === 'cancelled') s.notify('Save cancelled. The original file is unchanged; your edits remain in the local library.', 'info');
-        else s.notify('Downloaded a .lam copy. This browser cannot overwrite the original; use the desktop app or a browser with file-system access.', 'info');
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not save the project.';
-      useDocumentFiles.getState().setError(snapshot.id, message); s.notify(message, 'error');
-    } finally { useDocumentFiles.getState().setSaving(null); s.setBusy(false); }
-  }, []);
-  const onSave = useCallback(() => performSave('save'), [performSave]);
-  const onSaveAs = useCallback(() => performSave('save-as'), [performSave]);
-  const onSaveCopy = useCallback(() => performSave('copy'), [performSave]);
-  const loadProject = useCallback(async (raw: string | Uint8Array | ArrayBuffer, ownsBusyOperation = false, source?: FileSource): Promise<boolean> => {
-    const state = useEditor.getState();
-    if (state.blockReason || state.interacting || state.busy && !ownsBusyOperation || state.dialog && !['start', 'whats-new'].includes(state.dialog)) { state.notify('Finish the current operation before opening another project. Your file is unchanged.', 'info'); return false; }
-    try {
-      const parsed = readProjectData(raw); await openDocument(parsed, true, !!source);
-      if (source) useDocumentFiles.getState().bind(useEditor.getState().project, source);
-      useLaunch.setState({ pendingStart: false }); state.setDialog(null);
-      state.notify(source ? `Opened ${source.target.name}. Save will update this file.` : `“${parsed.name}” is in your library. Use Save As to choose a writable .lam file.`);
-      return true;
-    } catch (error) { state.notify(error instanceof Error ? error.message : 'Could not read this project.', 'error'); return false; }
-  }, []);
-  const loadNativeFile = useCallback((file: NativeOpenedFile | Uint8Array, ownsBusyOperation = false) => file instanceof Uint8Array
-    ? loadProject(file, ownsBusyOperation)
-    : loadProject(file.data, ownsBusyOperation, file.target ? { kind: 'native', target: file.target } : undefined), [loadProject]);
-  const onOpen = useCallback(async () => {
-    const s = useEditor.getState(); if (s.busy || s.blockReason || s.interacting) return;
-    if (!window.luno && !browserCanOpenFiles()) { inputProject.current?.click(); return; }
-    s.setBusy(true);
-    try {
-      if (window.luno) {
-        const file = await (window.luno.documents ? window.luno.documents.open() : window.luno.openProject());
-        if (file) await loadNativeFile(file, true);
-      } else {
-        const file = await openBrowserFile();
-        if (file) await loadProject(file.data, true, file.browserTarget ? { kind: 'browser', target: file.browserTarget } : undefined);
-      }
-    } catch (error) { s.notify(error instanceof Error ? error.message : 'Could not open the project file.', 'error'); }
-    finally { s.setBusy(false); }
-  }, [loadProject, loadNativeFile]);
-  const onImportVideo = useCallback(() => inputVideo.current?.click(), []);
-  const onImport = useCallback(() => inputImage.current?.click(), []), onImportAudio = useCallback(() => inputAudio.current?.click(), []);
-  const importFile = useCallback(async (file: File) => {
-    const s = useEditor.getState();
-    if (s.busy || s.blockReason || s.interacting) { s.notify('Finish the current operation before importing. Your original file is unchanged.', 'info'); return; }
-    (document.activeElement as HTMLElement | null)?.blur?.();
-    s.setBusy(true);
-    try {
-      if (/\.(lam|luno|json)$/i.test(file.name)) {
-        if (file.size > MAX_LAM_BYTES) { s.notify('Choose a project smaller than 64 MB.', 'error'); return; }
-        await loadProject(await file.arrayBuffer(), true); return;
-      }
-      const isVideo = /\.(mp4|mov|m4v)$/i.test(file.name) || /\.webm$/i.test(file.name) && (file.type.startsWith('video/') || s.project.animationMode === 'video-editing');
-      if (s.view === 'home') await openDocument(createProject('blank', isVideo ? 'video-editing' : 'rigged'));
-      if (isVideo) {
-        if (useEditor.getState().project.animationMode === 'frame-by-frame') throw new Error('Import footage into a Video editing or Rig / motion document. Your hand-drawn frames are unchanged.');
-        const snapshot = useEditor.getState().project, frame = useEditor.getState().frame;
-        videoAbort.current = new AbortController(); setVideoProgress({ value: 0, message: 'Reading footage…' });
-        let lastProgress = 0;
-        const result = await (await import('./services/video-import')).importVideo(file, snapshot, frame, (value, message) => {
-          // Keep decoder throughput independent of full studio redraws.
-          const now = performance.now(); if (value === 0 || value >= 0.85 || now - lastProgress >= 100) { lastProgress = now; setVideoProgress({ value, message }); }
-        }, videoAbort.current.signal);
-        videoAbort.current.signal.throwIfAborted();
-        if (useEditor.getState().project !== snapshot) throw new Error('The active document changed during import. Please try again.');
-        s.addVideo(result.asset, result.item, result.audio); s.notify('Footage imported as an embedded proxy. Open Timing to trim, split, or add fades.'); return;
-      }
-      if (/\.(mp3|wav|ogg|m4a|aac|flac|webm)$/i.test(file.name)) {
-        const clip = await audioFromFile(file, useEditor.getState().frame); useEditor.getState().addAudio(clip); s.notify('Sound added. Press play to hear it with your animation.'); return;
-      }
-      const image = await imageFromFile(file), p = useEditor.getState().project;
-      const scale = Math.min(1, p.width * 0.5 / image.width, p.height * 0.6 / image.height);
-      s.addItem(createItem('image', { name: file.name.replace(/\.[^.]+$/, '').slice(0, 100) || 'Artwork', x: p.width / 2, y: p.height / 2, width: image.width, height: image.height, scaleX: scale, scaleY: scale, imageData: image.data }));
-      s.notify('Artwork imported. Animate it directly, or attach it to a rig joint in the inspector.');
-    } catch (error) { s.notify(videoAbort.current?.signal.aborted ? 'Video import cancelled. No clips were added.' : error instanceof Error ? error.message : 'Could not import this file.', videoAbort.current?.signal.aborted ? 'info' : 'error'); }
-    finally { videoAbort.current = null; setVideoProgress(null); s.setBusy(false); }
-  }, [loadProject]);
-
+  const s = useStudio(),
+    [bootError, setBootError] = useState(""),
+    [progress, setProgress] = useState<number | null>(null),
+    input = useRef<HTMLInputElement>(null),
+    referenceInput = useRef<HTMLInputElement>(null),
+    audioInput = useRef<HTMLInputElement>(null),
+    abort = useRef<AbortController | null>(null),
+    ready = useRef(false),
+    activity = useRef(Date.now()),
+    [boot, setBoot] = useState(0);
   useEffect(() => {
-    let mounted = true; const started = performance.now();
-    setBootError(null); setBootPhase('Opening your local project library…');
-    void (async () => {
-      await initializeLibrary(); if (!mounted) return;
-      setBootPhase('Preparing the animation and video workspace…');
-      const result = await window.luno?.ready(); if (!mounted) return;
-      if (associationTask.current) await associationTask.current;
-      // Desktop uses its own small native launcher; the browser has a compact fallback.
-      if (!window.luno?.startup) await new Promise(resolve => setTimeout(resolve, Math.max(0, 450 - (performance.now() - started))));
-      if (mounted) {
-        setBootPhase(null); presentLaunch(associationSeen.current || !!result?.openedFile);
-        // The first ready workspace paint is prepared before the launcher closes.
-        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-        if (mounted) await window.luno?.startup?.complete();
-      }
-    })().catch(error => { if (mounted) { setBootPhase('Your studio could not open'); setBootError(error instanceof Error ? error.message : 'Could not open the local library. Your files have not been changed.'); } });
-    return () => { mounted = false; };
-  }, [bootAttempt]);
-  useEffect(() => { if (bootPhase) window.luno?.startup?.report({ phase: bootPhase, error: bootError }); }, [bootPhase, bootError]);
-  useEffect(() => window.luno?.startup?.onRetry(() => setBootAttempt(n => n + 1)), []);
+    document.documentElement.dataset.theme = s.preferences.theme;
+  }, [s.preferences.theme]);
   useEffect(() => {
-    if (!ready || view !== 'editor') return;
-    useEditor.getState().setSaveStatus('saving');
-    const timer = setTimeout(() => { void flushProject().catch(error => useEditor.getState().notify(`${error.message || 'Local storage is unavailable.'} Export a .lam copy to keep your changes.`, 'error')); }, 700);
-    return () => clearTimeout(timer);
-  }, [project, ready, view]);
-  const paintUpdatedAt = usePaint(s => s.updatedAt);
-  useEffect(() => {
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify(preferences)); } catch { /* Preferences also live in the durable library. */ }
-    document.documentElement.dataset.theme = preferences.theme;
-    if (ready) { const timer = setTimeout(() => { void flushProject().catch(() => {}); }, 300); return () => clearTimeout(timer); }
-  }, [preferences, ready, paintUpdatedAt]);
-  useEffect(() => {
-    const unload = (event: BeforeUnloadEvent) => { const s = useEditor.getState(); if (!window.luno && (hasUnsavedProject() || s.saveStatus === 'error' || !!s.blockReason || s.busy || s.interacting)) { event.preventDefault(); event.returnValue = ''; } };
-    const visibility = () => { if (document.visibilityState === 'hidden') { useEditor.getState().setPlaying(false); if (useEditor.getState().libraryReady) void flushProject().catch(() => {}); } };
-    window.addEventListener('beforeunload', unload); document.addEventListener('visibilitychange', visibility);
-    return () => { window.removeEventListener('beforeunload', unload); document.removeEventListener('visibilitychange', visibility); };
-  }, []);
-  useEffect(() => {
-    if (!playing || view !== 'editor') return;
-    const s = useEditor.getState(), area = s.project.workArea; const startFrame = s.frame < area.start || s.frame > area.end ? area.start : s.frame;
-    let startTime: number | null = null, request = 0;
-    const animate = (time: number) => {
-      if (startTime === null) startTime = time; const current = useEditor.getState();
-      const next = startFrame + Math.floor((time - startTime) / 1000 * current.project.fps), work = current.project.workArea;
-      if (next > work.end && !current.preferences.loop) { current.setFrame(work.end); current.setPlaying(false); return; }
-      const nextFrame = next > work.end ? work.start + (next - work.start) % (work.end - work.start + 1) : next;
-      if (current.frame !== nextFrame) current.setFrame(nextFrame); request = requestAnimationFrame(animate);
+    let active = true;
+    void initialize()
+      .then(async () => {
+        if (!active) return;
+        await document.fonts.ready;
+        if (window.studio && !ready.current) {
+          await window.studio.ready();
+          ready.current = true;
+          if (!useStudio.getState().preferences.newsSeen)
+            useStudio.setState({ dialog: "setup" });
+        }
+      })
+      .catch((e) => {
+        if (active) setBootError(e.message);
+      });
+    return () => {
+      active = false;
     };
-    request = requestAnimationFrame(animate); return () => cancelAnimationFrame(request);
-  }, [playing, view]);
+  }, [boot]);
   useEffect(() => {
-    const api = window.luno; if (!api) return;
-    const unsubFile = api.onProjectFile(file => { associationSeen.current = true; associationTask.current = loadNativeFile(file); });
-    const unsubPrepare = api.onPrepare(async request => {
-      const s = useEditor.getState();
-      if (s.busy || s.interacting || (request.reason === 'update' && (s.playing || !!document.querySelector('[role=dialog]:not(.updates-modal)'))) || s.blockReason) { api.preparationResult(request.id, false, 'Finish your current operation before restarting.'); return; }
-      (document.activeElement as HTMLElement | null)?.blur?.();
-      s.setBlocked(request.reason === 'update' ? 'Saving your library before the update…' : 'Saving your latest changes…');
-      try { await flushProject(true); api.preparationResult(request.id, true); }
-      catch (error) { api.preparationResult(request.id, false, error instanceof Error ? error.message : 'Your durable save did not finish.'); s.setBlocked(null); }
-    });
-    const unsubResume = api.onResume(() => useEditor.getState().setBlocked(null));
-    return () => { unsubFile(); unsubPrepare(); unsubResume(); };
-  }, [loadNativeFile]);
-  useEffect(() => {
-    const api = window.luno;
-    const send = () => { const s = useEditor.getState(); api?.updater.activity({ busy: booting.current || s.busy || !s.libraryReady || !!s.blockReason || !!document.querySelector('[role=dialog]:not(.updates-modal)'), playing: s.playing, interacting: s.interacting, dirty: hasUnsavedProject() || s.saveStatus === 'error' || fileIsDirty(s.project, useDocumentFiles.getState().links[s.project.id]), lastActivity: lastActivity.current }); };
-    const activity = () => { lastActivity.current = Date.now(); send(); };
-    const pointerActivity = () => { if (Date.now() - lastActivity.current > 1000) activity(); };
-    document.addEventListener('pointermove', pointerActivity, true); document.addEventListener('wheel', activity, true);
-    document.addEventListener('pointerdown', activity, true); document.addEventListener('keydown', activity, true); document.addEventListener('input', activity, true);
-    const timer = setInterval(send, 1000); const unsubscribe = useEditor.subscribe(send); send();
-    return () => { clearInterval(timer); unsubscribe(); document.removeEventListener('pointermove', pointerActivity, true); document.removeEventListener('wheel', activity, true); document.removeEventListener('pointerdown', activity, true); document.removeEventListener('keydown', activity, true); document.removeEventListener('input', activity, true); };
-  }, []);
-  useEffect(() => { void window.luno?.updater.setAutomatic(preferences.automaticUpdates).catch(() => {}); }, [preferences.automaticUpdates]);
-  useEffect(() => {
-    const command = (value: string) => {
-      const s = useEditor.getState(); if (bootPhase || s.blockReason || s.busy || s.interacting || s.dialog) return;
-      if (['open', 'new', 'setup', 'export', 'save', 'save-as', 'save-copy'].includes(value)) (document.activeElement as HTMLElement | null)?.blur?.();
-      if (value === 'open') void onOpen(); else if (value === 'new') s.setDialog('new'); else if (value === 'setup') s.setDialog('setup'); else if (value === 'help') s.setDialog('help'); else if (value === 'start') s.setDialog('start'); else if (value === 'whats-new') useLaunch.getState().openNews(); else if (value === 'updates') s.setDialog('updates');
-      else if (s.view === 'editor') { if (value === 'brush-studio') { s.setTool('pen'); useWorkspace.getState().setLayout({ showProperties: true }); useWorkspace.setState({ focused: false, popout: window.matchMedia('(max-width: 800px)').matches ? 'properties' : null }); usePaint.getState().requestStudio(); } else if (value === 'paint-layer') s.addPaintLayer(); else if (value === 'paint-swap') usePaint.getState().swapColors(); else if (['paint-brush', 'paint-eraser', 'paint-fill', 'paint-picker'].includes(value)) s.setTool(({ 'paint-brush': 'pen', 'paint-eraser': 'eraser', 'paint-fill': 'bucket', 'paint-picker': 'eyedropper' } as const)[value as 'paint-brush']); else if (value === 'save') void onSave(); else if (value === 'save-as') void onSaveAs(); else if (value === 'save-copy') void onSaveCopy(); else if (value === 'export') s.setDialog('export'); else if (value === 'undo') s.undo(); else if (value === 'redo') s.redo(); }
-    };
-    const unsubscribe = window.luno?.onCommand(command);
-    const keys = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement, s = useEditor.getState();
-      if (bootPhase || event.defaultPrevented || s.dialog || s.blockReason || s.busy || s.interacting) return;
-      const key = event.key.toLowerCase();
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === 'b' && s.view === 'editor') { event.preventDefault(); s.setTool('pen'); useWorkspace.getState().setLayout({ showProperties: true }); useWorkspace.setState({ focused: false, popout: window.matchMedia('(max-width: 800px)').matches ? 'properties' : null }); usePaint.getState().requestStudio(); return; }
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === 'p') { event.preventDefault(); (document.activeElement as HTMLElement | null)?.blur?.(); s.setDialog('commands'); return; }
-      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) {
-        if ((event.metaKey || event.ctrlKey) && key === 's' && s.view === 'editor') { event.preventDefault(); void (event.shiftKey ? onSaveAs() : onSave()); }
+    if (!window.studio) return;
+    const a = window.studio.onOpen(async (file) => {
+      const state = useStudio.getState();
+      if (state.busy || state.interacting) {
+        state.notify("Finish the current operation before opening this file.");
         return;
       }
-      if (event.metaKey || event.ctrlKey) {
-        if (['s', 'o', 'n', 'z', 'y', 'd', 'e', 'g', 'a', 'c', 'v', 'home', '0', '+', '=', '-', '[', ']', ','].includes(key)) event.preventDefault();
-        if (key === 'o') void onOpen(); else if (key === 'n') event.shiftKey && s.view === 'editor' ? s.addScene() : s.setDialog('new');
-        else if (s.view === 'editor') {
-          if (key === 's') void (event.shiftKey ? onSaveAs() : onSave()); else if (key === 'e') s.setDialog('export'); else if (key === 'z') event.shiftKey ? s.redo() : s.undo(); else if (key === 'y') s.redo(); else if (key === 'd') { if (event.shiftKey && s.selectedId && s.project.animationMode !== 'frame-by-frame') s.editClip(s.selectedId, 'split', s.frame); else if (!event.shiftKey) s.duplicateSelected(); }
-          else if (key === 'g') event.shiftKey ? s.ungroupSelected() : s.groupSelected(); else if (key === 'a') s.selectAll(); else if (key === 'c') s.copyKeys(); else if (key === 'v') s.pasteKeys(); else if (key === 'home') void goHome();
-          else if (key === '0') { s.setZoom(100); s.setPan({ x: 0, y: 0 }); }
-          else if (key === '+' || key === '=') s.setZoom(s.zoom * 1.25); else if (key === '-') s.setZoom(s.zoom / 1.25);
-          else if (key === ',') s.setDialog('settings'); else if ((key === '[' || key === ']') && s.selectedId) s.moveLayer(s.selectedId, key === ']' ? 'up' : 'down');
+      await flush();
+      const doc = await adoptDocument(decode(file.bytes));
+      state.open(doc);
+      bind({
+        document: doc.id,
+        name: file.name,
+        hash: file.hash,
+        token: file.token,
+        snapshot: useStudio.getState().document!,
+      });
+    });
+    const b = window.studio.onPrepare(async () => {
+      const state = useStudio.getState();
+      if (state.busy || state.interacting)
+        throw new Error("An operation is still running.");
+      await flush();
+    });
+    return () => {
+      a();
+      b();
+    };
+  }, []);
+  useEffect(() => {
+    if (!s.playing || !s.document || s.view !== "studio") return;
+    const scene = s.document.scenes.find((sc) => sc.id === s.sceneId)!;
+    let initial =
+        s.frame < scene.work[0] || s.frame > scene.work[1]
+          ? scene.work[0]
+          : s.frame,
+      start = performance.now(),
+      request = 0;
+    const tick = (time: number) => {
+      const state = useStudio.getState(),
+        sc = state.document?.scenes.find((sc) => sc.id === state.sceneId);
+      if (!sc || !state.playing) return;
+      const next =
+        initial +
+        Math.floor(((time - start) / 1000) * state.document!.canvas.fps);
+      if (next > sc.work[1]) {
+        if (state.preferences.loop) {
+          initial = sc.work[0];
+          start = time;
+          state.set({ frame: initial });
+        } else {
+          state.set({ frame: sc.work[1], playing: false });
+          return;
+        }
+      } else state.set({ frame: next });
+      request = requestAnimationFrame(tick);
+    };
+    request = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(request);
+  }, [s.playing, s.view, s.sceneId]);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const state = useStudio.getState();
+      window.studio?.updates.activity(
+        !state.busy &&
+          !state.interacting &&
+          !state.playing &&
+          state.saveState === "saved" &&
+          !dirty() &&
+          !state.dialog,
+        activity.current,
+      );
+    }, 2000);
+    const active = () => {
+      activity.current = Date.now();
+    };
+    for (const name of ["pointerdown", "keydown", "wheel", "input"])
+      document.addEventListener(name, active, true);
+    return () => {
+      clearInterval(timer);
+      for (const name of ["pointerdown", "keydown", "wheel", "input"])
+        document.removeEventListener(name, active, true);
+    };
+  }, []);
+  useEffect(
+    () =>
+      window.studio?.onCommand((id) => {
+        const state = useStudio.getState();
+        if (state.dialog) return;
+        const command = commands(() => input.current?.click()).find(
+          (c) => c.id === id,
+        );
+        if (command) execute(command);
+      }),
+    [],
+  );
+  useEffect(() => {
+    const keys = (event: KeyboardEvent) => {
+      const state = useStudio.getState();
+      if (event.defaultPrevented || state.busy || state.dialog) return;
+      const target = event.target as HTMLElement,
+        key = event.key.toLowerCase(),
+        mod = event.metaKey || event.ctrlKey,
+        editing =
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+          target.isContentEditable;
+      if (mod && key === "s") {
+        event.preventDefault();
+        void saveFile(event.shiftKey);
+        return;
+      }
+      if (mod && key === "o") {
+        event.preventDefault();
+        void openFile();
+        return;
+      }
+      if (mod && key === "e") {
+        event.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
+        state.set({ dialog: "export" });
+        return;
+      }
+      if (mod && event.shiftKey && key === "p") {
+        event.preventDefault();
+        state.set({ dialog: "commands" });
+        return;
+      }
+      if (editing) return;
+      if (state.interacting) {
+        if (key === "escape") state.cancelGesture();
+        return;
+      }
+      if (mod) {
+        const mapping: Record<string, string> = {
+          n: "new",
+          z: event.shiftKey ? "redo" : "undo",
+          y: "redo",
+          d: "duplicate",
+          g: "group",
+          c: "copy-keys",
+          v: "paste-keys",
+        };
+        const id = mapping[key];
+        if (id) {
+          event.preventDefault();
+          const command = commands(() => input.current?.click()).find(
+            (c) => c.id === id,
+          );
+          if (command) execute(command);
         }
         return;
       }
-      if (key === '?' || key === 'f1') { event.preventDefault(); s.setDialog('help'); }
-      if (s.view !== 'editor') return;
-      const tools: Record<string, Tool> = { v: 'select', h: 'hand', b: 'pen', e: 'eraser', f: 'bucket', i: 'eyedropper', r: 'rectangle', o: 'ellipse', g: 'rig', t: 'text', c: 'camera' };
-      if (tools[key]) { s.setTool(tools[key]); if (key === 'g') s.setPreference('showBones', true); }
-      if (key === 'tab' && (target === document.body || !!target.closest('.stage-area'))) { event.preventDefault(); useWorkspace.getState().toggleFocus(); }
-      if (key === '<' || key === '>' || key === ',' || key === '.') { event.preventDefault(); s.setPlaying(false); s.setFrame(s.frame + (key === '<' || key === ',' ? -1 : 1)); }
-      if (key === ' ') { event.preventDefault(); s.setPlaying(!s.playing); }
-      if (key === 'k') s.addKeyframe(); if (key === 'u') s.setPreference('onionSkin', !s.preferences.onionSkin);
-      if (key === 'f6') { event.preventDefault(); s.project.animationMode === 'frame-by-frame' ? s.nextDrawingFrame('duplicate') : s.duplicateCel(); } if (key === 'f7') { event.preventDefault(); s.project.animationMode === 'frame-by-frame' ? s.nextDrawingFrame('blank') : s.blankCel(); }
-      if (key === 'delete' || key === 'backspace') { event.preventDefault(); s.keySelection.length ? s.deleteKeys() : s.deleteSelected(); }
-      if (key === 'arrowleft' || key === 'arrowright') { event.preventDefault(); s.setPlaying(false); s.setFrame(s.frame + (key === 'arrowleft' ? -1 : 1) * (event.shiftKey ? 12 : 1)); }
-      if (key === 'x') usePaint.getState().swapColors(); if (key === 'd') usePaint.getState().resetColors();
-      if ((key === '[' || key === ']') && ['pen', 'eraser'].includes(s.tool)) { event.preventDefault(); const step = s.preferences.brushSize < 10 ? 1 : 5; s.setPreference('brushSize', Math.max(1, Math.min(256, s.preferences.brushSize + (key === '[' ? -step : step)))); return; }
-      if (key === '[') s.setWorkArea(s.frame, Math.max(s.frame, s.project.workArea.end)); if (key === ']') s.setWorkArea(Math.min(s.frame, s.project.workArea.start), s.frame);
-      if (key === 'escape') { s.select(null); useEditor.setState({ keySelection: [] }); }
+      if (state.view !== "studio" || !state.document) return;
+      const sc = state.document.scenes.find((sc) => sc.id === state.sceneId)!;
+      const toolKeys: Record<string, Tool> = {
+        v: "select",
+        h: "hand",
+        b: "brush",
+        e: "erase",
+        f: "fill",
+        i: "picker",
+        r: "rect",
+        o: "ellipse",
+        t: "text",
+        g: "rig",
+      };
+      if (toolKeys[key]) state.set({ tool: toolKeys[key], playing: false });
+      if (key === " ") {
+        event.preventDefault();
+        state.set({ playing: !state.playing });
+      }
+      if (key === "tab") {
+        event.preventDefault();
+        state.set({ focused: !state.focused });
+      }
+      if (key === "u") state.pref("onion", !state.preferences.onion);
+      if (key === "k") state.addKey();
+      if (key === "s") state.splitClip();
+      if (key === "f6" || key === "f7") {
+        event.preventDefault();
+        state.newCel(key === "f6");
+      }
+      if (key === "delete" || key === "backspace") {
+        event.preventDefault();
+        state.keySelection.length ? state.deleteKeys() : state.remove();
+      }
+      if (key === "x") {
+        const fg = state.preferences.foreground;
+        state.pref("foreground", state.preferences.background);
+        state.pref("background", fg);
+      }
+      if (key === "d") {
+        state.pref("foreground", "#343345");
+        state.pref("background", "#f6f5f1");
+      }
+      if (key === "[" || key === "]") {
+        event.preventDefault();
+        if (["brush", "erase"].includes(state.tool))
+          state.pref("brush", {
+            ...state.preferences.brush,
+            size: clamp(
+              state.preferences.brush.size + (key === "]" ? 2 : -2),
+              1,
+              256,
+            ),
+          });
+        else
+          state.workArea(
+            key === "[" ? state.frame : sc.work[0],
+            key === "]" ? state.frame : sc.work[1],
+          );
+      }
+      if (key === "." || key === ",") {
+        event.preventDefault();
+        state.set({
+          frame: clamp(state.frame + (key === "." ? 1 : -1), 0, sc.length - 1),
+          playing: false,
+        });
+      }
+      if (["arrowleft", "arrowright", "arrowup", "arrowdown"].includes(key)) {
+        event.preventDefault();
+        if (target.tagName === "CANVAS" && state.selected.length) {
+          const step = event.shiftKey ? 10 : 1;
+          for (const id of state.selected) {
+            const l = sc.layers.find((l) => l.id === id);
+            if (l) {
+              const p = pose(l, state.frame);
+              state.transform(id, {
+                x:
+                  p.x +
+                  (key === "arrowleft"
+                    ? -step
+                    : key === "arrowright"
+                      ? step
+                      : 0),
+                y:
+                  p.y +
+                  (key === "arrowup" ? -step : key === "arrowdown" ? step : 0),
+              });
+            }
+          }
+        } else
+          state.set({
+            frame: clamp(
+              state.frame + (key === "arrowleft" ? -1 : 1),
+              0,
+              sc.length - 1,
+            ),
+            playing: false,
+          });
+      }
+      if (key === "escape") state.select(null);
     };
-    window.addEventListener('keydown', keys); return () => { window.removeEventListener('keydown', keys); unsubscribe?.(); };
-  }, [onOpen, onSave, onSaveAs, onSaveCopy, bootPhase]);
-
-  return <><SoundPlayback /><div className={`app-shell ${view === 'home' ? 'home-mode' : ''}`} data-booting={!!bootPhase} inert={!!blocked || !!bootPhase || !!videoProgress} aria-busy={busy || !!blocked || !!bootPhase} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file && !useEditor.getState().dialog && !useEditor.getState().blockReason && !useEditor.getState().busy && !useEditor.getState().interacting) void importFile(file); }}>
-    {view === 'home' ? <ProjectHome onOpen={() => void onOpen()} /> : <>
-      <Header onOpen={() => void onOpen()} onSave={() => void onSave()} onSaveAs={() => void onSaveAs()} onSaveCopy={() => void onSaveCopy()} onImport={onImport} onImportAudio={onImportAudio} onImportVideo={onImportVideo} />
-      <StudioWorkspace onImport={onImport} onImportAudio={onImportAudio} onImportVideo={onImportVideo} /><StudioStatus />
-    </>}
-    <Toast /><UpdateBanner />
-    {dialog === 'commands' ? <CommandPalette onOpen={() => void onOpen()} onSave={() => void onSave()} onSaveAs={() => void onSaveAs()} onSaveCopy={() => void onSaveCopy()} onImport={onImport} onImportAudio={onImportAudio} onImportVideo={onImportVideo} /> : <Suspense fallback={<div className="dialog-loading" role="status">Loading panel…</div>}>{dialog && <Dialogs onOpen={() => void onOpen()} />}</Suspense>}
-
-    <input ref={inputProject} type="file" className="visually-hidden" aria-label="Open Luno project file" accept=".lam,.luno,.json" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
-    <input ref={inputImage} type="file" className="visually-hidden" aria-label="Import image file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
-    <input ref={inputVideo} type="file" className="visually-hidden" aria-label="Import video file" accept=".mp4,.webm,.mov,.m4v" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
-    <input ref={inputAudio} type="file" className="visually-hidden" aria-label="Import audio file" accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,.webm" onChange={async e => { const file = e.target.files?.[0]; if (file) await importFile(file); e.target.value = ''; }} />
-  </div>{bootPhase && (!window.luno?.startup || bootError) && <StartupPopup phase={bootPhase} error={bootError} onRetry={() => setBootAttempt(n => n + 1)} />}{videoProgress && <div className="media-import-overlay" role="dialog" aria-modal="true" aria-label="Importing video"><div><img src="./favicon.svg" width="54" height="54" alt="" /><h2>Preparing your footage</h2><p>{videoProgress.message}</p><progress value={videoProgress.value} max={1} aria-label="Video import progress" /><p className="muted-text">Embedded proxies up to 960 px · source file is unchanged</p><button className="button secondary" autoFocus onClick={() => videoAbort.current?.abort()}>Cancel import</button></div></div>}{blocked && <div className="safe-operation-overlay" role="status" aria-live="polite"><div><span><RefreshCw size={25} className="spin" /></span><h2>{blocked}</h2><p>Do not close Luno until this operation completes.</p></div></div>}</>;
+    window.addEventListener("keydown", keys);
+    return () => window.removeEventListener("keydown", keys);
+  }, []);
+  useEffect(() => {
+    const notice = s.notice;
+    if (!notice) return;
+    const timer = setTimeout(
+      () => {
+        if (useStudio.getState().notice?.id === notice.id)
+          useStudio.setState({ notice: null });
+      },
+      notice.error ? 8500 : 4200,
+    );
+    return () => clearTimeout(timer);
+  }, [s.notice]);
+  const importFile = async (file: File, reference = false) => {
+    const state = useStudio.getState();
+    if (state.busy || state.interacting) return;
+    if (file.name.toLowerCase().endsWith(".lam")) {
+      await importProject(file);
+      return;
+    }
+    if (!state.document || state.view !== "studio") {
+      state.notify("Create or open a document before importing media.");
+      return;
+    }
+    const expected = state.document.id;
+    state.set({ busy: true, playing: false });
+    abort.current = new AbortController();
+    try {
+      let asset: Asset,
+        companion: Asset | undefined,
+        note = "";
+      if (
+        file.type.startsWith("video/") ||
+        /\.(mov|mp4|webm|m4v)$/i.test(file.name)
+      ) {
+        if (reference) throw new Error("Use a raster image reference.");
+        setProgress(0);
+        const result = await importVideo(
+          file,
+          setProgress,
+          abort.current.signal,
+        );
+        asset = result.video;
+        companion = result.audio;
+        note = result.audioNote;
+      } else if (
+        file.type.startsWith("audio/") ||
+        /\.(wav|mp3|m4a|aac|ogg|flac)$/i.test(file.name)
+      ) {
+        if (reference) throw new Error("Use a raster image reference.");
+        asset = await importAudio(file);
+      } else asset = await importImage(file);
+      abort.current.signal.throwIfAborted();
+      if (state.media(asset, expected, reference, companion)) {
+        state.notify(
+          reference
+            ? "Reference embedded, excluded from renders."
+            : asset.kind === "video"
+              ? `Bounded video proxy imported. ${note}`
+              : "Media embedded in this document.",
+        );
+        if (reference) state.set({ navigator: "reference" });
+      }
+    } catch (e) {
+      state.notify(
+        abort.current.signal.aborted
+          ? "Import cancelled. No media was added."
+          : e instanceof Error
+            ? e.message
+            : "Import failed.",
+        !abort.current.signal.aborted,
+      );
+    } finally {
+      state.set({ busy: false });
+      setProgress(null);
+    }
+  };
+  const doc = s.document,
+    scene = doc?.scenes.find((sc) => sc.id === s.sceneId),
+    link = useFile((v) => (doc ? v.links[doc.id] : undefined));
+  return (
+    <>
+      <Audio />
+      <div
+        className="application"
+        inert={s.busy || !s.ready}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (!s.dialog && e.dataTransfer.files[0])
+            void importFile(e.dataTransfer.files[0]);
+        }}
+      >
+        {s.view === "home" || !doc || !scene ? (
+          <Home />
+        ) : (
+          <>
+            <Header onImport={() => input.current?.click()} />
+            <div
+              className={`editor ${s.focused ? "focused" : ""}`}
+              style={
+                {
+                  "--left-width": `${s.preferences.left}px`,
+                  "--right-width": `${s.preferences.right}px`,
+                } as React.CSSProperties
+              }
+            >
+              <Toolbox />
+              <div className="workbench">
+                <div
+                  className="upper-workbench"
+                  style={
+                    {
+                      "--left-width": `${s.preferences.left}px`,
+                      "--right-width": `${s.preferences.right}px`,
+                    } as React.CSSProperties
+                  }
+                >
+                  <Navigator
+                    onImport={() => input.current?.click()}
+                    onReference={() => referenceInput.current?.click()}
+                  />
+                  <Resizer side="left" />
+                  <Stage />
+                  <Resizer side="right" />
+                  <Inspector />
+                </div>
+                <Resizer side="timeline" />
+                <Timeline onSound={() => audioInput.current?.click()} />
+              </div>
+              {s.popout && (
+                <>
+                  <button
+                    className="dock-backdrop"
+                    aria-label="Dismiss dock overlay"
+                    onClick={() => s.set({ popout: null })}
+                  />
+                  <button
+                    className={`dock-close ${s.popout}`}
+                    aria-label="Close dock overlay"
+                    onClick={() => s.set({ popout: null })}
+                  >
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+            <footer className="studio-status">
+              <span>
+                <Circle size={7} fill="currentColor" />
+                {s.workspace.toUpperCase()} <i>/</i>
+                {s.selected.length} selected
+              </span>
+              <span>
+                {doc.canvas.width} × {doc.canvas.height}
+                <i>·</i>
+                {doc.canvas.fps} fps<i>·</i>Frame {s.frame + 1}
+              </span>
+              <span className="external-file-state">
+                {link
+                  ? `${link.snapshot !== doc ? "Modified · " : ""}${link.name}`
+                  : "Library document · Save As for external .lam"}
+              </span>
+              <button
+                aria-label="Toggle navigator"
+                onClick={() =>
+                  s.set({
+                    popout: s.popout === "left" ? null : "left",
+                    focused: false,
+                  })
+                }
+              >
+                <PanelLeft size={12} />
+              </button>
+              <button
+                aria-label="Toggle inspector"
+                onClick={() =>
+                  s.set({
+                    popout: s.popout === "right" ? null : "right",
+                    focused: false,
+                  })
+                }
+              >
+                <PanelRight size={12} />
+              </button>
+              <button onClick={() => s.set({ dialog: "commands" })}>
+                ⌘ / COMMANDS
+              </button>
+            </footer>
+          </>
+        )}
+        {s.notice && (
+          <div
+            className={`toast ${s.notice.error ? "error" : ""}`}
+            role={s.notice.error ? "alert" : "status"}
+          >
+            <Check size={14} />
+            <span>{s.notice.text}</span>
+            <button
+              aria-label="Dismiss message"
+              onClick={() => s.set({ notice: null })}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+        <UpdateNotice />
+        {s.dialog && <Dialogs onImport={() => input.current?.click()} />}
+        <input
+          ref={input}
+          className="hidden-input"
+          type="file"
+          aria-label="Import media file"
+          accept="image/png,image/jpeg,image/webp,audio/*,video/*,.lam"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void importFile(file);
+          }}
+        />
+        <input
+          ref={referenceInput}
+          className="hidden-input"
+          type="file"
+          aria-label="Import reference file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void importFile(file, true);
+          }}
+        />
+        <input
+          ref={audioInput}
+          className="hidden-input"
+          type="file"
+          aria-label="Import sound file"
+          accept="audio/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void importFile(file);
+          }}
+        />
+      </div>
+      {!s.ready && (
+        <div className="boot-card" role="status">
+          <img src="./mark.svg" alt="" />
+          <span>Opening Luno Studio</span>
+          {bootError ? (
+            <>
+              <p>{bootError}</p>
+              <button
+                onClick={() => {
+                  setBootError("");
+                  setBoot((n) => n + 1);
+                }}
+              >
+                Retry library
+              </button>
+            </>
+          ) : (
+            <LoaderCircle size={16} className="spin" />
+          )}
+        </div>
+      )}
+      {progress !== null && (
+        <Modal title="Preparing media" close={() => abort.current?.abort()}>
+          <div className="dialog-intro">
+            <span className="eyebrow">BOUNDED PROXY / LOCAL DECODE</span>
+            <h1>Preparing your footage.</h1>
+            <p>
+              Your original file is unchanged. This document embeds a
+              960px/20fps proxy and decoded audio where available.
+            </p>
+          </div>
+          <progress value={progress} max={1} />
+          <div className="dialog-footer">
+            <span>{Math.round(progress * 100)}%</span>
+            <button
+              className="button secondary"
+              onClick={() => abort.current?.abort()}
+            >
+              Cancel import
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
 }
-
-function SoundPlayback() {
-  const project = useEditor(s => s.project), frame = useEditor(s => s.frame), playing = useEditor(s => s.playing), view = useEditor(s => s.view);
-  const audio = useRef<AudioPlayback | null>(null);
-  useEffect(() => { audio.current ??= new AudioPlayback(); audio.current.update(project, frame, playing && view === 'editor', () => useEditor.getState().notify('Your browser blocked sound playback. Click Play again, or use the desktop app.', 'info')); }, [project, frame, playing, view]);
-  useEffect(() => () => audio.current?.dispose(), []);
+function Resizer({ side }: { side: "left" | "right" | "timeline" }) {
+  const value = useStudio((s) => s.preferences[side]),
+    drag = useRef<{ position: number; value: number } | null>(null),
+    vertical = side !== "timeline",
+    min = side === "left" ? 190 : side === "right" ? 250 : 180,
+    max = side === "left" ? 350 : side === "right" ? 420 : 460;
+  const finish = (e: PointerEvent<HTMLDivElement>) => {
+    drag.current = null;
+    useStudio.setState({ interacting: false });
+    if (e.currentTarget.hasPointerCapture(e.pointerId))
+      e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+  return (
+    <div
+      className={`resizer ${side === "timeline" ? "bottom" : side}`}
+      role="separator"
+      tabIndex={0}
+      aria-label={`Resize ${side} dock`}
+      aria-orientation={vertical ? "vertical" : "horizontal"}
+      aria-valuenow={value}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      onPointerDown={(e) => {
+        if (e.button) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { position: vertical ? e.clientX : e.clientY, value };
+        useStudio.setState({ interacting: true });
+      }}
+      onPointerMove={(e) => {
+        if (drag.current) {
+          const delta =
+            (vertical ? e.clientX : e.clientY) - drag.current.position;
+          useStudio
+            .getState()
+            .pref(
+              side,
+              clamp(
+                drag.current.value + delta * (side === "left" ? 1 : -1),
+                min,
+                max,
+              ),
+            );
+        }
+      }}
+      onPointerUp={finish}
+      onPointerCancel={finish}
+      onLostPointerCapture={() => {
+        if (drag.current) {
+          drag.current = null;
+          useStudio.setState({ interacting: false });
+        }
+      }}
+      onKeyDown={(e) => {
+        if (
+          ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          useStudio
+            .getState()
+            .pref(
+              side,
+              clamp(
+                value +
+                  (e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : -1) *
+                    (side === "left" ? 1 : -1) *
+                    (e.shiftKey ? 20 : 5),
+                min,
+                max,
+              ),
+            );
+        }
+      }}
+    />
+  );
+}
+function Audio() {
+  const s = useStudio(),
+    engine = useRef<PlaybackAudio | null>(null);
+  useEffect(() => {
+    engine.current ??= new PlaybackAudio();
+    const scene = s.document?.scenes.find((sc) => sc.id === s.sceneId);
+    if (s.document && scene)
+      engine.current.update(
+        s.document,
+        scene,
+        s.frame,
+        s.playing && s.view === "studio",
+        (message) => s.notify(message),
+      );
+    else engine.current.stop();
+  }, [s.document, s.sceneId, s.frame, s.playing, s.view]);
+  useEffect(() => () => engine.current?.dispose(), []);
   return null;
 }

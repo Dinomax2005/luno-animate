@@ -1,82 +1,788 @@
-import { useEffect, useRef, useState } from 'react';
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical, Bone, Camera, ChevronDown, ChevronRight, Diamond, Footprints, Hand, HelpCircle, Link2, MoveVertical, Plus, RotateCcw, RotateCw, SlidersHorizontal, Trash2, Volume2, Wind, CircleDot, Eye, ArrowRight } from 'lucide-react';
-import { BrushStudio } from './BrushStudio';
-import { isPaintTool, usePaint } from '../store/paint';
-import { useEditor, useSelectedItem } from '../store/editor';
-import { EasingGraph } from './EasingGraph';
-import { NumberField } from './NumberField';
-export { NumberField } from './NumberField';
-import { MotionEffects, MotionTiming, PropertyKeys } from './MotionPanels';
-import { sampleCamera } from '../engine/animation';
-import type { Easing, Keyframe, Preset, SceneItem } from '../engine/types';
-import { LayerIcon } from './Library';
-
-const presets: { id: Preset; label: string; sub: string; icon: typeof Hand }[] = [
-  { id: 'wave', label: 'Wave', sub: 'Keyframed arm rotation', icon: Hand }, { id: 'bounce', label: 'Bounce', sub: 'Eased vertical translation', icon: MoveVertical },
-  { id: 'walk', label: 'Walk', sub: 'Alternating limb poses', icon: Footprints }, { id: 'spin', label: 'Spin', sub: 'Full rotation', icon: RotateCw },
-  { id: 'float', label: 'Float', sub: 'Continuous oscillation', icon: Wind }, { id: 'pulse', label: 'Pulse', sub: 'Animated scale', icon: CircleDot },
-  { id: 'fade', label: 'Fade', sub: 'Opacity interpolation', icon: Eye }, { id: 'slide', label: 'Slide in', sub: 'Position interpolation', icon: ArrowRight },
-];
-const easingLabels: { value: Easing; label: string }[] = [ { value: 'ease-in-out', label: 'Ease in / out' }, { value: 'linear', label: 'Linear' }, { value: 'ease-in', label: 'Ease in' }, { value: 'ease-out', label: 'Ease out' }, { value: 'hold', label: 'Hold' }, { value: 'back-out', label: 'Overshoot' }, { value: 'bounce-out', label: 'Bounce out' }, { value: 'elastic-out', label: 'Elastic' }, { value: 'bezier', label: 'Custom Bézier' } ];
-const palette = ['#c5b1ed', '#a3bea4', '#e9c669', '#f0b793', '#a4c7d4', '#d5a8b0'];
-function EasingEditor({ keys, disabled = false }: { keys: Keyframe[]; disabled?: boolean }) {
-  const frame = useEditor(s => s.frame); const current = [...keys].reverse().find(k => k.frame <= frame) ?? keys[0]; const curve = current?.easing ?? 'ease-in-out'; const bezier = current?.bezier ?? [0.42, 0, 0.58, 1];
-  return <section className="inspector-section easing-section"><div className="section-heading"><span>TWEEN INTERPOLATION</span></div><label className="select-field"><span>Easing</span><select aria-label="Keyframe easing" value={curve} disabled={!keys.length || disabled} onChange={e => useEditor.getState().setEasing(e.target.value as Easing)}>{easingLabels.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}</select></label><EasingGraph easing={curve} bezier={bezier as [number, number, number, number]} disabled={!keys.length || disabled} />{curve === 'bezier' && <div className="field-grid">{bezier.map((v, n) => <NumberField key={n} label={`Bezier ${['X1', 'Y1', 'X2', 'Y2'][n]}`} value={v} min={n % 2 ? -3 : 0} max={n % 2 ? 3 : 1} step={0.05} disabled={disabled} onChange={value => { const next = [...bezier] as [number, number, number, number]; next[n] = value; useEditor.getState().setBezier(next); }} />)}</div>}<p>{curve === 'hold' ? 'Constant value until the next keyframe.' : 'Interpolation to the next keyframe.'}</p><p className="inspector-note">Channels at the same frame share this key’s curve.</p></section>;
-}
-function KeyList({ id, name, keys, disabled = false }: { id: string; name: string; keys: Keyframe[]; disabled?: boolean }) {
-  const frame = useEditor(s => s.frame), p = useEditor(s => s.project);
-  return <section className="inspector-section motion-tab-section"><div className="section-heading"><span>KEYFRAMES</span><button className="icon-button small" disabled={disabled} aria-label="Add animation keyframe" onClick={() => useEditor.getState().addKeyframe()}><Plus size={14} /></button></div>{!keys.length ? <div className="keyframe-empty"><Diamond size={22} /><p>No transform keys for {name}.</p><button className="button secondary" disabled={disabled} onClick={() => useEditor.getState().addKeyframe()}>Insert keyframe <Plus size={13} /></button></div> : <div className="keyframe-list">{keys.map(k => <div key={k.id} className={k.frame === frame ? 'active' : ''}><button className="keyframe-list-select" onClick={e => useEditor.getState().selectKey(id, k.frame, e.shiftKey)}><Diamond size={12} /><span>Frame {String(k.frame + 1).padStart(3, '0')}</span><span>{(k.frame / p.fps).toFixed(2)}s</span></button><button className="icon-button small" disabled={disabled} aria-label={`Delete keyframe at frame ${k.frame + 1}`} onClick={() => useEditor.getState().removeKeyframe(id, k.frame)}><Trash2 size={12} /></button></div>)}</div>}</section>;
-}
-function CameraInspector() {
-  const p = useEditor(s => s.project), f = useEditor(s => s.frame), camera = sampleCamera(p.camera, f);
-  return <div className="inspector-content"><div className="object-title"><span className="object-type-icon"><Camera size={20} /></span><div><strong>Scene camera</strong><span>Animated viewport</span></div></div><section className="inspector-section"><div className="section-heading"><span>CAMERA TRANSFORM</span><button className="icon-button small" title="Reset camera and remove camera keys (Undo to restore)" aria-label="Reset camera" onClick={() => useEditor.getState().resetCamera()}><RotateCcw size={13} /></button></div><div className="field-grid"><NumberField label="Camera X" value={camera.x} onChange={x => useEditor.getState().editCamera({ x })} /><NumberField label="Camera Y" value={camera.y} onChange={y => useEditor.getState().editCamera({ y })} /><NumberField label="Camera zoom" value={camera.zoom * 100} min={5} max={2000} unit="%" onChange={v => useEditor.getState().editCamera({ zoom: v / 100 })} /><NumberField label="Camera rotation" value={camera.rotation} unit="°" onChange={rotation => useEditor.getState().editCamera({ rotation })} /></div><p className="inspector-note">Drag the canvas with the Camera tool to pan. Auto-key animates camera moves. Editor zoom never changes your exported animation.</p></section><KeyList id="@camera" name="camera" keys={p.camera.keys} /><EasingEditor keys={p.camera.keys} /></div>;
-}
-function AudioInspector({ id }: { id: string }) {
-  const p = useEditor(s => s.project); const clip = p.audio.find(a => a.id === id); if (!clip) return null;
-  const edit = (patch: Parameters<ReturnType<typeof useEditor.getState>['editAudio']>[1]) => useEditor.getState().editAudio(id, patch);
-  return <div className="inspector-content"><div className="object-title"><span className="object-type-icon"><Volume2 size={20} /></span><div><strong>{clip.name}</strong><span>Embedded sound · {clip.duration.toFixed(2)}s</span></div></div><section className="inspector-section"><div className="section-heading"><span>SOUND & TIMING</span></div><div className="field-grid"><NumberField label="Start frame" value={clip.startFrame + 1} min={1} max={p.duration} onChange={v => edit({ startFrame: v - 1 })} /><NumberField label="Trim start" value={clip.trimStart} min={0} max={clip.duration - 0.01} step={0.1} unit="s" onChange={trimStart => edit({ trimStart })} /><NumberField label="Volume" value={clip.volume * 100} min={0} max={100} unit="%" onChange={v => edit({ volume: v / 100 })} /></div><label className="checkbox-label"><input type="checkbox" checked={clip.muted} onChange={e => edit({ muted: e.target.checked })} /> Mute this sound</label><p className="inspector-note">Sound follows the playhead, loops with the work area, and is included in MP4 exports. Drag its timeline clip to change its start frame. Moving or trimming sound independently unlinks it from footage; volume and mute preserve the link.</p><button className="button secondary" onClick={() => useEditor.getState().removeAudio(id)}><Trash2 size={12} /> Remove sound</button></section></div>;
-}
-function RigSection({ item }: { item: SceneItem }) {
-  const [open, setOpen] = useState(true); const selectedBone = useEditor(s => s.selectedBone), tool = useEditor(s => s.tool), prefs = useEditor(s => s.preferences);
-  const bone = item.rig?.bones.find(b => b.id === selectedBone); if (!item.rig) return null;
-  const constraints = bone?.minAngle !== undefined || bone?.maxAngle !== undefined;
-  return <section className="inspector-section rig-section"><button className="section-heading section-toggle" onClick={() => setOpen(!open)}><span><Bone size={13} /> CHARACTER RIG</span>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button>{open && <><div className="rig-status"><span><span className="green-dot" /> FK / IK enabled</span><span>{item.rig.bones.length} bones</span></div><div className="rig-actions"><button className={`button pose-button ${tool === 'rig' ? 'posing' : ''}`} disabled={item.locked} onClick={() => { useEditor.getState().setTool('rig'); useEditor.getState().setPreference('showBones', true); }}><Bone size={14} />{tool === 'rig' ? 'Posing character' : 'Pose character'}<span>G</span></button><button className="icon-button reset-rig" aria-label="Reset character pose" disabled={item.locked} onClick={() => useEditor.getState().resetRig()}><RotateCcw size={15} /></button></div><label className="select-field rig-style"><span>Artwork</span><select aria-label="Rig artwork style" value={item.characterStyle ?? 'milo'} disabled={item.locked} onChange={e => useEditor.getState().editItem(item.id, { characterStyle: e.target.value as 'milo' | 'skeleton' })}><option value="milo">Milo character</option><option value="skeleton">Your cutout artwork</option></select></label><label className="checkbox-label"><input type="checkbox" checked={prefs.inverseKinematics} onChange={e => useEditor.getState().setPreference('inverseKinematics', e.target.checked)} /> Connected limb IK</label>{bone && <div className="bone-properties"><div className="selected-joint"><Link2 size={12} />{bone.name}</div><div className="field-grid"><NumberField label="Angle" value={bone.angle} min={bone.minAngle ?? -3600} max={bone.maxAngle ?? 3600} unit="°" disabled={item.locked || bone.locked} onChange={angle => useEditor.getState().editBone(item.id, { [bone.id]: angle })} /><NumberField label="Length" value={bone.length} min={0} max={1000} unit="px" disabled={item.locked} onChange={length => useEditor.getState().editBoneProperties(item.id, bone.id, { length })} /></div><label className="select-field rig-parent"><span>Parent</span><select aria-label="Bone parent" disabled={item.locked} value={bone.parentId ?? ''} onChange={e => useEditor.getState().editBoneProperties(item.id, bone.id, { parentId: e.target.value || null })}><option value="">Root / no parent</option>{item.rig.bones.filter(b => b.id !== bone.id).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label><label className="checkbox-label"><input type="checkbox" checked={bone.locked ?? false} disabled={item.locked} onChange={e => useEditor.getState().editBoneProperties(item.id, bone.id, { locked: e.target.checked })} /> Lock this joint</label><label className="checkbox-label"><input type="checkbox" checked={constraints} disabled={item.locked} onChange={e => useEditor.getState().editBoneProperties(item.id, bone.id, { minAngle: e.target.checked ? -180 : undefined, maxAngle: e.target.checked ? 180 : undefined })} /> Joint angle limits</label>{constraints && <div className="field-grid"><NumberField label="Minimum angle" value={bone.minAngle ?? -180} min={-3600} max={bone.maxAngle ?? 3600} unit="°" onChange={minAngle => useEditor.getState().editBoneProperties(item.id, bone.id, { minAngle })} /><NumberField label="Maximum angle" value={bone.maxAngle ?? 180} min={bone.minAngle ?? -3600} max={3600} unit="°" onChange={maxAngle => useEditor.getState().editBoneProperties(item.id, bone.id, { maxAngle })} /></div>}</div>}<div className="rig-caption"><span>Parent hierarchy · IK constraints</span><button className="text-link" disabled={item.locked} onClick={() => useEditor.getState().addBone()}><Plus size={11} /> Add bone</button></div></>}</section>;
-}
-function AttachmentSection({ item }: { item: SceneItem }) {
-  const project = useEditor(s => s.project); const rigs = project.items.filter(i => i.type === 'character' && i.id !== item.id);
-  if (!rigs.length || item.type === 'character' || item.type === 'group') return null;
-  const rig = rigs.find(i => i.id === item.attachment?.characterId);
-  return <section className="inspector-section attachment-section"><div className="section-heading"><span><Link2 size={12} /> CUTOUT RIGGING</span></div><label className="form-label">Attach to character<select aria-label="Attach to character" disabled={item.locked} value={item.attachment?.characterId ?? ''} onChange={e => useEditor.getState().bindToBone(item.id, e.target.value || null)}><option value="">No joint attachment</option>{rigs.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>{rig && <><label className="form-label">Follow joint<select aria-label="Follow joint" value={item.attachment?.boneId} disabled={item.locked} onChange={e => useEditor.getState().bindToBone(item.id, rig.id, e.target.value)}>{rig.rig?.bones.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label><label className="form-label">Attachment point<select aria-label="Attachment point" value={item.attachment?.anchor} disabled={item.locked} onChange={e => useEditor.getState().editItem(item.id, { attachment: { ...item.attachment!, anchor: Number(e.target.value) } })}><option value={0}>Start of bone</option><option value={0.5}>Center of bone</option><option value={1}>Joint / end of bone</option></select></label></>}<p className="inspector-note">Separate artwork parts follow this joint, including IK poses. Binding fits the art to the joint and replaces its own transform keys (Undo to restore). Adjust scale, rotation, and X/Y offsets afterward.</p></section>;
-}
+import { useEffect, useState } from "react";
+import {
+  ArrowRight,
+  Bone,
+  Diamond,
+  Plus,
+  RotateCcw,
+  Settings2,
+  SlidersHorizontal,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+import { useStudio } from "../state/studio";
+import { celAt, channelAt, pose } from "../core/motion";
+import { uid, type Key } from "../core/model";
+import { BrushPanel, ColorPanel } from "./BrushPanel";
+import { NumberField, Section } from "./Common";
 export function Inspector() {
-  const item = useSelectedItem(), project = useEditor(s => s.project), selectedCamera = useEditor(s => s.selectedCamera), selectedAudio = useEditor(s => s.selectedAudio), ids = useEditor(s => s.selectedIds);
-  const opacityGesture = useRef({ active: false, checkpointed: false });
-  const finishOpacity = () => { opacityGesture.current = { active: false, checkpointed: false }; useEditor.getState().setInteracting(false); };
-  const [tab, setTab] = useState<'object' | 'motion' | 'effects' | 'timing' | 'paint'>('object'), [preset, setPreset] = useState<Preset>('wave');
-  const tool = useEditor(s => s.tool), previousTool = useRef(tool);
-  const studioRequest = usePaint(s => s.studioRequest);
-  useEffect(() => { if (studioRequest) setTab('paint'); }, [studioRequest]);
-  useEffect(() => { if (isPaintTool(tool)) setTab('paint'); else if (isPaintTool(previousTool.current)) setTab('object'); previousTool.current = tool; }, [tool]);
-  const keys = item ? project.keyframes[item.id] ?? [] : [];
-  const edit = (patch: Partial<SceneItem>) => {
-    if (!item || item.locked) return;
-    const entries = Object.entries(patch), [property, value] = entries[0] ?? [];
-    if (project.animationMode !== 'frame-by-frame' && entries.length === 1 && ['x', 'y', 'rotation', 'opacity', 'scaleX', 'scaleY'].includes(property)) useEditor.getState().editMotionProperty(property as import('../engine/types').MotionProperty, value as number);
-    else useEditor.getState().editItem(item.id, patch);
-  };
-  return <aside className="inspector-panel"><div className="inspector-heading"><span>{tab === 'paint' ? 'Brush studio' : project.animationMode === 'video-editing' ? 'Video / layer studio' : project.animationMode === 'rigged' ? 'Motion / layer studio' : 'Properties'}</span><SlidersHorizontal size={15} /></div>{!selectedCamera && !selectedAudio && <div className="inspector-tabs"><button className={tab === 'paint' ? 'active' : ''} onClick={() => setTab('paint')}>Paint</button><button className={tab === 'object' ? 'active' : ''} onClick={() => setTab('object')}>Object</button><button className={tab === 'motion' ? 'active' : ''} onClick={() => setTab('motion')}>Motion {keys.length > 0 && <span className="motion-count">{keys.length}</span>}</button>{project.animationMode !== 'frame-by-frame' && <><button className={tab === 'effects' ? 'active' : ''} onClick={() => setTab('effects')}>Effects</button><button className={tab === 'timing' ? 'active' : ''} onClick={() => setTab('timing')}>Timing</button></>}</div>}
-    {tab === 'paint' && !selectedCamera && !selectedAudio ? <BrushStudio /> : selectedCamera ? <CameraInspector /> : selectedAudio ? <AudioInspector id={selectedAudio} /> : !item ? <div className="inspector-content document-properties"><div className="object-title"><span className="object-type-icon"><SlidersHorizontal size={19} /></span><div><strong>Document</strong><span>{project.sceneName} · {project.sceneOrder.length} scene{project.sceneOrder.length === 1 ? '' : 's'}</span></div></div>
-      <section className="inspector-section"><div className="section-heading"><span>STAGE</span></div><dl className="document-property-list"><div><dt>Width</dt><dd>{project.width} px</dd></div><div><dt>Height</dt><dd>{project.height} px</dd></div><div><dt>Frame rate</dt><dd>{project.fps} fps</dd></div><div><dt>Duration</dt><dd>{project.duration} frames</dd></div><div><dt>Layers</dt><dd>{project.items.length}</dd></div></dl><button className="button secondary" onClick={() => useEditor.getState().setDialog('settings')}>Document settings</button></section>
-      </div> : <div className="inspector-content"><div className="object-title"><span className="object-type-icon"><LayerIcon item={item} size={20} /></span><div><input aria-label="Layer name" key={item.id + item.name} defaultValue={item.name} disabled={item.locked} maxLength={100} onBlur={e => { if (e.target.value.trim() && e.target.value !== item.name) edit({ name: e.target.value.trim() }); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} /><span>{ids.length > 1 ? `${ids.length} layers selected` : item.type === 'character' ? 'Rigged character' : item.type === 'video' ? 'Embedded video clip' : item.type === 'image' ? 'Imported image' : item.type === 'drawing' ? `${item.cels?.length ?? 0} drawing cels` : item.type === 'text' ? 'Editable text' : item.type === 'group' ? 'Animated group' : 'Vector artwork'}</span></div><span className="object-status" /></div>{item.locked && <div className="lock-notice">This layer is locked. {project.items.find(i => i.id === item.id)?.locked ? <button onClick={() => useEditor.getState().editItem(item.id, { locked: false })}>Unlock</button> : <span>Unlock its parent in Layers.</span>}</div>}
-      {(project.animationMode === 'frame-by-frame' && tab !== 'motion' || tab === 'object') ? <>{project.animationMode !== 'frame-by-frame' && <PropertyKeys item={item} />}<section className="inspector-section"><div className="section-heading"><span>{project.animationMode === 'frame-by-frame' ? 'TRANSFORM' : 'MOVE & TRANSFORM'}</span><button className="icon-button small" aria-label="Reset object transform" title="Reset rotation and scale" disabled={item.locked} onClick={() => edit({ scaleX: 1, scaleY: 1, rotation: 0 })}><RotateCcw size={12} /></button></div><div className="field-grid"><NumberField label="X" value={item.x} onChange={x => edit({ x })} disabled={item.locked} /><NumberField label="Y" value={item.y} onChange={y => edit({ y })} disabled={item.locked} /><NumberField label="W" value={item.width} onChange={width => edit({ width, ...(item.type === 'path' ? { points: item.points?.map(p => ({ ...p, x: p.x * width / item.width })) } : {}) })} min={1} max={10000} unit="px" disabled={item.locked || ['character', 'drawing', 'group'].includes(item.type)} /><NumberField label="H" value={item.height} onChange={height => edit({ height, ...(item.type === 'path' ? { points: item.points?.map(p => ({ ...p, y: p.y * height / item.height })) } : {}) })} min={1} max={10000} unit="px" disabled={item.locked || ['character', 'drawing', 'group'].includes(item.type)} /><NumberField label="Rotate" value={item.rotation} onChange={rotation => edit({ rotation })} unit="°" disabled={item.locked} /><NumberField label="Scale" value={item.scaleX * 100} onChange={v => edit({ scaleX: v / 100, scaleY: v / 100 })} min={1} max={10000} unit="%" disabled={item.locked} /></div></section>
-      {item.type === 'path' && <section className="inspector-section paint-stroke-property"><div className="section-heading"><span>PAINT STROKE</span><span>{item.brush?.kind ?? 'legacy round'}</span></div><label className="select-field"><span>Stroke color</span><input aria-label="Vector paint color" type="color" value={/^#[a-f0-9]{6}$/i.test(item.stroke) ? item.stroke : '#000000'} disabled={item.locked} onChange={e => edit({ stroke: e.target.value })} /></label><button className="button secondary" disabled={item.locked} onClick={() => edit({ brush: { ...usePaint.getState().brush }, strokeWidth: useEditor.getState().preferences.brushSize, stroke: useEditor.getState().preferences.brushColor })}>Apply active brush & color</button><p className="inspector-note">Updates this editable vector stroke. Undo restores its original style.</p></section>}
-      {item.type === 'text' && <section className="inspector-section text-section"><div className="section-heading"><span>TEXT</span></div><label className="form-label">Text<textarea aria-label="Text content" key={item.id} defaultValue={item.text} maxLength={4000} rows={3} disabled={item.locked} onBlur={e => { if (e.target.value !== item.text) edit({ text: e.target.value }); }} /></label><div className="field-grid"><NumberField label="Font size" value={item.fontSize ?? 56} min={4} max={600} unit="px" disabled={item.locked} onChange={fontSize => edit({ fontSize })} /><label className="form-label">Weight<select aria-label="Text weight" value={item.fontWeight ?? 600} disabled={item.locked} onChange={e => edit({ fontWeight: Number(e.target.value) })}><option value={400}>Regular</option><option value={600}>Semibold</option><option value={700}>Bold</option></select></label></div><label className="select-field"><span>Alignment</span><select aria-label="Text alignment" value={item.textAlign ?? 'middle'} disabled={item.locked} onChange={e => edit({ textAlign: e.target.value as SceneItem['textAlign'] })}><option value="start">Left</option><option value="middle">Center</option><option value="end">Right</option></select></label></section>}
-      {item.type === 'drawing' && <section className="inspector-section cel-section"><div className="section-heading"><span>FRAME-BY-FRAME</span><span>{item.cels?.length ?? 0} cels</span></div><div className="cel-inspector-actions"><button className="button secondary" onClick={() => { useEditor.getState().setPreference('drawingMode', 'cel'); useEditor.getState().setTool('pen'); }}>Draw <span>B</span></button><button className="button secondary" disabled={item.locked} aria-label={project.animationMode === 'frame-by-frame' ? 'Next blank frame from Properties' : undefined} onClick={() => project.animationMode === 'frame-by-frame' ? useEditor.getState().nextDrawingFrame('blank') : useEditor.getState().blankCel()}>{project.animationMode === 'frame-by-frame' ? 'Blank next' : 'Blank'} <span>F7</span></button><button className="button secondary" disabled={item.locked} aria-label={project.animationMode === 'frame-by-frame' ? 'Duplicate next frame from Properties' : undefined} onClick={() => project.animationMode === 'frame-by-frame' ? useEditor.getState().nextDrawingFrame('duplicate') : useEditor.getState().duplicateCel()}>{project.animationMode === 'frame-by-frame' ? 'Copy next' : 'Copy'} <span>F6</span></button></div><label className="checkbox-label"><input type="checkbox" checked={item.holdCels !== false} disabled={item.locked} onChange={e => edit({ holdCels: e.target.checked })} /> Hold drawings until the next cel</label><p className="inspector-note">{project.animationMode === 'frame-by-frame' ? 'Blank next and Copy next advance without replacing an existing drawing. Uncreated frames stay blank.' : 'Blank cels stop a held drawing.'} Move cel circles in the timeline to change exposure. Onion skin shows neighboring drawings without exporting them.</p></section>}
-      {item.rig && <RigSection item={item} />}<AttachmentSection item={item} />
-      <section className="inspector-section align-section"><div className="section-heading"><span>ALIGN TO CANVAS</span></div><div className="align-buttons">{[{ id: 'left', label: 'Align left', icon: AlignStartVertical }, { id: 'center', label: 'Align center horizontally', icon: AlignCenterVertical }, { id: 'right', label: 'Align right', icon: AlignEndVertical }, { id: 'top', label: 'Align top', icon: AlignStartHorizontal }, { id: 'middle', label: 'Align center vertically', icon: AlignCenterHorizontal }, { id: 'bottom', label: 'Align bottom', icon: AlignEndHorizontal }].map(a => <button key={a.id} aria-label={a.label} title={a.label} disabled={item.locked || !!item.parentId || !!item.attachment} onClick={() => useEditor.getState().alignSelected(a.id as 'left')}><a.icon size={16} /></button>)}</div>{item.type === 'group' ? <button className="text-link ungroup-button" onClick={() => useEditor.getState().ungroupSelected()}>Ungroup & preserve motion</button> : ids.length > 1 && <button className="text-link ungroup-button" onClick={() => useEditor.getState().groupSelected()}>Group selected layers · Ctrl/⌘ G</button>}</section>
-      <section className="inspector-section appearance-section"><div className="section-heading"><span>APPEARANCE</span><span className="appearance-value">{Math.round(item.opacity * 100)}%</span></div>{!['image', 'video', 'group', 'drawing'].includes(item.type) && <div className="color-swatches">{palette.map(color => <button key={color} aria-label={`Set color ${color}`} aria-pressed={item.fill === color} className={item.fill === color ? 'selected' : ''} style={{ background: color }} disabled={item.locked} onClick={() => edit({ fill: color })} />)}<label className="custom-color" title="Custom color"><Plus size={13} /><input type="color" aria-label="Custom object color" value={item.fill.startsWith('#') ? item.fill : '#c5b1ed'} disabled={item.locked} onChange={e => edit({ fill: e.target.value })} /></label></div>}<label className="opacity-slider"><span>Opacity</span><input aria-label="Object opacity" type="range" min="0" max="100" value={Math.round(item.opacity * 100)} disabled={item.locked} onPointerDown={() => { opacityGesture.current = { active: true, checkpointed: false }; useEditor.getState().setInteracting(true); }} onPointerUp={finishOpacity} onPointerCancel={finishOpacity} onChange={e => { const s = useEditor.getState(), gesture = opacityGesture.current; if (gesture.active && !gesture.checkpointed) { s.checkpoint(); gesture.checkpointed = true; } if (project.animationMode === 'frame-by-frame') s.editItem(item.id, { opacity: Number(e.target.value) / 100 }, !gesture.active); else s.editMotionProperty('opacity', Number(e.target.value) / 100, !gesture.active); }} /><span>{Math.round(item.opacity * 100)}</span></label><label className="select-field"><span>Blend</span><select aria-label="Layer blend mode" value={item.blendMode ?? 'normal'} disabled={item.locked || item.type === 'group'} onChange={e => edit({ blendMode: e.target.value as SceneItem['blendMode'] })}><option value="normal">Normal</option><option value="multiply">Multiply</option><option value="screen">Screen</option><option value="overlay">Overlay</option></select></label></section>
-      </> : tab === 'effects' ? <MotionEffects item={item} /> : tab === 'timing' ? <MotionTiming item={item} /> : <><KeyList id={item.id} name="layer" keys={keys} disabled={item.locked} /><EasingEditor keys={keys} disabled={item.locked} /><details className="inspector-section motion-presets"><summary>Motion presets</summary><label className="select-field"><span>Preset</span><select aria-label="Motion preset" value={preset} disabled={item.locked} onChange={e => setPreset(e.target.value as Preset)}>{presets.filter(p => p.id !== 'walk' || item.rig).map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label><button className="button secondary" disabled={item.locked} onClick={() => useEditor.getState().applyPreset(preset)}>Apply preset</button><p className="inspector-note">Replaces this layer’s transform keys. Undo restores the previous keys.</p></details></>}
-    </div>}
-    <div className="inspector-footer"><HelpCircle size={13} /><button onClick={() => useEditor.getState().setDialog('help')}>Tools & keyboard reference</button><span>↗</span></div>
-  </aside>;
+  const s = useStudio(),
+    doc = s.document!,
+    scene = doc.scenes.find((sc) => sc.id === s.sceneId)!,
+    selected = scene.layers.find((l) => l.id === s.selected[0]),
+    [tab, setTab] = useState<"properties" | "brush" | "color">("properties");
+  useEffect(() => {
+    if (["brush", "erase", "fill"].includes(s.tool)) setTab("brush");
+    else setTab("properties");
+  }, [s.tool]);
+  const values = selected ? pose(selected, s.frame) : null,
+    key = selected?.keys.find((k) =>
+      s.keySelection.some(
+        (ref) => ref.layer === selected.id && ref.id === k.id,
+      ),
+    );
+  return (
+    <aside className="inspector">
+      <div className="panel-title">
+        <SlidersHorizontal size={14} />
+        <span>Inspector</span>
+        <small>{selected ? s.selected.length : "Document"}</small>
+      </div>
+      <div
+        className="inspector-tabs"
+        role="tablist"
+        aria-label="Inspector panels"
+      >
+        {(["properties", "brush", "color"] as const).map((name) => (
+          <button
+            role="tab"
+            key={name}
+            aria-selected={tab === name}
+            onClick={() => setTab(name)}
+          >
+            {name[0].toUpperCase() + name.slice(1)}
+          </button>
+        ))}
+      </div>
+      <div className="inspector-scroll">
+        {tab === "brush" ? (
+          <BrushPanel />
+        ) : tab === "color" ? (
+          <ColorPanel />
+        ) : selected && values ? (
+          <>
+            <Section title={`${selected.kind} / ${selected.name}`}>
+              <label className="text-field">
+                <span>Layer name</span>
+                <input
+                  aria-label="Layer name"
+                  key={selected.id}
+                  defaultValue={selected.name}
+                  maxLength={100}
+                  onBlur={(e) => {
+                    if (
+                      e.target.value.trim() &&
+                      e.target.value !== selected.name
+                    )
+                      s.patchLayer(selected.id, {
+                        name: e.target.value.trim(),
+                      });
+                  }}
+                />
+              </label>
+            </Section>
+            <Section title="Transform">
+              <div className="field-grid">
+                {(["x", "y", "rotation"] as const).map((channel) => (
+                  <NumberField
+                    label={
+                      channel === "rotation"
+                        ? "Rotation"
+                        : channel.toUpperCase()
+                    }
+                    key={channel}
+                    value={values[channel]}
+                    unit={channel === "rotation" ? "°" : "px"}
+                    onChange={(v) => s.transform(selected.id, { [channel]: v })}
+                  />
+                ))}
+                <NumberField
+                  label="Opacity"
+                  min={0}
+                  max={100}
+                  value={values.opacity * 100}
+                  unit="%"
+                  onChange={(v) =>
+                    s.transform(selected.id, { opacity: v / 100 })
+                  }
+                />
+                <NumberField
+                  label="Scale X"
+                  min={1}
+                  max={10000}
+                  value={values.scaleX * 100}
+                  unit="%"
+                  onChange={(v) =>
+                    s.transform(selected.id, { scaleX: v / 100 })
+                  }
+                />
+                <NumberField
+                  label="Scale Y"
+                  min={1}
+                  max={10000}
+                  value={values.scaleY * 100}
+                  unit="%"
+                  onChange={(v) =>
+                    s.transform(selected.id, { scaleY: v / 100 })
+                  }
+                />
+              </div>
+              <div className="property-actions">
+                <button disabled={selected.locked} onClick={() => s.addKey()}>
+                  <Diamond size={12} />
+                  Insert key
+                </button>
+                <button
+                  aria-label="Reset layer transform"
+                  onClick={() =>
+                    s.transform(selected.id, {
+                      rotation: 0,
+                      scaleX: 1,
+                      scaleY: 1,
+                      opacity: 1,
+                    })
+                  }
+                >
+                  <RotateCcw size={12} />
+                </button>
+              </div>
+            </Section>
+            {selected.kind === "shape" && (
+              <Section title="Appearance">
+                <div className="field-grid">
+                  <NumberField
+                    label="Shape width"
+                    min={1}
+                    max={4096}
+                    value={selected.width}
+                    onChange={(v) => s.patchLayer(selected.id, { width: v })}
+                  />
+                  <NumberField
+                    label="Shape height"
+                    min={1}
+                    max={4096}
+                    value={selected.height}
+                    onChange={(v) => s.patchLayer(selected.id, { height: v })}
+                  />
+                </div>
+                <label className="color-line">
+                  Fill
+                  <input
+                    type="color"
+                    aria-label="Shape fill"
+                    value={selected.color}
+                    onChange={(e) =>
+                      s.patchLayer(selected.id, { color: e.target.value })
+                    }
+                  />
+                </label>
+                <NumberField
+                  label="Stroke width"
+                  min={0}
+                  max={256}
+                  value={selected.line}
+                  onChange={(v) => s.patchLayer(selected.id, { line: v })}
+                />
+                {selected.line > 0 && (
+                  <label className="color-line">
+                    Stroke
+                    <input
+                      type="color"
+                      aria-label="Shape stroke"
+                      value={selected.stroke}
+                      onChange={(e) =>
+                        s.patchLayer(selected.id, { stroke: e.target.value })
+                      }
+                    />
+                  </label>
+                )}
+              </Section>
+            )}
+            {selected.kind === "text" && (
+              <Section title="Typography">
+                <label className="text-field">
+                  <span>Text content</span>
+                  <textarea
+                    aria-label="Text content"
+                    key={selected.id}
+                    defaultValue={selected.text}
+                    rows={4}
+                    maxLength={4000}
+                    onBlur={(e) => {
+                      if (e.target.value !== selected.text)
+                        s.patchLayer(selected.id, { text: e.target.value });
+                    }}
+                  />
+                </label>
+                <NumberField
+                  label="Font size"
+                  min={4}
+                  max={600}
+                  value={selected.fontSize ?? 64}
+                  unit="px"
+                  onChange={(v) => s.patchLayer(selected.id, { fontSize: v })}
+                />
+                <label className="color-line">
+                  Color
+                  <input
+                    type="color"
+                    aria-label="Text color"
+                    value={selected.color}
+                    onChange={(e) =>
+                      s.patchLayer(selected.id, { color: e.target.value })
+                    }
+                  />
+                </label>
+              </Section>
+            )}
+            {selected.kind === "paint" && (
+              <Section title="Drawing exposures">
+                <label className="switch-line">
+                  <span>Hold between cels</span>
+                  <input
+                    type="checkbox"
+                    checked={selected.held !== false}
+                    onChange={(e) =>
+                      s.patchLayer(selected.id, { held: e.target.checked })
+                    }
+                  />
+                </label>
+                <div className="property-actions">
+                  <button onClick={() => s.newCel(false, true)}>
+                    <Plus size={12} />
+                    Blank next
+                  </button>
+                  <button onClick={() => s.newCel(true, true)}>
+                    <ArrowRight size={12} />
+                    Duplicate next
+                  </button>
+                </div>
+                <div className="cel-mark-stack">
+                  <span>
+                    {celAt(selected, s.frame)?.marks.length ?? 0} marks / frame{" "}
+                    {s.frame + 1}
+                  </span>
+                  {(celAt(selected, s.frame)?.marks ?? []).map(
+                    (mark, index) => (
+                      <button
+                        key={mark.id}
+                        onClick={() =>
+                          s.commit("Delete mark", (_d, sc) => {
+                            const l = sc.layers.find(
+                              (l) => l.id === selected.id,
+                            )!;
+                            let c = l.cels?.find((c) => c.frame === s.frame);
+                            if (!c) {
+                              c = {
+                                frame: s.frame,
+                                marks: structuredClone(
+                                  celAt(l, s.frame)?.marks ?? [],
+                                ),
+                              };
+                              l.cels = [...(l.cels ?? []), c];
+                            }
+                            c.marks.splice(index, 1);
+                          })
+                        }
+                      >
+                        <i style={{ background: mark.color }} />
+                        {mark.tool === "erase"
+                          ? "Eraser"
+                          : mark.tool === "fill"
+                            ? "Fill"
+                            : mark.brush.tip}
+                        <small>×</small>
+                      </button>
+                    ),
+                  )}
+                </div>
+              </Section>
+            )}
+            {selected.kind === "rig" && (
+              <Section title="Armature">
+                <label className="text-field">
+                  <span>Active joint</span>
+                  <select
+                    aria-label="Active joint"
+                    value={s.bone ?? selected.bones?.[0]?.id}
+                    onChange={(e) => s.set({ bone: e.target.value })}
+                  >
+                    {selected.bones?.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {(() => {
+                  const b = selected.bones?.find(
+                    (b) => b.id === (s.bone ?? selected.bones?.[0]?.id),
+                  );
+                  return b ? (
+                    <>
+                      <NumberField
+                        label="Joint angle"
+                        min={b.min}
+                        max={b.max}
+                        value={channelAt(
+                          b.angle,
+                          selected.keys,
+                          `bone:${b.id}`,
+                          s.frame,
+                        )}
+                        unit="°"
+                        onChange={(v) =>
+                          s.boneAngles(selected.id, { [b.id]: v })
+                        }
+                      />
+                      <NumberField
+                        label="Bone length"
+                        min={1}
+                        max={1000}
+                        value={b.length}
+                        unit="px"
+                        onChange={(v) =>
+                          s.patchLayer(selected.id, {
+                            bones: selected.bones!.map((x) =>
+                              x.id === b.id ? { ...x, length: v } : x,
+                            ),
+                          })
+                        }
+                      />
+                    </>
+                  ) : null;
+                })()}
+                <div className="property-actions">
+                  <button onClick={() => s.set({ tool: "rig" })}>
+                    <Bone size={12} />
+                    Pose with IK
+                  </button>
+                  <button
+                    onClick={() =>
+                      s.patchLayer(selected.id, {
+                        bones: [
+                          ...(selected.bones ?? []),
+                          {
+                            id: uid(),
+                            name: `Joint ${(selected.bones?.length ?? 0) + 1}`,
+                            parent: s.bone ?? selected.bones?.[0]?.id ?? null,
+                            length: 60,
+                            angle: 0,
+                            min: -180,
+                            max: 180,
+                          },
+                        ],
+                      })
+                    }
+                  >
+                    <Plus size={12} />
+                    Add bone
+                  </button>
+                </div>
+              </Section>
+            )}
+            {selected.kind !== "rig" && selected.kind !== "group" && (
+              <Section title="Rig attachment">
+                <select
+                  aria-label="Attach to rig"
+                  value={selected.bind?.rig ?? ""}
+                  onChange={(e) => {
+                    const rig = scene.layers.find(
+                      (l) => l.id === e.target.value,
+                    );
+                    s.bind(selected.id, rig?.id ?? null, rig?.bones?.[0]?.id);
+                  }}
+                >
+                  <option value="">None / stage space</option>
+                  {scene.layers
+                    .filter((l) => l.kind === "rig")
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                </select>
+                {selected.bind && (
+                  <select
+                    aria-label="Attachment joint"
+                    value={selected.bind.bone}
+                    onChange={(e) =>
+                      s.bind(selected.id, selected.bind!.rig, e.target.value)
+                    }
+                  >
+                    {scene.layers
+                      .find((l) => l.id === selected.bind!.rig)
+                      ?.bones?.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </Section>
+            )}
+            <Section title="Clip timing">
+              <div className="field-grid">
+                <NumberField
+                  label="Layer in"
+                  min={1}
+                  max={selected.end}
+                  value={selected.start + 1}
+                  onChange={(v) =>
+                    s.patchLayer(selected.id, { start: Math.round(v) - 1 })
+                  }
+                />
+                <NumberField
+                  label="Layer out"
+                  min={selected.start + 1}
+                  max={scene.length}
+                  value={selected.end}
+                  onChange={(v) =>
+                    s.patchLayer(selected.id, { end: Math.round(v) })
+                  }
+                />
+              </div>
+              {selected.kind === "video" && (
+                <NumberField
+                  label="Source in"
+                  min={0}
+                  max={30}
+                  step={0.05}
+                  value={selected.sourceIn}
+                  unit="s"
+                  onChange={(v) => s.patchLayer(selected.id, { sourceIn: v })}
+                />
+              )}
+              <label className="text-field">
+                <span>Blend mode</span>
+                <select
+                  aria-label="Layer blend mode"
+                  value={selected.blend}
+                  onChange={(e) =>
+                    s.patchLayer(selected.id, {
+                      blend: e.target.value as typeof selected.blend,
+                    })
+                  }
+                >
+                  <option value="source-over">Normal</option>
+                  <option value="multiply">Multiply</option>
+                  <option value="screen">Screen</option>
+                </select>
+              </label>
+            </Section>
+            {s.workspace !== "Draw" && (
+              <Section title="Motion presets">
+                <div className="motion-preset-grid">
+                  {(["fade", "slide", "spin", "pulse"] as const).map((kind) => (
+                    <button key={kind} onClick={() => s.presetMotion(kind)}>
+                      {kind}
+                    </button>
+                  ))}
+                </div>
+              </Section>
+            )}
+            {key && (
+              <Section title="Selected keyframe">
+                <label className="text-field">
+                  <span>Interpolation</span>
+                  <select
+                    aria-label="Keyframe interpolation"
+                    value={key.easing}
+                    onChange={(e) => s.easing(e.target.value as Key["easing"])}
+                  >
+                    <option value="linear">Linear</option>
+                    <option value="smooth">Smooth</option>
+                    <option value="in">Ease in</option>
+                    <option value="out">Ease out</option>
+                    <option value="hold">Hold</option>
+                    <option value="bezier">Custom Bézier</option>
+                  </select>
+                </label>
+                {key.easing === "bezier" && (
+                  <Curve
+                    curve={key.curve ?? [0.25, 0.1, 0.25, 1]}
+                    onChange={(c) => s.easing("bezier", c)}
+                  />
+                )}
+              </Section>
+            )}
+          </>
+        ) : (
+          <>
+            <Section title="Document">
+              <h2 className="inspector-document-name">{doc.title}</h2>
+              <p className="panel-note">
+                {scene.layers.length} layers · {doc.scenes.length} scenes
+                <br />
+                RGB · local-first · Luno Studio 1.0
+              </p>
+              <div className="field-grid">
+                <NumberField
+                  label="Canvas width"
+                  min={64}
+                  max={4096}
+                  value={doc.canvas.width}
+                  onChange={(v) =>
+                    s.commit("Canvas size", (d) => {
+                      d.canvas.width = Math.round(v);
+                    })
+                  }
+                />
+                <NumberField
+                  label="Canvas height"
+                  min={64}
+                  max={4096}
+                  value={doc.canvas.height}
+                  onChange={(v) =>
+                    s.commit("Canvas size", (d) => {
+                      d.canvas.height = Math.round(v);
+                    })
+                  }
+                />
+                <NumberField
+                  label="Project FPS"
+                  min={1}
+                  max={60}
+                  value={doc.canvas.fps}
+                  onChange={(v) => s.timing(scene.length, Math.round(v))}
+                />
+                <NumberField
+                  label="Scene frames"
+                  min={2}
+                  max={1800}
+                  value={scene.length}
+                  onChange={(v) => s.timing(Math.round(v))}
+                />
+              </div>
+              <label className="color-line">
+                Background
+                <input
+                  type="color"
+                  aria-label="Scene background"
+                  value={scene.background}
+                  onChange={(e) =>
+                    s.commit("Scene background", (_d, sc) => {
+                      sc.background = e.target.value;
+                    })
+                  }
+                />
+              </label>
+              <button
+                className="subtle"
+                onClick={() => s.set({ dialog: "settings" })}
+              >
+                <Settings2 size={13} />
+                Document settings
+              </button>
+            </Section>
+            <Section title="Camera">
+              <div className="field-grid">
+                <NumberField
+                  label="Camera X"
+                  value={scene.camera.x}
+                  onChange={(v) =>
+                    s.commit("Camera", (_d, sc) => {
+                      sc.camera.x = v;
+                    })
+                  }
+                />
+                <NumberField
+                  label="Camera Y"
+                  value={scene.camera.y}
+                  onChange={(v) =>
+                    s.commit("Camera", (_d, sc) => {
+                      sc.camera.y = v;
+                    })
+                  }
+                />
+                <NumberField
+                  label="Camera zoom"
+                  min={10}
+                  max={1000}
+                  value={scene.camera.zoom * 100}
+                  unit="%"
+                  onChange={(v) =>
+                    s.commit("Camera", (_d, sc) => {
+                      sc.camera.zoom = v / 100;
+                    })
+                  }
+                />
+              </div>
+              <button
+                className="subtle"
+                onClick={() =>
+                  s.commit("Camera key", (_d, sc) => {
+                    const old = sc.camera.keys.find((k) => k.frame === s.frame);
+                    sc.camera.keys = [
+                      ...sc.camera.keys.filter((k) => k.frame !== s.frame),
+                      {
+                        id: old?.id ?? uid(),
+                        frame: s.frame,
+                        easing: "smooth" as const,
+                        values: {
+                          x: sc.camera.x,
+                          y: sc.camera.y,
+                          scaleX: sc.camera.zoom,
+                        },
+                      },
+                    ].sort((a, b) => a.frame - b.frame);
+                  })
+                }
+              >
+                <Diamond size={12} />
+                Key camera
+              </button>
+            </Section>
+          </>
+        )}
+        {tab === "properties" &&
+          s.workspace === "Edit" &&
+          scene.sounds.length > 0 && (
+            <Section title="Sound mixer">
+              {scene.sounds.map((sound) => (
+                <div className="sound-control" key={sound.id}>
+                  <div>
+                    <strong>{sound.name}</strong>
+                    <button
+                      aria-label={`${sound.muted ? "Unmute" : "Mute"} audio ${sound.name}`}
+                      onClick={() =>
+                        s.editSound(sound.id, { muted: !sound.muted })
+                      }
+                    >
+                      {sound.muted ? (
+                        <VolumeX size={12} />
+                      ) : (
+                        <Volume2 size={12} />
+                      )}
+                    </button>
+                  </div>
+                  <NumberField
+                    label={`Volume ${sound.name}`}
+                    min={0}
+                    max={200}
+                    value={sound.gain * 100}
+                    unit="%"
+                    onChange={(v) => s.editSound(sound.id, { gain: v / 100 })}
+                  />
+                  {!scene.layers.some((l) => l.sound === sound.id) && (
+                    <NumberField
+                      label={`Audio source in ${sound.name}`}
+                      min={0}
+                      max={
+                        (doc.assets.find((a) => a.id === sound.asset)
+                          ?.duration ?? 1) - 0.01
+                      }
+                      step={0.05}
+                      value={sound.trim}
+                      unit="s"
+                      onChange={(v) => s.editSound(sound.id, { trim: v })}
+                    />
+                  )}
+                </div>
+              ))}
+            </Section>
+          )}
+      </div>
+      <div className="inspector-footer">
+        <span>All tools. No unlocks.</span>
+        <small>LUNO / 1.0</small>
+      </div>
+    </aside>
+  );
+}
+function Curve({
+  curve,
+  onChange,
+}: {
+  curve: NonNullable<Key["curve"]>;
+  onChange: (c: NonNullable<Key["curve"]>) => void;
+}) {
+  const [local, setLocal] = useState(curve),
+    [drag, setDrag] = useState<number | null>(null);
+  useEffect(() => setLocal(curve), [curve]);
+  const x = (n: number) => 20 + n * 200,
+    y = (n: number) => 140 - n * 120;
+  return (
+    <svg
+      className="curve-editor"
+      viewBox="0 0 240 165"
+      aria-label="Custom easing curve"
+    >
+      <path d="M20 140H220M20 20V140" stroke="var(--line)" fill="none" />
+      <path
+        d={`M20 140L${x(local[0])} ${y(local[1])}M220 20L${x(local[2])} ${y(local[3])}`}
+        stroke="var(--muted)"
+        fill="none"
+      />
+      <path
+        d={`M20 140C${x(local[0])} ${y(local[1])},${x(local[2])} ${y(local[3])},220 20`}
+        stroke="var(--accent)"
+        strokeWidth="2"
+        fill="none"
+      />
+      {[0, 2].map((i) => (
+        <circle
+          key={i}
+          role="slider"
+          tabIndex={0}
+          aria-label={`Easing control ${i / 2 + 1}`}
+          aria-valuemin={0}
+          aria-valuemax={1}
+          aria-valuenow={local[i]}
+          cx={x(local[i])}
+          cy={y(local[i + 1])}
+          r={5}
+          fill="var(--accent)"
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            setDrag(i);
+          }}
+          onPointerMove={(e) => {
+            if (drag === null) return;
+            const r = e.currentTarget.ownerSVGElement!.getBoundingClientRect(),
+              c = [...local] as typeof local;
+            c[drag] = Math.min(
+              1,
+              Math.max(0, (((e.clientX - r.left) / r.width) * 240 - 20) / 200),
+            );
+            c[drag + 1] = Math.min(
+              3,
+              Math.max(
+                -2,
+                (140 - ((e.clientY - r.top) / r.height) * 165) / 120,
+              ),
+            );
+            setLocal(c);
+          }}
+          onPointerUp={() => {
+            if (drag !== null) onChange(local);
+            setDrag(null);
+          }}
+          onPointerCancel={() => {
+            setLocal(curve);
+            setDrag(null);
+          }}
+          onKeyDown={(e) => {
+            const c = [...local] as typeof local;
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+              e.preventDefault();
+              c[i] = Math.min(
+                1,
+                Math.max(0, c[i] + (e.key === "ArrowRight" ? 0.02 : -0.02)),
+              );
+              onChange(c);
+            }
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              e.preventDefault();
+              c[i + 1] = Math.min(
+                3,
+                Math.max(-2, c[i + 1] + (e.key === "ArrowUp" ? 0.02 : -0.02)),
+              );
+              onChange(c);
+            }
+          }}
+        />
+      ))}
+    </svg>
+  );
 }
