@@ -72,6 +72,22 @@ async function notice(folder) {
     if ((await stat(full)).isFile())
       licence += (await readFile(full, "utf8")) + "\n";
   }
+  if (!licence && meta.license === "MIT") {
+    const author =
+      typeof meta.author === "string"
+        ? meta.author
+        : (meta.author?.name ?? "the upstream contributors");
+    licence = `The package declares MIT and author ${author}, but ships no standalone licence file. The following standard MIT permission terms are reproduced as a declared-license fallback, not claimed as an exact upstream copyright notice.
+
+Author attribution: ${author}
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+`;
+  }
   sections.push(
     `\n=== ${meta.name} ${meta.version} ===\nDeclared licence: ${typeof meta.license === "string" ? meta.license : JSON.stringify(meta.license)}\n${licence || "This installed package does not include standalone licence text; retain its declared licence and upstream attribution.\n"}`,
   );

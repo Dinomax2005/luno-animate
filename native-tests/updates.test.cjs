@@ -16,7 +16,11 @@ function fixture(t) {
     calls.install++;
   };
   const updater = new Updates({
-    app: { isPackaged: true, getVersion: () => "1.0.0" },
+    app: {
+      isPackaged: true,
+      getVersion: () => "1.0.0",
+      getPath: () => "/not-a-signed-studio-build",
+    },
     send: () => {},
     prepare: async () => {
       calls.prepare++;
@@ -53,6 +57,12 @@ test("supported feed uses a new channel rather than inheriting the legacy latest
   delete process.env.LUNO_DISABLE_UPDATES;
   try {
     await updater.initialize();
+    if (process.platform === "darwin") {
+      assert.equal(updater.state.phase, "disabled");
+      assert.match(updater.state.message, /manual install/);
+      assert.equal(sdk.feed, undefined);
+      return;
+    }
     assert.equal(sdk.channel, "studio-v1");
     assert.equal(sdk.feed.channel, "studio-v1");
     assert.equal(sdk.allowPrerelease, false);
