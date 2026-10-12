@@ -35,20 +35,20 @@ jobs:
             files: |
               release/*.exe
               release/*.exe.blockmap
-              release/*.yml
+              release/studio-v1*.yml
           - os: macos-latest
             name: macOS
             files: |
               release/*.zip
               release/*.dmg
               release/*.blockmap
-              release/*.yml
+              release/studio-v1*.yml
           - os: ubuntu-latest
             name: Linux
             files: |
               release/*.AppImage
               release/*.deb
-              release/*.yml
+              release/studio-v1*.yml
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
