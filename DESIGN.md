@@ -17,6 +17,10 @@ The generic "AI interface" fingerprint is a cluster: violet→indigo gradients, 
 | Letter-spaced 6–8px caption type | 10px minimum labels, 11px base, 12px row names |
 | Uplift copy ("Bring it to life") | Terse, specific labels: "Duplicate next cel", "Work area", "Export" |
 
+## Where this comes from
+
+The fingerprint above is drawn from 2026 design writing on the sameness of generated interfaces (smoothui.dev/blog/ai-design-slop, 925studios.co/blog/ai-slop-design-tells, vibecodekit.dev/ai-slop-design, uxskill.laithjunaidy.com/what-is-ai-slop, axe-web.com/insights/ai-website-design-sameness, managed-code.com/blog-post/ai-slop-in-design). Two consequences for this project: a single aesthetic has to be chosen and written down, and marketing-site patterns do not belong inside a production tool.
+
 ## Tokens
 
 Dark (default) / light:
