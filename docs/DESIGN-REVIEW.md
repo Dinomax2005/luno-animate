@@ -2,7 +2,7 @@
 
 **Goal:** make the 1.0 preview stop reading as an AI-generated interface, without changing a single function.
 
-Published release: <https://github.com/Dinomax2005/luno-animate/releases/tag/v1.0.0> (tag `v1.0.0` on build commit `d04cfb2`).
+Published releases: [v1.0.1](https://github.com/Dinomax2005/luno-animate/releases/tag/v1.0.1) (current) and [v1.0.0](https://github.com/Dinomax2005/luno-animate/releases/tag/v1.0.0) (redesign, build commit `d04cfb2`).
 
 ## 1. What was researched
 
@@ -37,7 +37,7 @@ Two fixes are recommended consistently: **commit to one aesthetic in writing**, 
 | Rig / canvas | Violet armature, violet selection, violet grid | Amber selection and joints, graphite armature, 20% graphite grid |
 | Icons | Rounded-square gradient mark | Flat mark, amber `L` on graphite; package icons regenerated to match |
 
-New behaviour: a tool-options bar above the canvas (brush tip/size/opacity/flow/stabilize/spacing/pressure, selection grid/snap/pose readout, rig joint). It concentrates the density professional tools have rather than leaving empty chrome, and it is a product pattern, not a landing-page one.
+New behaviour: the canvas shows a **paint cursor** sized to the brush tip (scales with zoom, dashed when the tip is smaller than the minimum ring, dashed variant for the eraser, hidden outside the artboard and during playback), plus a tool-options bar above the canvas (brush tip/size/opacity/flow/stabilize/spacing/pressure, selection grid/snap/pose readout, rig joint). It concentrates the density professional tools have rather than leaving empty chrome, and it is a product pattern, not a landing-page one.
 
 ## 3. Locked tokens
 

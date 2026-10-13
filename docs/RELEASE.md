@@ -1,3 +1,7 @@
+# Luno Studio v1.0.1
+
+Cursor and canvas-navigation release. The canvas now shows a paint cursor: a ring sized to the active brush tip that scales with zoom, with a crosshair and an amber centre dot, drawn above grids and selection guides. It appears on hover, hides outside the artboard and while playing, uses a dashed ring when the brush is smaller than the minimum ring so the exact paint point stays visible, and a dashed variant for the eraser. Plain cursors elsewhere follow the tool (crosshair for paint/fill/eyedropper, grab for hand, default for selection, text for type). No document, format or export behaviour changed.
+
 # Luno Studio v1.0.0
 
 A clean first Studio release: new code, scene engine, renderer, native shell, branding, interface, project format and verification suite.

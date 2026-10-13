@@ -74,12 +74,17 @@ export function Stage() {
     [size, setSize] = useState({ w: 800, h: 550 }),
     [preview, setPreview] = useState<Mark | null>(null),
     [cursor, setCursor] = useState({ x: 0, y: 0 }),
+    [hovering, setHovering] = useState(false),
     [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const fit = Math.min(
       (size.w - 50) / doc.canvas.width,
       (size.h - 90) / doc.canvas.height,
     ),
-    scale = (Math.max(0.08, fit) * zoom) / 100;
+    scale = (Math.max(0.08, fit) * zoom) / 100,
+    painting = tool === "brush" || tool === "erase",
+    tip = prefs.brush.size * scale,
+    cursorSize = Math.max(14, Math.min(600, tip)),
+    cursorExact = tip >= 13;
   useEffect(() => {
     const observer = new ResizeObserver((entries) => {
       const r = entries[0].contentRect;
@@ -712,6 +717,7 @@ export function Stage() {
       </div>
       <div
         className="canvas-well"
+        data-tool={tool}
         onWheel={(e) => {
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
@@ -723,11 +729,14 @@ export function Stage() {
       >
         <div
           className="artboard"
+          data-tool={tool}
           style={{
             width: doc.canvas.width * scale,
             height: doc.canvas.height * scale,
             transform: `translate(${pan.x}px,${pan.y}px)`,
           }}
+          onPointerEnter={() => setHovering(true)}
+          onPointerLeave={() => setHovering(false)}
         >
           <canvas
             ref={canvas}
@@ -758,6 +767,19 @@ export function Stage() {
             width={doc.canvas.width}
             height={doc.canvas.height}
           />
+          {painting && hovering && !playing && !menu && (
+            <div
+              className={`brush-cursor${tool === "erase" ? " eraser" : ""}${cursorExact ? "" : " min"}`}
+              aria-hidden="true"
+              style={{
+                width: cursorSize,
+                height: cursorSize,
+                transform: `translate3d(${cursor.x * scale - cursorSize / 2}px,${cursor.y * scale - cursorSize / 2}px,0)`,
+              }}
+            >
+              <span />
+            </div>
+          )}
         </div>
       </div>
       <div className="stage-status">

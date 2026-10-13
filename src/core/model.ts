@@ -162,7 +162,7 @@ export interface Document {
   references: Reference[];
   created: number;
 }
-export const VERSION = "1.0.0";
+export const VERSION = "1.0.1";
 export const MAX_BYTES = 64_000_000;
 export const MAX_FRAMES = 1800;
 export const uid = () => crypto.randomUUID();

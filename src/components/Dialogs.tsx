@@ -639,7 +639,7 @@ function Setup() {
       <div className="setup-brand">
         <img src="./mark.svg" alt="" />
         <span>
-          LUNO STUDIO <small>1.0.0</small>
+          LUNO STUDIO <small>{VERSION}</small>
         </span>
       </div>
       <div className="dialog-intro">

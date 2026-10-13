@@ -516,3 +516,46 @@ test("unsupported legacy files cannot replace the active new-format document", a
   await expect(page.getByRole("alert")).toContainText("legacy");
   expect((await snapshot(page)).document).toEqual(before);
 });
+
+test("canvas shows a brush-sized paint cursor that follows size, zoom and tool", async ({
+  page,
+}) => {
+  await create(page);
+  const canvas = page.getByTestId("canvas");
+  const ring = page.locator(".brush-cursor");
+  const hover = async (fx = 0.4, fy = 0.4) => {
+    const b = (await canvas.boundingBox())!;
+    await page.mouse.move(b.x + b.width * fx, b.y + b.height * fy);
+    await page.waitForTimeout(120);
+    return b;
+  };
+  await hover();
+  await expect(ring).toHaveCount(1);
+  await page.getByLabel("Tip size").fill("60");
+  await hover();
+  const wide = (await ring.boundingBox())!;
+  await page.getByLabel("Tip size").fill("40");
+  await hover();
+  const mid = (await ring.boundingBox())!;
+  expect(wide.width).toBeGreaterThan(mid.width * 1.2);
+  await page.getByRole("button", { name: "Zoom in canvas" }).click();
+  await page.getByRole("button", { name: "Zoom in canvas" }).click();
+  await hover();
+  const zoomed = (await ring.boundingBox())!;
+  expect(zoomed.width).toBeGreaterThan(mid.width * 1.1);
+  await page.getByLabel("Tip size").fill("4");
+  await hover();
+  const tiny = (await ring.boundingBox())!;
+  expect(tiny.width).toBeGreaterThanOrEqual(13);
+  await page.getByRole("button", { name: "Eraser tool" }).click();
+  await hover();
+  await expect(ring).toHaveClass(/eraser/);
+  await page.getByRole("button", { name: "Selection tool" }).click();
+  await hover();
+  await expect(ring).toHaveCount(0);
+  await page.getByRole("button", { name: "Brush tool" }).click();
+  const b = await hover();
+  await expect(ring).toHaveCount(1);
+  await page.mouse.move(b.x - 90, b.y - 50);
+  await expect(ring).toHaveCount(0);
+});

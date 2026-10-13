@@ -180,6 +180,35 @@ table { border-collapse: collapse; }
 .canvas-well { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; background: var(--field); }
 .artboard { position: relative; flex-shrink: 0; box-shadow: 0 0 0 1px #0006; }
 .artboard > canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; outline: none; cursor: crosshair; }
+.canvas-well[data-tool="brush"], .canvas-well[data-tool="erase"], .canvas-well[data-tool="fill"], .canvas-well[data-tool="picker"] { cursor: crosshair; }
+.canvas-well[data-tool="hand"] { cursor: grab; }
+.canvas-well[data-tool="hand"]:active { cursor: grabbing; }
+.artboard[data-tool="select"] > canvas { cursor: default; }
+.artboard[data-tool="hand"] > canvas { cursor: grab; }
+.artboard[data-tool="hand"] > canvas:active { cursor: grabbing; }
+.artboard[data-tool="text"] > canvas { cursor: text; }
+/* Paint cursor: brush-size ring, crosshair and centre dot, drawn above the guides. */
+.brush-cursor {
+  position: absolute; left: 0; top: 0; z-index: 6; border-radius: 50%;
+  border: 1px solid #ffffffd9; box-shadow: 0 0 0 1px #000000a8, inset 0 0 0 1px #000000a8;
+  pointer-events: none; will-change: transform;
+}
+.brush-cursor::before, .brush-cursor::after {
+  content: ""; position: absolute; left: 50%; top: 50%; background: #ffffffcc; box-shadow: 0 0 0 1px #00000099;
+}
+.brush-cursor::before { width: 11px; height: 1px; margin: -0.5px 0 0 -5.5px; }
+.brush-cursor::after { width: 1px; height: 11px; margin: -5.5px 0 0 -0.5px; }
+.brush-cursor > span {
+  position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px;
+  border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px #000000b3;
+}
+/* Brush smaller than the minimum ring: dashed ring marks the exact paint point. */
+.brush-cursor.min { border-style: dashed; opacity: 0.92; }
+.brush-cursor.min::before { width: 15px; margin-left: -7.5px; }
+.brush-cursor.min::after { height: 15px; margin-top: -7.5px; }
+.brush-cursor.min > span { width: 4px; height: 4px; margin: -2px 0 0 -2px; }
+.brush-cursor.eraser { border-style: dashed; border-color: #f4f4f5e6; }
+.brush-cursor.eraser > span { background: #e8e8ea; }
 .artboard > .canvas-overlay { pointer-events: none; }
 .stage-status { display: flex; align-items: center; gap: 14px; height: 24px; min-height: 24px; padding: 0 8px; color: var(--mute); font-size: 10px; background: var(--chrome); border-top: 1px solid var(--line); }
 .stage-status > span { display: flex; align-items: center; gap: 5px; }
