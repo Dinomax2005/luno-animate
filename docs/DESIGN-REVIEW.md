@@ -63,7 +63,7 @@ Every function and every accessibility hook asserted by the browser and desktop 
 
 ## 6. Verification after the redesign
 
-v1.0.1 (paint cursor) shipped the same way: **build desktop installers run 38411293200 success**, draft staged from the exact commit and published as Latest.
+v1.0.2 (pointer for every tool) and v1.0.1 (paint cursor) shipped the same way; v1.0.2 built from `5547a62` (installer run 38413972869 success): **build desktop installers run 38411293200 success**, draft staged from the exact commit and published as Latest.
 
 CI for the redesign: **Studio quality run 38351954814 success**; **Build desktop installers run 38351870129 success** — Windows, macOS and Linux packages, packaged Linux desktop acceptance, and `verify-artifacts.mjs` passed twice (verify job and pre-staging job).
 
