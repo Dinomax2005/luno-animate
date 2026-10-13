@@ -2,7 +2,7 @@
 
 **Goal:** make the interface read as a purpose-built studio tool instead of a generic template, without changing a single function.
 
-Current release: [the latest build](https://github.com/Dinomax2005/luno-animate/releases/latest). The 1.0.0 redesign shipped from build `d04cfb2`.
+Current release: [the latest build](https://github.com/Dinomax2005/luno-animate/releases/latest). The 1.0.0 interface shipped from build `d04cfb2`.
 
 ## 1. What the defaults are
 
@@ -61,7 +61,7 @@ Every function and every accessibility hook asserted by the browser and desktop 
 
 ## 6. Release history
 
-- **1.0.3** — single-row application bar, no bar on the library screen, drawn pointer across the whole application.
+- **1.0.3** — single-row application bar, no bar on the library screen, drawn pointer across the whole application, plain-language release notes.
 - **1.0.2** — canvas pointer for every tool, hotspot-accurate glyphs, remount fix.
 - **1.0.1** — brush-sized paint cursor on the canvas.
 - **1.0.0** — this interface, on build `d04cfb2`.
