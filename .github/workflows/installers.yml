@@ -133,5 +133,5 @@ jobs:
         run: |
           TAG=$(node -p '`v${require("./package.json").version}`')
           node scripts/release-report.mjs verified-assets .cache/release.md
-          gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Luno Studio $TAG — Animation, with intent" --notes-file .cache/release.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Luno Studio $TAG" --notes-file .cache/release.md
           gh release upload "$TAG" verified-assets/*

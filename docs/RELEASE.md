@@ -1,6 +1,10 @@
-# Luno Studio v1.0.0 — Animation, with intent.
+# Luno Studio v1.0.0
 
-A clean first Studio release: new code, scene engine, renderer, native shell, branding, interface, project format and verification suite. Graphite and amber (locked in DESIGN.md) replace the predecessor's styling; the new geometric Luno mark replaces its eclipse icon.
+A clean first Studio release: new code, scene engine, renderer, native shell, branding, interface, project format and verification suite.
+
+## Interface
+
+The visual layer was rebuilt against the current \"AI interface\" fingerprint and the result is locked in `DESIGN.md` as *Studio Instrument*: graphite surfaces, hairline borders, one amber signal accent, square panels with 2px controls and 3px overlays, shadow only for surfaces that float above the canvas, and a document table with a tool rail instead of a hero and feature cards. No gradients, glow, glass, violet or indigo; copy names the object or the action. The Luno mark and every package icon are flat and single-accent.
 
 ## Entirely free
 
