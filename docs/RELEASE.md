@@ -1,44 +1,59 @@
-# Luno Studio v1.0.2
+# Luno Studio release notes
 
-Canvas pointer release. The artboard now draws its own pointer for **every** tool instead of relying on the system cursor, so the edit point is always visible — including with a stylus, on touch screens, in full-screen and in streamed or remote-desktop environments where the OS cursor is not rendered. Brush and eraser keep the ring sized to the tip (scaled with zoom, dashed when tiny, dashed ring for the eraser, centre dot tinted to the current ink); selection shows an arrow anchored at its exact hotspot; hand shows the grab glyph; type, rectangle, ellipse and rig show their own glyphs; fill and eyedropper show a crosshair ring in the tool's state colour. The pointer follows drags and strokes, hides on leaving the canvas or opening the context menu, never appears in exports, and the system cursor is hidden only while the drawn pointer is active.
+## 1.0.3
 
-Development fix: `mediabunny` (very large ESM) is excluded from dependency pre-bundling, which removes the intermittent "Outdated Optimize Dep" 504 that could stall the first media import in a dev server.
+- Fixed: the window no longer shows a menu strip above the editor. The application bar is now a single row, and the library screen has no bar at all.
+- General UI changes: commands live behind one application menu button in the top bar, so the editor keeps one row of chrome instead of two.
+- The application now draws its own pointer everywhere, not only on the canvas: arrow, text caret and panel resize cursors follow the pointer by hand, so it stays visible with a stylus, on a touch screen and in full-screen or streamed sessions.
+- Small alignment and spacing fixes in the library header and document tab.
 
-# Luno Studio v1.0.1
+## 1.0.2
 
-Cursor and canvas-navigation release. The canvas now shows a paint cursor: a ring sized to the active brush tip that scales with zoom, with a crosshair and an amber centre dot, drawn above grids and selection guides. It appears on hover, hides outside the artboard and while playing, uses a dashed ring when the brush is smaller than the minimum ring so the exact paint point stays visible, and a dashed variant for the eraser. Plain cursors elsewhere follow the tool (crosshair for paint/fill/eyedropper, grab for hand, default for selection, text for type). No document, format or export behaviour changed.
+- Bug fixes: the canvas now draws a pointer for every tool. Brush and eraser keep a ring sized to the tip, the selection arrow is anchored at its exact hotspot, and hand, type, shape, rig, fill and eyedropper each show a suitable pointer.
+- Bug fixes: the pointer no longer jumps to the corner of the canvas after the pointer leaves and re-enters the drawing area.
+- Bug fixes: fixed a development-server stall that could interrupt the first media import.
 
-# Luno Studio v1.0.0
+## 1.0.1
 
-A clean first Studio release: new code, scene engine, renderer, native shell, branding, interface, project format and verification suite.
+- Bug fixes: drawing and erasing no longer require guessing where the next mark lands. The canvas shows a ring sized to the active brush tip, scaled with zoom, with a crosshair and centre dot.
+- Bug fixes: the ring switches to a dashed outline when the brush is smaller than the smallest ring, and the eraser has its own dashed ring.
+- General UI changes: the pointer over the canvas follows the tool for hand, selection and type as well.
 
-## Interface
+## 1.0.0
 
-The visual layer was rebuilt against the current "AI interface" fingerprint and the result is locked in `DESIGN.md` as *Studio Instrument*: graphite surfaces, hairline borders, one amber signal accent, square panels with 2px controls and 3px overlays, shadow only for surfaces that float above the canvas, and a document table with a tool rail instead of a hero and feature cards. No gradients, glow, glass, violet or indigo; copy names the object or the action. The Luno mark and every package icon are flat and single-accent.
+First Studio release: new scene engine, renderer, desktop shell, brand, project format and test suite. Graphite surfaces, hairline borders and a single amber accent, described in `DESIGN.md`. Earlier Luno Animate versions and their project files are out of date and are not opened or converted by this release.
 
-## Entirely free
+### Draw
 
-No subscriptions, mandatory accounts, paid feature locks or watermarks. The free proprietary application licence restricts application redistribution/rebranding where rights are legally held; user-created output is not claimed by Luno.
+- Eight pressure-aware brushes with stabilization, flow, spacing, pixel painting and pen pressure.
+- Non-destructive erasing on the active cel, bounded fill, eyedropper, manual cels, held exposures, onion skins.
 
-## One document, three workspaces
+### Motion
 
-- **Draw:** eight pressure-aware procedural brushes, stabilization, flow, pixel painting, non-destructive active-cel erasure, bounded fill, eyedropper, manual cels, held exposures and onion skins.
-- **Motion:** editable vector shapes/type, transform/property keys, custom easing, grouping and a fresh FK/IK armature/attachment system.
-- **Edit:** embedded image/audio/video media, waveforms, bounded decoded proxies, linked audio, trim/split controls and animated overlays.
-- Scene ordering, work-area playback, references/notes, command search, resizable docks, focus mode, light/dark surfaces, and a real local project library.
-- Linked overwrite Save, Save As, external-conflict protection, revisions and verified desktop backups.
-- Actual H.264 MP4/audio output where supported, transparent PNG, PNG sequences, flattened raster SVG snapshots, and new compressed/integrity-checked `.lam` documents.
+- Editable shapes and type, transform and property keys, custom easing curves, grouping.
+- 2D armature with constrained inverse kinematics, bone editing and attachments.
 
-## Legacy support policy
+### Edit
 
-**All previous Luno Animate releases and project formats are out of date and unsupported.** They are not silently converted or deleted. Keep independent legacy backups and export media from an old application before using those assets in Studio 1.0. This app has a new identity/profile and **studio-v1** update channel; do not expect an old updater or old .lam reader to become compatible.
+- Embedded image, audio and video media with waveforms, bounded decoded video proxies, linked audio, trim and split controls, animated overlays.
+- Scene ordering, work-area playback, reference boards with notes, command search, resizable docks, focus mode, light and dark surfaces, and a local project library.
+- Linked overwrite save, save as, external conflict protection, revisions and desktop library backups.
+- H.264 MP4 with audio where the device supports it, transparent PNG, PNG sequences in one zip, flattened raster SVG snapshots, and compressed, integrity-checked `.lam` documents.
 
-## Limits and verification scope
+## Free to use
 
-64 MB projects; bounded procedural work; 1,800 frames per scene. Video inputs up to 100 MB / 30 seconds become 960px/20fps JPEG proxies—not full-source video preservation. MP4 jobs up to 1,800 frames / 120 seconds; PNG ZIP jobs up to 300 frames / 100 MB. AAC or Opus encoding depends on the device. SVG snapshots are flattened; editable vector data stays in `.lam`. 2D armatures are not mesh deformation or 3D.
+No subscriptions, no account, no trials and no watermarks. Every tool is available in every build. The application licence covers the software itself; the work you make with Luno Studio belongs to you and is not claimed by us.
 
-Unsigned macOS and DEB updates are manual. Physical cross-OS upgrades and tablet verification are not implied by installer builds. No universal performance/parity or damage-proof upgrade claim is made.
+## Legacy versions
 
-## Owner review
+Every earlier Luno Animate release and its project files are unsupported. Keep your old files and export media from an older build if you still need them. Studio 1.0 uses its own identity, its own update channel and its own `.lam` format, so an old updater or old project reader will not become compatible with it.
 
-The application licence is a draft covering rights the holder can legally license. It does not establish Arena/provider distribution permission or exclusive ownership of AI-generated output. Confirm legal entity, contact process, service terms and component obligations before a public/company distribution.
+## Working limits
+
+Projects up to 64 MB. 1,800 frames per scene, 32 scenes, 256 layers, up to 4,096 px canvases. Video imports up to 100 MB and 30 seconds become a 960 px, 20 fps proxy rather than a full copy of the source. MP4 jobs up to 1,800 frames or 120 seconds; PNG sequence jobs up to 300 frames or 100 MB. Audio encoding depends on the device. SVG export is a flattened snapshot; editable vector data stays in the `.lam` document. Armatures are 2D and are not mesh deformation or 3D.
+
+Unsigned macOS and DEB builds update manually. Installer builds do not by themselves prove anything about a specific machine, tablet or older upgrading copy.
+
+## Licence
+
+Free proprietary licence. Redistribution, rebranding and resale of the application need written permission, where such rights can be granted. The licence text in `LICENSE` is a draft and is kept under review.

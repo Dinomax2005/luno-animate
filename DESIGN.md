@@ -2,9 +2,9 @@
 
 Committed direction: **Studio Instrument**. A control surface for people who make things, in the lineage of professional animation and compositing tools. Not a marketing site, not a product landing page.
 
-## Anti-fingerprint decisions (deliberate, not defaults)
+## Anti-default decisions (deliberate, not defaults)
 
-The generic "AI interface" fingerprint is a cluster: violet→indigo gradients, three equal feature cards, unchosen Inter at display scale, uniform large radii and soft shadows on every surface, centered hero with a badge, glowing borders, and uplift copy. Each of these was rejected explicitly:
+Generated-looking interfaces share a cluster of defaults: violet→indigo gradients, three equal feature cards, one typeface at display scale, uniform large radii and soft shadows on every surface, centered hero with a badge, glowing borders, and uplift copy. Each of these was rejected explicitly:
 
 | Rejected default | This app |
 | --- | --- |
@@ -19,7 +19,7 @@ The generic "AI interface" fingerprint is a cluster: violet→indigo gradients, 
 
 ## Where this comes from
 
-The fingerprint above is drawn from 2026 design writing on the sameness of generated interfaces (smoothui.dev/blog/ai-design-slop, 925studios.co/blog/ai-slop-design-tells, vibecodekit.dev/ai-slop-design, uxskill.laithjunaidy.com/what-is-ai-slop, axe-web.com/insights/ai-website-design-sameness, managed-code.com/blog-post/ai-slop-in-design). Two consequences for this project: a single aesthetic has to be chosen and written down, and marketing-site patterns do not belong inside a production tool.
+2026 design writing on the sameness of template-made interfaces converges on the same list. Two consequences for this project: a single aesthetic has to be chosen and written down, and marketing-site patterns do not belong inside a production tool.
 
 ## Tokens
 

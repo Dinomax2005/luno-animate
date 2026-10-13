@@ -1,26 +1,24 @@
-# Luno Studio 1.0 — interface redesign review
+# Luno Studio — interface changes
 
-**Goal:** make the 1.0 preview stop reading as an AI-generated interface, without changing a single function.
+**Goal:** make the interface read as a purpose-built studio tool instead of a generic template, without changing a single function.
 
-Published releases: [v1.0.1](https://github.com/Dinomax2005/luno-animate/releases/tag/v1.0.1) (current) and [v1.0.0](https://github.com/Dinomax2005/luno-animate/releases/tag/v1.0.0) (redesign, build commit `d04cfb2`).
+Current release: [the latest build](https://github.com/Dinomax2005/luno-animate/releases/latest). The 1.0.0 redesign shipped from build `d04cfb2`.
 
-## 1. What was researched
+## 1. What the defaults are
 
-2026 design writing on "AI slop" interfaces lists a repeatable cluster, not vague "bad taste":
+2026 design writing on look-alike interfaces lists a repeatable cluster, not vague taste:
 
-| Told | Why it reads as generated |
+| Default pattern | Why it reads as a template |
 | --- | --- |
-| Violet → indigo gradient accent | Tailwind `indigo-500 → purple-600` is the default accent in generated code |
-| Exactly three equal rounded cards | The "three features, one row" prompt pattern |
-| One font (Inter) at display scale | No typographic decision was made |
+| Violet → indigo gradient accent | The stock accent of most UI starter kits |
+| Exactly three equal rounded cards | The "three features, one row" landing-page pattern |
+| One font at display scale | No typographic decision was made |
 | Same 12–18px radius + soft shadow everywhere | One surface recipe copy-pasted onto every element |
 | Glassmorphism, neon glow, gradient text | Decoration substituting for hierarchy |
 | Centered hero + badge + slogan | Marketing-site skeleton inside a product |
 | Weightless copy ("Bring your ideas to life") | No domain knowledge in the words |
 
-Sources: smoothui.dev/blog/ai-design-slop, 925studios.co/blog/ai-slop-design-tells, vibecodekit.dev/ai-slop-design, uxskill.laithjunaidy.com/what-is-ai-slop, alexlavaee.me/blog/lessons-learned-designing-with-ai, axe-web.com/insights/ai-website-design-sameness, managed-code.com/blog-post/ai-slop-in-design.
-
-Two fixes are recommended consistently: **commit to one aesthetic in writing**, and **use real product patterns instead of landing-page patterns**. Both are in `DESIGN.md` (direction: *Studio Instrument*).
+Two rules follow: **commit to one aesthetic in writing**, and **use product patterns instead of landing-page patterns**. Both are in `DESIGN.md` (direction: *Studio Instrument*).
 
 ## 2. What replaced what
 
@@ -30,7 +28,7 @@ Two fixes are recommended consistently: **commit to one aesthetic in writing**, 
 | Gradients | Gradient logo, glow, gradient fills | Flat fills; amber timeline bands capped at 12–20% opacity |
 | Radii | 12–18px on everything | 0 for panels, 2px controls, 3px overlays |
 | Depth | Soft shadow on every surface | Shadow only for menus, dialogs, toasts, update notice |
-| Type | Inter at several scales, letter-spaced captions | Inter Variable kept as the UI face with tabular numerals; 10px labels, 11px base, 12px row titles, 15–18px dialog titles |
+| Type | Inter at several scales, letter-spaced captions | Inter Variable kept as the UI face with tabular numerals (functional, not decorative); 10px labels, 11px base, 12px row titles, 15–18px dialog titles |
 | Home | Hero, badge, three feature cards, slogan | Sidebar tool rail + document table (Name, Mode, Scenes, Length, Modified, actions) with search/sort and an inline empty state |
 | New project | Three equal illustrated cards | Compact `Draw / Motion / Edit` list with one-line scopes |
 | Dialogs | "What will you make?", "Give it an audience.", "Learn the instrument." | "Create a project", "Export", "Tools, keys and limits" — labels and limits instead of slogans |
@@ -61,13 +59,14 @@ Density: 22–26px rows, 26px controls, 28–38px bars. Motion: 120ms background
 
 Every function and every accessibility hook asserted by the browser and desktop suites is intact: menu bar with File/View menus, command search, context menus, tool box, navigator tabs, inspector tabs, timeline interactions, imports, exports, library, updates. Local verification: typecheck, **54 unit**, **15 browser** (real H.264 and non-silent audio decode), **19 native**, production build — all pass.
 
-## 6. Verification after the redesign
+## 6. Release history
 
-v1.0.2 (pointer for every tool) and v1.0.1 (paint cursor) shipped the same way; v1.0.2 built from `5547a62` (installer run 38413972869 success): **build desktop installers run 38411293200 success**, draft staged from the exact commit and published as Latest.
+- **1.0.3** — single-row application bar, no bar on the library screen, drawn pointer across the whole application.
+- **1.0.2** — canvas pointer for every tool, hotspot-accurate glyphs, remount fix.
+- **1.0.1** — brush-sized paint cursor on the canvas.
+- **1.0.0** — this interface, on build `d04cfb2`.
 
-CI for the redesign: **Studio quality run 38351954814 success**; **Build desktop installers run 38351870129 success** — Windows, macOS and Linux packages, packaged Linux desktop acceptance, and `verify-artifacts.mjs` passed twice (verify job and pre-staging job).
-
-Published 2026-10-13 at the owner's request: release **v1.0.0** (id 411317444), marked **Latest**, 16 assets — Windows x64 exe, Linux AppImage + deb, macOS arm64/x64 dmg + zip with blockmaps, `SHA256SUMS.txt`, `studio-v1.yml`, `studio-v1-mac.yml`, `studio-v1-linux.yml`. No `latest.yml`, so the legacy feed is untouched. Every asset carries a GitHub-computed sha256 digest. The superseded draft was deleted before staging, so the published release always matches the redesigned interface. Branch HEAD differs from the tag only in documentation, which the build does not consume.
+Every release is built by the installer pipeline, which packages Windows, macOS and Linux, checks the artifacts and stages the draft for review before publishing.
 
 ## 7. Limits
 

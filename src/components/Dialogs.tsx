@@ -783,10 +783,9 @@ function About() {
             unsupported archives; they are not migrated.
           </p>
           <p className="dialog-note">
-            The proprietary application licence does not establish
-            Arena/provider permission or guarantee exclusive rights in
-            AI-generated code. The distributor must review applicable rights and
-            the legal entity before a public/company distribution.
+            The application licence covers the software itself and is under
+            review. Confirm licensing entity and written permission before
+            public or company distribution.
           </p>
         </div>
       ) : (

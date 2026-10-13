@@ -7,6 +7,7 @@ import {
   PanelRight,
   X,
 } from "lucide-react";
+import { AppCursor } from "./components/AppCursor";
 import { useStudio } from "./state/studio";
 import { type Asset, type Tool } from "./core/model";
 import { decode } from "./core/codec";
@@ -406,6 +407,7 @@ export default function App() {
   return (
     <>
       <Audio />
+      <AppCursor />
       <div
         className="application"
         inert={s.busy || !s.ready}

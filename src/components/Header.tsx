@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, ArrowDownToLine, Check, ChevronDown, FolderOpen, Grid2X2, Home, LoaderCircle, Redo2, RotateCcw, Save, Search, Undo2 } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, Check, ChevronDown, FolderOpen, Grid2X2, Home, LoaderCircle, Menu, Redo2, RotateCcw, Save, Search, Undo2 } from 'lucide-react';
 import { useStudio } from '../state/studio';
 import { clamp, pose } from '../core/motion';
 import { VERSION, type Workspace } from '../core/model';
@@ -9,66 +9,68 @@ import { openFile, saveFile, useFile } from '../services/files';
 
 const groups: Command['group'][] = ['File', 'Edit', 'Layer', 'Animation', 'View', 'Help'];
 
+/** Single application bar. Commands live behind one menu button so the editor keeps
+ * a single row of chrome, in the layout professional tools use. */
 export function Header({ onImport }: { onImport: () => void }) {
   const s = useStudio();
   const d = s.document!;
   const link = useFile(v => v.links[d.id]);
-  const [menu, setMenu] = useState<Command['group'] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [group, setGroup] = useState<Command['group']>('File');
   const [title, setTitle] = useState(d.title);
-  const bar = useRef<HTMLDivElement>(null);
-  const popup = useRef<HTMLDivElement>(null);
-  const triggers = useRef<Partial<Record<Command['group'], HTMLButtonElement>>>({});
+  const bar = useRef<HTMLElement>(null);
+  const columns = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const list = commands(onImport);
+  const rows = () => [...(columns.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
   useEffect(() => setTitle(d.title), [d.title]);
   useEffect(() => {
-    if (!menu) return;
-    const outside = (event: MouseEvent) => { if (!bar.current?.contains(event.target as Node)) setMenu(null); };
+    if (!open) return;
+    const outside = (event: MouseEvent) => { if (!bar.current?.contains(event.target as Node)) setOpen(false); };
     document.addEventListener('mousedown', outside);
     return () => document.removeEventListener('mousedown', outside);
-  }, [menu]);
-  const focusMenu = (group: Command['group']) => { setMenu(group); requestAnimationFrame(() => popup.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()); };
-  const keys = (event: React.KeyboardEvent, group: Command['group']) => {
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMenu(null); triggers.current[group]?.focus(); }
-    if (event.key === 'Tab') setMenu(null);
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); event.stopPropagation(); focusMenu(groups[(groups.indexOf(group) + (event.key === 'ArrowRight' ? 1 : groups.length - 1)) % groups.length]); }
-    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+  }, [open]);
+  const show = (next: Command['group']) => {
+    setOpen(true);
+    setGroup(next);
+    requestAnimationFrame(() => columns.current?.querySelector<HTMLButtonElement>('.menu-commands button')?.focus());
+  };
+  const keys = (event: React.KeyboardEvent) => {
+    const inside = document.activeElement?.closest('.menu-commands') !== null;
+    if (event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation();
-      if (!menu) { focusMenu(group); return; }
-      const rows = [...(popup.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
-      const at = rows.indexOf(document.activeElement as HTMLButtonElement);
-      rows[event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1 : (at + (event.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length]?.focus();
+      if (inside && open) { setGroup(groups[0]); requestAnimationFrame(() => columns.current?.querySelector<HTMLButtonElement>(`.menu-groups button[data-group="${group}"]`)?.focus()); return; }
+      setOpen(false);
+      trigger.current?.focus();
+      return;
     }
+    if (event.key === 'Tab') { setOpen(false); return; }
+    if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault(); event.stopPropagation();
+    if (!open) { show(group); return; }
+    const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight';
+    const all = rows();
+    const here = all.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'ArrowRight' && !inside) { show(group); return; }
+    if (event.key === 'ArrowLeft' && inside) { requestAnimationFrame(() => columns.current?.querySelector<HTMLButtonElement>(`.menu-groups button[data-group="${group}"]`)?.focus()); return; }
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? all.length - 1 : (here + (forward ? 1 : all.length - 1)) % Math.max(1, all.length);
+    all[next]?.focus();
   };
   return (
-    <header className="studio-header" inert={s.busy}>
-      <div className="menu-bar" ref={bar}>
-        <button className="header-mark" aria-label="Project library" onClick={() => void home()}><img src="./mark.svg" alt="" /></button>
-        <nav role="menubar" aria-label="Application menus">
-          {groups.map(group => (
-            <div className="menu-group" key={group}>
-              <button role="menuitem" aria-haspopup="menu" aria-expanded={menu === group} ref={el => { if (el) triggers.current[group] = el; }} onClick={() => setMenu(menu === group ? null : group)} onMouseEnter={() => { if (menu) setMenu(group); }} onKeyDown={event => keys(event, group)}>{group}</button>
-              {menu === group && (
-                <div className="menu-popup" style={{ position: 'fixed', left: Math.max(6, Math.min(triggers.current[group]?.getBoundingClientRect().left ?? 6, window.innerWidth - 240)), top: 28 }} role="menu" aria-label={`${group} commands`} ref={popup} onKeyDown={event => keys(event, group)}>
-                  {list.filter(command => command.group === group).map(command => (
-                    <button role="menuitem" aria-label={command.label} key={command.id} disabled={command.enabled?.() === false} onClick={() => { setMenu(null); execute(command); }}><span>{command.label}</span><kbd>{command.shortcut}</kbd></button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </nav>
-        <span className="product-wordmark">LUNO <i>STUDIO</i><small>{VERSION}</small></span>
-        <button className="icon-button" aria-label="Search commands" title="Command search · Ctrl Shift P" onClick={() => s.set({ dialog: 'commands' })}><Search size={13} /></button>
-      </div>
-      <div className="document-bar">
-        <button className="icon-button" aria-label="Back to projects" onClick={() => void home()}><Home size={13} /></button>
+    <header className="studio-header top-only" inert={s.busy} ref={bar}>
+      <div className="top-bar" onKeyDown={keys}>
+        <button className="app-menu-button" aria-label="Application menu" aria-haspopup="menu" aria-expanded={open} ref={trigger} onClick={() => { setOpen(!open); setGroup(group); }} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); show(group); } }}>
+          <img src="./mark.svg" alt="" />
+          <Menu size={13} />
+        </button>
+        <button className="icon-button" aria-label="Back to projects" title="Project library" onClick={() => void home()}><Home size={13} /></button>
         <div className="document-tab">
           <span>LAM</span>
           <input aria-label="Document title" value={title} maxLength={100} onChange={event => setTitle(event.target.value)} onBlur={() => { if (title.trim() && title !== d.title) s.commit('Rename document', doc => { doc.title = title.trim(); }); else setTitle(d.title); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
           <small aria-label={link && link.snapshot !== d ? 'Unsaved file changes' : 'External file state'}>{link && link.snapshot !== d ? '●' : ''}</small>
           <ChevronDown size={10} />
         </div>
-        <span className={`save-indicator ${s.saveState}`} aria-live="polite">{s.saveState === 'saving' ? <LoaderCircle size={11} className="spin" /> : s.saveState === 'error' ? <AlertTriangle size={11} /> : <Check size={11} />}{s.saveState === 'saved' ? 'Saved locally' : s.saveState === 'saving' ? 'Saving locally…' : 'Library save failed'}</span>
+        <span className={`save-indicator ${s.saveState}`} aria-live="polite">{s.saveState === 'saving' ? <LoaderCircle size={11} className="spin" /> : s.saveState === 'error' ? <AlertTriangle size={11} /> : <Check size={11} />}{s.saveState === 'saved' ? 'Saved' : s.saveState === 'saving' ? 'Saving…' : 'Save failed'}</span>
         <span className="bar-divider" />
         <button className="icon-button" aria-label="Undo" disabled={!s.history.length} onClick={() => s.undo()}><Undo2 size={13} /></button>
         <button className="icon-button" aria-label="Redo" disabled={!s.future.length} onClick={() => s.redo()}><Redo2 size={13} /></button>
@@ -78,9 +80,27 @@ export function Header({ onImport }: { onImport: () => void }) {
             <button role="tab" aria-selected={s.workspace === workspace} key={workspace} onClick={() => s.set({ workspace, tool: workspace === 'Draw' ? 'brush' : 'select', playing: false })}>{workspace}</button>
           ))}
         </div>
+        <button className="icon-button" aria-label="Search commands" title="Command search · Ctrl Shift P" onClick={() => s.set({ dialog: 'commands' })}><Search size={13} /></button>
+        <span className="bar-divider" />
         <button className="icon-button" aria-label="Save project" title={link ? `Overwrite ${link.name}` : 'Choose a .lam destination'} onClick={() => void saveFile()}><Save size={13} /></button>
         <button className="icon-button" aria-label="Open project" onClick={() => void openFile()}><FolderOpen size={13} /></button>
         <button className="button primary" aria-label="Export" onClick={() => s.set({ dialog: 'export' })}>Export<ArrowDownToLine size={13} /></button>
+        {open && (
+          <div className="app-menu" role="menu" aria-label="Application menu" ref={columns}>
+            <div className="menu-groups">
+              {groups.map(name => (
+                <button role="menuitem" aria-haspopup="menu" aria-expanded={group === name} data-group={name} key={name} className={group === name ? 'active' : ''} onMouseEnter={() => setGroup(name)} onClick={() => show(name)}><span>{name}</span><ChevronDown size={11} className="menu-chevron" /></button>
+              ))}
+            </div>
+            <div className="menu-commands" role="menu" aria-label={`${group} commands`}>
+              <span className="menu-heading">{group}</span>
+              {list.filter(command => command.group === group).map(command => (
+                <button role="menuitem" aria-label={command.label} key={command.id} disabled={command.enabled?.() === false} onClick={() => { setOpen(false); execute(command); }}><span>{command.label}</span><kbd>{command.shortcut}</kbd></button>
+              ))}
+            </div>
+            <span className="menu-foot">Luno Studio {VERSION}</span>
+          </div>
+        )}
       </div>
       <ToolOptions />
     </header>

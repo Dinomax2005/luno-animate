@@ -7,7 +7,7 @@ This is an independent 1.0 implementation, not a theme patch on Luno Animate. Th
 ## My product direction
 
 Graphite surfaces, hairline borders and a single amber signal accent, documented in `DESIGN.md`. A custom geometric Luno mark. Deliberate tools instead of a simplified beginner UI. One unified document, with **Draw**, **Motion** and **Edit** workspaces:
-The redesign review, including what the AI-generated-interface fingerprint is and how each tell was rejected, is in [`docs/DESIGN-REVIEW.md`](docs/DESIGN-REVIEW.md).
+The interface changes and the reasoning behind them are in [`docs/INTERFACE.md`](docs/INTERFACE.md).
 
 - **Draw:** eight procedural brush families, pressure, stabilization, flow, pixel marks, ordered cel erasure, bounded area fill and a composited eyedropper. Manual blank/duplicate cels, optional held exposures, onion skins and Undo/Redo.
 - **Motion:** vector shapes, editable text, layer transforms, groups, property keys, interpolation and a custom Bézier editor. A new ten-bone armature, constrained FK/IK posing, new joints and artwork attachments.
@@ -46,6 +46,6 @@ No measured speedup, Adobe parity, universal codec support, damage-proof upgrade
 
 [LICENSE](LICENSE) is a **free proprietary application licence draft**, not MIT/open source. Application reuse, resale, redistribution and rebranding require appropriate permission except where law, GitHub terms or third-party component licences independently grant rights. Creative output is not claimed by Luno.
 
-The distributor must verify the actual legal entity and Arena/provider permissions before relying on the draft for public/company distribution. This document does not supply official Arena permission, guarantee exclusive rights in AI output, or override service terms. See [licensing](docs/LICENSING.md).
+Confirm the licensing entity and written permissions before relying on the draft for public distribution. Nothing here supplies third-party permission, guarantees exclusive rights in generated code, or overrides service terms. See [licensing](docs/LICENSING.md).
 
 Build-time notices include shipped JS/font dependencies. Electron/Chromium retain their runtime notices. Unmodified Mediabunny is MPL 2.0; exact installed sources and licence ship in `public/legal/mediabunny-source.zip` and are accessible through About → Third-party notices. Inter retains its SIL Open Font Licence.

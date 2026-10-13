@@ -69,16 +69,11 @@ export function Home() {
         </div>
       </aside>
       <main className="home-main">
-        <header>
-          <span>Project library<i>/</i>{window.studio ? 'filesystem' : 'browser storage'}</span>
-          <div>
-            <button aria-label="New project" onClick={() => s.set({ dialog: 'new' })}><Plus size={13} />New project</button>
-            <button aria-label="Open project file" onClick={() => void openFile()}><Upload size={13} />Open file</button>
-          </div>
-        </header>
         <div className="home-content">
           <div className="library-heading">
             <div><h2>Documents <small>{visible.length}</small></h2></div>
+            <button className="button" aria-label="New project" onClick={() => s.set({ dialog: 'new' })}><Plus size={13} />New project</button>
+            <button className="button" aria-label="Open project file" onClick={() => void openFile()}><Upload size={13} />Open file</button>
             <label className="search"><Search size={13} /><input aria-label="Search projects" value={search} placeholder="Filter by name" onChange={event => setSearch(event.target.value)} /></label>
             <select aria-label="Sort projects" value={sort} onChange={event => setSort(event.target.value as typeof sort)}>
               <option value="modified">Last modified</option>

@@ -58,6 +58,7 @@ async function ink(page: Page, offset = 0) {
 }
 async function portable(page: Page) {
   const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Application menu" }).click();
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page
     .getByRole("menuitem", { name: "Export .lam copy…", exact: true })
@@ -464,7 +465,8 @@ test("command search and native-like menu navigation preserve focus and do not s
       (l) => l.shape === "rect",
     ),
   ).toBe(true);
-  await page.getByRole("menuitem", { name: "File", exact: true }).focus();
+  const appMenu = page.getByRole("button", { name: "Application menu" });
+  await appMenu.focus();
   await page.keyboard.press("ArrowDown");
   await expect(
     page.getByRole("menuitem", { name: "New project…", exact: true }),
@@ -473,7 +475,13 @@ test("command search and native-like menu navigation preserve focus and do not s
   await expect(
     page.getByRole("menuitem", { name: "File", exact: true }),
   ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(appMenu).toBeFocused();
+  await expect(page.locator(".app-menu")).toHaveCount(0);
   expect((await snapshot(page)).frame).toBe(0);
+  // one row of application chrome, no permanent menu bar
+  await expect(page.locator(".studio-header > *")).toHaveCount(2);
+  await expect(page.getByRole("menubar")).toHaveCount(0);
 });
 
 test("compact workbench and new light theme keep real docks and exports usable", async ({
@@ -493,6 +501,7 @@ test("compact workbench and new light theme keep real docks and exports usable",
   await page
     .getByRole("button", { name: "Close dock overlay", exact: true })
     .click();
+  await page.getByRole("button", { name: "Application menu" }).click();
   await page.getByRole("menuitem", { name: "View", exact: true }).click();
   await page
     .getByRole("menuitem", { name: "Light interface", exact: true })
@@ -607,14 +616,23 @@ test("an app-drawn pointer is visible and exact for every canvas tool", async ({
     expect(Math.abs(remounted.x - again.x)).toBeLessThan(10);
     expect(Math.abs(remounted.y - again.y)).toBeLessThan(10);
   }
-  // the system cursor is suppressed only while the drawn pointer is active
-  expect(
-    await well.evaluate((el) => getComputedStyle(el).cursor),
-  ).toBe("none");
-  await page.mouse.move(24, 24);
-  expect(
-    await page
-      .locator(".canvas-well")
-      .evaluate((el) => getComputedStyle(el).cursor),
-  ).not.toBe("none");
+  // the canvas hands the pointer over to its own tool cursor...
+  const appCursor = page.locator(".app-cursor");
+  expect(await appCursor.evaluate((el) => getComputedStyle(el).display)).toBe(
+    "none",
+  );
+  // ...while the rest of the application is covered by the drawn pointer
+  await page.mouse.move(320, 12);
+  await page.waitForTimeout(150);
+  expect(await appCursor.evaluate((el) => getComputedStyle(el).display)).not.toBe(
+    "none",
+  );
+  await expect(appCursor).toHaveAttribute("data-kind", "arrow");
+  const resizer = (await page.locator(".resizer").first().boundingBox())!;
+  await page.mouse.move(resizer.x + 1, resizer.y + 80);
+  await page.waitForTimeout(150);
+  await expect(appCursor).toHaveAttribute("data-kind", "ew");
+  await page.getByLabel("Document title").click();
+  await page.waitForTimeout(150);
+  await expect(appCursor).toHaveAttribute("data-kind", "text");
 });

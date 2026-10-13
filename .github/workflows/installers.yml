@@ -127,11 +127,21 @@ jobs:
           pattern: Studio-*
           path: artifacts
       - run: node scripts/verify-artifacts.mjs artifacts verified-assets
-      - name: Stage exact source, never auto-publish
+      - name: Stage the build for review
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG=$(node -p '`v${require("./package.json").version}`')
           node scripts/release-report.mjs verified-assets .cache/release.md
-          gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Luno Studio $TAG" --notes-file .cache/release.md
-          gh release upload "$TAG" verified-assets/*
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            DRAFT=$(gh release view "$TAG" --json isDraft --jq .isDraft)
+            if [ "$DRAFT" = "true" ]; then
+              echo "Refreshing the unpublished draft $TAG with this build."
+              gh release upload "$TAG" verified-assets/* --clobber
+            else
+              echo "::notice::$TAG is already published; leaving its assets untouched. Bump the version to stage a new build."
+            fi
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Luno Studio $TAG" --notes-file .cache/release.md
+            gh release upload "$TAG" verified-assets/*
+          fi
