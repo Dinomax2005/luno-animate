@@ -72,7 +72,8 @@ test("new identity, project home and optional setup have no fake projects or pai
 }) => {
   await page.goto("/");
   await expect(page.getByText("LUNO", { exact: false }).first()).toBeVisible();
-  await expect(page.locator(".project-card")).toHaveCount(0);
+  await expect(page.locator(".project-row")).toHaveCount(0);
+  await expect(page.locator(".project-table")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "New Draw project", exact: true }),
   ).toBeEnabled();
@@ -80,7 +81,7 @@ test("new identity, project home and optional setup have no fake projects or pai
     .getByRole("button", { name: "Workspace setup", exact: false })
     .click();
   const setup = page.getByRole("dialog", { name: "Workspace setup" });
-  await expect(setup).toContainText("Choose your focus");
+  await expect(setup).toContainText("Choose a workspace");
   await setup.getByRole("button", { name: "Skip setup", exact: true }).click();
   await expect(setup).toHaveCount(0);
   await expect(page.getByText("Unlock with Pro", { exact: true })).toHaveCount(

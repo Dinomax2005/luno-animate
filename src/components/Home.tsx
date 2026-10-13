@@ -1,346 +1,149 @@
-import { useState } from "react";
-import {
-  ArrowRight,
-  Bone,
-  Clapperboard,
-  Copy,
-  Ellipsis,
-  Film,
-  FolderOpen,
-  Grid2X2,
-  HelpCircle,
-  Moon,
-  Plus,
-  Search,
-  Settings2,
-  Shield,
-  Sparkles,
-  Sun,
-  Trash2,
-  Pencil,
-  Download,
-} from "lucide-react";
-import { useStudio } from "../state/studio";
-import { VERSION, type Workspace } from "../core/model";
-import {
-  deleteProject,
-  duplicateProject,
-  loadProject,
-} from "../services/library";
-import { openFile } from "../services/files";
+import { useEffect, useRef, useState } from 'react';
+import { Bone, Clapperboard, Copy, Ellipsis, FolderOpen, HelpCircle, Moon, Pencil, Plus, RefreshCw, Search, Settings2, Shield, Sun, Trash2, Upload } from 'lucide-react';
+import { useStudio } from '../state/studio';
+import { VERSION, type Workspace } from '../core/model';
+import { deleteProject, duplicateProject, loadProject } from '../services/library';
+import { openFile } from '../services/files';
+
+const newKinds: { id: Workspace; title: string; detail: string; icon: typeof Pencil }[] = [
+  { id: 'Draw', title: 'Draw', detail: 'cels', icon: Pencil },
+  { id: 'Motion', title: 'Motion', detail: 'keys', icon: Bone },
+  { id: 'Edit', title: 'Edit', detail: 'media', icon: Clapperboard },
+];
+const modified = (time: number) => new Date(time).toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
 export function Home() {
-  const s = useStudio(),
-    [search, setSearch] = useState(""),
-    [sort, setSort] = useState("modified"),
-    [menu, setMenu] = useState<string | null>(null);
+  const s = useStudio();
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<'modified' | 'name'>('modified');
+  const [menu, setMenu] = useState<string | null>(null);
+  const [working, setWorking] = useState<string | null>(null);
+  const row = useRef<HTMLTableRowElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const outside = (event: MouseEvent) => { if (!row.current?.contains(event.target as Node)) setMenu(null); };
+    document.addEventListener('mousedown', outside);
+    return () => document.removeEventListener('mousedown', outside);
+  }, [menu]);
+  const run = async (id: string, action: () => Promise<unknown>) => {
+    if (working) return;
+    setMenu(null); setWorking(id);
+    try { await action(); } catch (error) { s.notify(error instanceof Error ? error.message : 'The operation could not be completed.', true); }
+    finally { setWorking(null); }
+  };
   const visible = s.library
-      .filter((p) => p.title.toLowerCase().includes(search.toLowerCase()))
-      .sort((a, b) =>
-        sort === "name"
-          ? a.title.localeCompare(b.title)
-          : b.modified - a.modified,
-      ),
-    start = (w: Workspace) => s.set({ workspace: w, dialog: "new" });
+    .filter(project => project.title.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => (sort === 'name' ? a.title.localeCompare(b.title) : b.modified - a.modified));
+  const start = (workspace: Workspace) => s.set({ workspace, dialog: 'new' });
+
   return (
     <div className="home">
       <aside className="home-sidebar">
-        <a className="brand" href="#" onClick={(e) => e.preventDefault()}>
-          <img src="./mark.svg" alt="" />
-          <span>
-            LUNO<small>STUDIO</small>
-          </span>
-        </a>
-        <span className="home-version">RELEASE 1.0.0</span>
+        <a className="brand" href="#" onClick={event => event.preventDefault()}><img src="./mark.svg" alt="" /><span>LUNO<small>STUDIO</small></span></a>
+        <span className="home-version">Version {VERSION} · all tools enabled</span>
         <div className="home-primary">
-          <button
-            className="button primary"
-            aria-label="New project"
-            onClick={() => s.set({ dialog: "new" })}
-          >
-            <Plus size={14} />
-            New project
-          </button>
-          <button
-            className="button secondary"
-            aria-label="Open project file"
-            onClick={() => void openFile()}
-          >
-            <FolderOpen size={14} />
-            Open project
-          </button>
+          <div className="home-new" aria-label="New project">
+            {newKinds.map(kind => (
+              <button key={kind.id} aria-label={`New ${kind.id} project`} onClick={() => start(kind.id)}>
+                <kind.icon size={14} /><span>{kind.title}</span><small>{kind.detail}</small>
+              </button>
+            ))}
+          </div>
+          <button className="button secondary" aria-label="Open project file" onClick={() => void openFile()}><FolderOpen size={13} />Open .lam file</button>
         </div>
-        <span className="sidebar-overline">WORKSPACE</span>
-        <button className="home-nav active">
-          <Grid2X2 size={15} />
-          Project library<small>{s.library.length}</small>
-        </button>
+        <span className="sidebar-overline">Library</span>
+        <button className="home-nav active" aria-label="Project library"><FolderOpen size={14} />All documents<small>{s.library.length}</small></button>
         <div className="home-philosophy">
-          <Shield size={18} />
-          <strong>
-            Made for your work.
-            <br />
-            Not your subscription.
-          </strong>
-          <p>
-            Every tool is available. Files stay on your device. Your creations
-            stay yours.
-          </p>
+          <Shield size={14} />
+          <strong>Free, local, no account</strong>
+          <p>Documents stay in this device’s library. There are no subscriptions, activation codes, watermarks or locked tools.</p>
         </div>
         <div className="home-bottom">
-          <button onClick={() => s.set({ dialog: "setup" })}>
-            <Settings2 size={14} />
-            Workspace setup
-          </button>
-          <button onClick={() => s.set({ dialog: "updates" })}>
-            <Download size={14} />
-            Updates & backups
-          </button>
-          <button onClick={() => s.set({ dialog: "help" })}>
-            <HelpCircle size={14} />
-            Tools & shortcuts
-          </button>
+          <button aria-label="Workspace setup" onClick={() => s.set({ dialog: 'setup' })}><Settings2 size={13} />Workspace setup</button>
+          <button aria-label="Updates & backups" onClick={() => s.set({ dialog: 'updates' })}><RefreshCw size={13} />Updates &amp; backups</button>
+          <button aria-label="Tools & shortcuts" onClick={() => s.set({ dialog: 'help' })}><HelpCircle size={13} />Tools &amp; shortcuts</button>
           <div>
-            <button onClick={() => s.set({ dialog: "about" })}>
-              About & licence
-            </button>
-            <button
-              aria-label="Toggle interface theme"
-              onClick={() =>
-                s.pref(
-                  "theme",
-                  s.preferences.theme === "dark" ? "light" : "dark",
-                )
-              }
-            >
-              {s.preferences.theme === "dark" ? (
-                <Sun size={14} />
-              ) : (
-                <Moon size={14} />
-              )}
-            </button>
+            <button aria-label="About & licence" onClick={() => s.set({ dialog: 'about' })}>About &amp; licence</button>
+            <button aria-label="Toggle interface theme" onClick={() => s.pref('theme', s.preferences.theme === 'dark' ? 'light' : 'dark')}>{s.preferences.theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}</button>
           </div>
         </div>
       </aside>
       <main className="home-main">
         <header>
-          <span>
-            YOUR STUDIO <i>/</i>{" "}
-            {window.studio ? "ON THIS COMPUTER" : "IN THIS BROWSER"}
-          </span>
-          <button onClick={() => s.set({ dialog: "about" })}>
-            <span className="free-dot" />
-            FREE BY DESIGN
-          </button>
+          <span>Project library<i>/</i>{window.studio ? 'filesystem' : 'browser storage'}</span>
+          <div>
+            <button aria-label="New project" onClick={() => s.set({ dialog: 'new' })}><Plus size={13} />New project</button>
+            <button aria-label="Open project file" onClick={() => void openFile()}><Upload size={13} />Open file</button>
+          </div>
         </header>
         <div className="home-content">
-          <section className="home-hero">
-            <div>
-              <span className="eyebrow">ANIMATION, WITH INTENT.</span>
-              <h1>
-                Ideas into
-                <br />
-                <em>motion.</em>
-              </h1>
-              <p>
-                A single canvas for drawings, characters and film.
-                <br />A deliberate workspace for the way you create.
-              </p>
-              <button
-                className="button primary"
-                onClick={() => s.set({ dialog: "new" })}
-              >
-                Start something new
-                <ArrowRight size={15} />
-              </button>
-            </div>
-            <div className="hero-art" aria-hidden="true">
-              <div className="hero-frame back" />
-              <div className="hero-frame middle" />
-              <div className="hero-frame front">
-                <img src="./mark.svg" alt="" />
-                <small>
-                  FRAME 001 <span>●</span>
-                </small>
-              </div>
-              <div className="hero-path" />
-              <span className="hero-caption">DRAW. MOVE. MAKE.</span>
-            </div>
-          </section>
-          <div className="start-cards">
-            {[
-              {
-                w: "Draw" as const,
-                icon: Pencil,
-                title: "Draw your story",
-                desc: "Pressure brushes, drawing cels and expressive timing.",
-                tag: "DRAW / FRAME BY FRAME",
-              },
-              {
-                w: "Motion" as const,
-                icon: Bone,
-                title: "Bring it to life",
-                desc: "Armatures, precise keys, groups and custom easing.",
-                tag: "MOTION / POSE & ANIMATE",
-              },
-              {
-                w: "Edit" as const,
-                icon: Clapperboard,
-                title: "Build the sequence",
-                desc: "Footage, audio and animated layers on one timeline.",
-                tag: "EDIT / CUT & COMPOSE",
-              },
-            ].map((card) => (
-              <button
-                key={card.w}
-                aria-label={`New ${card.w} project`}
-                onClick={() => start(card.w)}
-              >
-                <div>
-                  <card.icon size={22} strokeWidth={1.5} />
-                  <ArrowRight size={14} />
-                </div>
-                <small>{card.tag}</small>
-                <strong>{card.title}</strong>
-                <p>{card.desc}</p>
-              </button>
-            ))}
+          <div className="library-heading">
+            <div><h2>Documents <small>{visible.length}</small></h2></div>
+            <label className="search"><Search size={13} /><input aria-label="Search projects" value={search} placeholder="Filter by name" onChange={event => setSearch(event.target.value)} /></label>
+            <select aria-label="Sort projects" value={sort} onChange={event => setSort(event.target.value as typeof sort)}>
+              <option value="modified">Last modified</option>
+              <option value="name">Name</option>
+            </select>
           </div>
-          <section className="library-section">
-            <div className="library-heading">
-              <div>
-                <span className="eyebrow">LOCAL DOCUMENTS</span>
-                <h2>
-                  Your projects <small>{s.library.length}</small>
-                </h2>
-              </div>
-              <label className="search">
-                <Search size={14} />
-                <input
-                  aria-label="Search projects"
-                  value={search}
-                  placeholder="Find a project…"
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </label>
-              <select
-                aria-label="Sort projects"
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-              >
-                <option value="modified">Last modified</option>
-                <option value="name">Name</option>
-              </select>
-            </div>
-            {visible.length ? (
-              <div className="project-grid">
-                {visible.map((p) => (
-                  <article className="project-card" key={p.id}>
-                    <button
-                      className="project-open"
-                      aria-label={`Open ${p.title}`}
-                      onClick={() => void loadProject(p.id)}
-                    >
-                      <div className="project-thumb">
-                        {p.thumbnail ? (
-                          <img src={p.thumbnail} alt={`${p.title} preview`} />
-                        ) : (
-                          <Film size={27} />
-                        )}
-                        <small>
-                          {p.scenes} scene{p.scenes === 1 ? "" : "s"}
-                        </small>
+          {visible.length ? (
+            <table className="project-table">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Mode</th>
+                  <th scope="col" className="numeric">Scenes</th>
+                  <th scope="col" className="numeric">Length</th>
+                  <th scope="col">Modified</th>
+                  <th scope="col" aria-label="Row actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map(project => (
+                  <tr className="project-row" key={project.id} ref={menu === project.id ? row : undefined}>
+                    <td>
+                      <button className="project-open" aria-label={`Open ${project.title}`} disabled={!!working} onClick={() => void run(project.id, () => loadProject(project.id))}>
+                        <span className="project-thumb">{project.thumbnail ? <img src={project.thumbnail} alt="" /> : <Clapperboard size={14} />}</span>
+                        <span className="project-card-info"><strong>{project.title}</strong><span>{project.workspace} document</span></span>
+                      </button>
+                    </td>
+                    <td className="project-kind">{project.workspace}</td>
+                    <td className="numeric">{project.scenes}</td>
+                    <td className="numeric">{project.seconds.toFixed(2)}s</td>
+                    <td>{modified(project.modified)}</td>
+                    <td className="project-actions-cell">
+                      <div className="project-row-actions">
+                        <button aria-label={`Duplicate ${project.title}`} onClick={() => void run(project.id, () => duplicateProject(project.id))}><Copy size={13} /></button>
+                        <button aria-label={`Actions for ${project.title}`} aria-expanded={menu === project.id} onClick={() => setMenu(menu === project.id ? null : project.id)}><Ellipsis size={14} /></button>
                       </div>
-                      <div className="project-card-info">
-                        <strong>{p.title}</strong>
-                        <span>
-                          {p.workspace} <i>·</i> {p.seconds.toFixed(2)}s
-                        </span>
-                        <small>
-                          {new Date(p.modified).toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </small>
-                      </div>
-                    </button>
-                    <button
-                      className="project-action-button"
-                      aria-label={`Actions for ${p.title}`}
-                      onClick={() => setMenu(menu === p.id ? null : p.id)}
-                    >
-                      <Ellipsis size={17} />
-                    </button>
-                    {menu === p.id && (
-                      <div className="project-actions">
-                        <button
-                          onClick={() => {
-                            setMenu(null);
-                            void duplicateProject(p.id).catch((e) =>
-                              s.notify(e.message, true),
-                            );
-                          }}
-                        >
-                          <Copy size={12} />
-                          Duplicate
-                        </button>
-                        <button
-                          className="danger-text"
-                          onClick={() => {
-                            setMenu(null);
-                            if (
-                              confirm(
-                                `Permanently delete ${p.title} from this library? External .lam files are unchanged.`,
-                              )
-                            )
-                              void deleteProject(p.id).catch((e) =>
-                                s.notify(e.message, true),
-                              );
-                          }}
-                        >
-                          <Trash2 size={12} />
-                          Delete from library
-                        </button>
-                      </div>
-                    )}
-                  </article>
+                      {menu === project.id && (
+                        <div className="project-actions" role="menu" aria-label={`${project.title} actions`}>
+                          <button role="menuitem" onClick={() => void run(project.id, () => duplicateProject(project.id))}><Copy size={12} />Duplicate</button>
+                          <button role="menuitem" className="danger-text" onClick={() => { setMenu(null); if (confirm(`Remove ${project.title} from this library? External .lam files are not touched.`)) void run(project.id, () => deleteProject(project.id)); }}><Trash2 size={12} />Remove from library</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            ) : (
-              <div className="empty-library">
-                <FolderOpen size={29} strokeWidth={1.2} />
-                <h3>{search ? "No matching projects" : "A fresh start."}</h3>
-                <p>
-                  {search
-                    ? "Try a different name."
-                    : "Create a document or open a Luno Studio 1.0 .lam file."}
-                </p>
-                <button
-                  className="button secondary"
-                  onClick={() => void openFile()}
-                >
-                  Open a project
-                  <ArrowRight size={13} />
-                </button>
-              </div>
-            )}
-          </section>
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-library">
+              <h3>{search ? 'No documents match this filter.' : 'No documents yet.'}</h3>
+              <p>{search ? 'Clear the filter to see the full library.' : 'Create a Draw, Motion or Edit project, or open a Luno Studio 1.0 .lam file. Nothing is preinstalled and nothing is uploaded.'}</p>
+              {!search && <div className="empty-actions"><button className="button" aria-label="Open project file" onClick={() => void openFile()}><FolderOpen size={13} />Open .lam file</button><button className="button primary" aria-label="New project" onClick={() => s.set({ dialog: 'new' })}><Plus size={13} />New project</button></div>}
+            </div>
+          )}
           <div className="home-support-note">
-            <Sparkles size={13} />
-            <span>
-              Luno Studio 1.0 is a clean foundation. Previous Luno Animate
-              releases and formats are unsupported. Keep legacy work in
-              independent backups.
-            </span>
+            <Shield size={12} />
+            <span>Studio 1.0 uses a new document format. Earlier Luno Animate releases and their project files are unsupported here and are not converted automatically — keep independent copies of legacy work.</span>
           </div>
           <footer>
-            <span>LUNO STUDIO / {VERSION}</span>
-            <span>
-              {window.studio ? "Filesystem library" : "IndexedDB library"}{" "}
-              <i>·</i> local rendering <i>·</i> no account
-            </span>
+            <span>LUNO STUDIO {VERSION}</span>
+            <span>{window.studio ? 'Filesystem library' : 'IndexedDB library'}<i>·</i>local rendering<i>·</i>no account</span>
           </footer>
         </div>
       </main>
+      {working && <div className="update-notice" role="status"><div><RefreshCw size={14} className="spin" /><strong>{working === 'listing' ? 'Loading' : 'Working'}</strong></div><p>Finishing the local library operation. Do not close the window.</p></div>}
     </div>
   );
 }

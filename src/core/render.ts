@@ -250,7 +250,7 @@ export function drawLayer(
       ctx.arc(head.end.x, head.end.y, 26, 0, Math.PI * 2);
       ctx.fillStyle = l.color;
       ctx.fill();
-      ctx.fillStyle = "#20212b";
+      ctx.fillStyle = "#1c1d1f";
       ctx.beginPath();
       ctx.arc(head.end.x + 8, head.end.y - 3, 2.5, 0, Math.PI * 2);
       ctx.fill();
@@ -268,7 +268,7 @@ export function drawLayer(
       img = source ? image(source) : undefined;
     if (img) ctx.drawImage(img, -l.width / 2, -l.height / 2, l.width, l.height);
     else {
-      ctx.fillStyle = "#282b35";
+      ctx.fillStyle = "#2b2d31";
       ctx.fillRect(-l.width / 2, -l.height / 2, l.width, l.height);
     }
   }

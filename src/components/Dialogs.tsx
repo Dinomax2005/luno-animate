@@ -62,9 +62,12 @@ function NewProject() {
   return (
     <Modal title="New project" close={close}>
       <div className="dialog-intro">
-        <span className="eyebrow">A NEW DOCUMENT</span>
-        <h1>What will you make?</h1>
-        <p>One project format. Three focused ways to work.</p>
+        <span className="eyebrow">NEW DOCUMENT</span>
+        <h1>Create a project</h1>
+        <p>
+          One .lam document, three workspaces. Draw, Motion and Edit share
+          the same scenes, layers and exports.
+        </p>
       </div>
       <div className="document-types">
         {[
@@ -293,9 +296,12 @@ function Export() {
   return (
     <Modal title="Export animation" close={requestClose} wide>
       <div className="dialog-intro">
-        <span className="eyebrow">DELIVERY / LOCAL RENDER</span>
-        <h1>Give it an audience.</h1>
-        <p>No watermarks. No unlocks. Your work, in the format you need.</p>
+        <span className="eyebrow">LOCAL RENDER</span>
+        <h1>Export</h1>
+        <p>
+          MP4 up to 1800 frames or 120 s · PNG · PNG-sequence ZIP ·
+          flattened raster SVG · portable .lam copy. Encoded on this device.
+        </p>
       </div>
       <div className="export-layout">
         <div className="export-preview">
@@ -473,8 +479,8 @@ function Settings() {
   return (
     <Modal title="Document settings" close={close}>
       <div className="dialog-intro">
-        <span className="eyebrow">DOCUMENT & WORKSPACE</span>
-        <h1>Set the rhythm.</h1>
+        <span className="eyebrow">DOCUMENT AND WORKSPACE</span>
+        <h1>Document settings</h1>
       </div>
       <label className="text-field">
         <span>Document title</span>
@@ -573,7 +579,7 @@ function CommandSearch({ onImport }: { onImport: () => void }) {
           autoFocus
           aria-label="Search commands"
           value={query}
-          placeholder="What do you want to do?"
+          placeholder="Type a command name"
           onChange={(e) => {
             setQuery(e.target.value);
             setIndex(0);
@@ -637,20 +643,20 @@ function Setup() {
         </span>
       </div>
       <div className="dialog-intro">
-        <span className="eyebrow">YOUR WORKSPACE / {step + 1} OF 3</span>
+        <span className="eyebrow">SETUP / {step + 1} OF 3</span>
         <h1>
           {step === 0
-            ? "Choose your focus."
+            ? "Choose a workspace"
             : step === 1
-              ? "Make yourself at home."
-              : "Ready for the first frame."}
+              ? "Interface"
+              : "Where your work lives"}
         </h1>
         <p>
           {step === 0
-            ? "Workspaces rearrange your focus, not your document format."
+            ? "Workspaces rearrange the docks around one document. No tool is locked to a workspace."
             : step === 1
-              ? "Graphite and iris, or a light surface. Every tool stays available."
-              : "Local-first means you choose where your work goes. No account is required."}
+              ? "Graphite or porcelain. Both themes keep every tool and value legible."
+              : "Documents live in the local library. Save .lam copies wherever you want; no account is required."}
         </p>
       </div>
       {step === 0 ? (
@@ -743,7 +749,7 @@ function About() {
         <div>
           <h1>Luno Studio</h1>
           <p>
-            Animation, with intent. <span>Version {VERSION}</span>
+            Studio 1.0 · LUNO1LAM documents <span>Version {VERSION}</span>
           </p>
         </div>
       </div>
@@ -812,8 +818,8 @@ function Help() {
     <Modal title="Tools and shortcuts" close={close} wide>
       <div className="dialog-intro">
         <span className="eyebrow">STUDIO REFERENCE</span>
-        <h1>Learn the instrument.</h1>
-        <p>Precise tools reward a deliberate workflow.</p>
+        <h1>Tools, keys and limits</h1>
+        <p>Shortcuts, tool behaviour and the working limits of Studio 1.0.</p>
       </div>
       <div className="help-grid">
         {[
@@ -901,7 +907,7 @@ function Updates() {
     >
       <div className="dialog-intro">
         <span className="eyebrow">APPLICATION / MAINTENANCE</span>
-        <h1>Keep your work safe.</h1>
+        <h1>Updates and verified backups</h1>
         <p>
           Official Studio 1.0 releases. Your library stays on this computer.
         </p>

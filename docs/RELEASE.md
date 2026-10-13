@@ -1,6 +1,6 @@
 # Luno Studio v1.0.0 — Animation, with intent.
 
-A clean first Studio release: new code, scene engine, renderer, native shell, branding, interface, project format and verification suite. Graphite and iris replace the predecessor's styling; the new geometric Luno mark replaces its eclipse icon.
+A clean first Studio release: new code, scene engine, renderer, native shell, branding, interface, project format and verification suite. Graphite and amber (locked in DESIGN.md) replace the predecessor's styling; the new geometric Luno mark replaces its eclipse icon.
 
 ## Entirely free
 

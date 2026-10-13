@@ -260,7 +260,7 @@ export default function App() {
         state.pref("background", fg);
       }
       if (key === "d") {
-        state.pref("foreground", "#343345");
+        state.pref("foreground", "#24262a");
         state.pref("background", "#f6f5f1");
       }
       if (key === "[" || key === "]") {
@@ -495,7 +495,7 @@ export default function App() {
                   })
                 }
               >
-                <PanelLeft size={12} />
+                <PanelLeft size={12} /><span>Navigator</span>
               </button>
               <button
                 aria-label="Toggle inspector"
@@ -506,10 +506,10 @@ export default function App() {
                   })
                 }
               >
-                <PanelRight size={12} />
+                <PanelRight size={12} /><span>Inspector</span>
               </button>
               <button onClick={() => s.set({ dialog: "commands" })}>
-                ⌘ / COMMANDS
+                Commands ⌘K
               </button>
             </footer>
           </>
@@ -593,7 +593,7 @@ export default function App() {
         <Modal title="Preparing media" close={() => abort.current?.abort()}>
           <div className="dialog-intro">
             <span className="eyebrow">BOUNDED PROXY / LOCAL DECODE</span>
-            <h1>Preparing your footage.</h1>
+            <h1>Importing a bounded proxy</h1>
             <p>
               Your original file is unchanged. This document embeds a
               960px/20fps proxy and decoded audio where available.

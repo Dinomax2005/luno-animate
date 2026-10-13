@@ -135,7 +135,7 @@ export function Stage() {
     ctx.clearRect(0, 0, c.width, c.height);
     ctx.save();
     if (prefs.grid) {
-      ctx.strokeStyle = "#94909b20";
+      ctx.strokeStyle = "#7c7f8622";
       ctx.lineWidth = 1;
       for (let x = 0; x < c.width; x += 40) {
         ctx.beginPath();
@@ -161,13 +161,13 @@ export function Stage() {
           b = localBounds(l, frame);
         ctx.save();
         ctx.transform(...m);
-        ctx.strokeStyle = "#a69cff";
+        ctx.strokeStyle = "#d9822b";
         ctx.lineWidth = 1 / scale;
         ctx.setLineDash([5 / scale, 4 / scale]);
         ctx.strokeRect(b.x, b.y, b.width, b.height);
         ctx.setLineDash([]);
         if (!locked(l, scene.layers)) {
-          ctx.fillStyle = "#f5f2ff";
+          ctx.fillStyle = "#e8e8ea";
           for (const p of [
             { x: b.x, y: b.y },
             { x: b.x + b.width, y: b.y },
@@ -207,7 +207,7 @@ export function Stage() {
             ctx.beginPath();
             ctx.arc(bone.end.x, bone.end.y, 7 / scale, 0, Math.PI * 2);
             ctx.fillStyle =
-              bone.id === useStudio.getState().bone ? "#fff0b6" : "#a69cff";
+              bone.id === useStudio.getState().bone ? "#ffd08a" : "#d9822b";
             ctx.fill();
           }
         }
@@ -215,8 +215,8 @@ export function Stage() {
       }
     const g = gesture.current;
     if (g && (g.kind === "box" || g.kind === "shape")) {
-      ctx.fillStyle = "#a69cff17";
-      ctx.strokeStyle = "#a69cff";
+      ctx.fillStyle = "#d9822b22";
+      ctx.strokeStyle = "#d9822b";
       ctx.lineWidth = 1 / scale;
       ctx.fillRect(
         g.start.x,

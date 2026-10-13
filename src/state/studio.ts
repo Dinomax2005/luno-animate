@@ -70,7 +70,7 @@ function settings(): Preferences {
     autoKey: true,
     loop: true,
     brush: { ...brushDefaults },
-    foreground: "#343345",
+    foreground: "#24262a",
     background: "#f6f5f1",
     left: 240,
     right: 296,

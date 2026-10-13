@@ -267,7 +267,7 @@ export function layer(
     keys: [],
     width: kind === "paint" ? canvas.width : 180,
     height: kind === "paint" ? canvas.height : 180,
-    color: "#a59be9",
+    color: "#9aa0a6",
     stroke: "#000000",
     line: 0,
     start: 0,
@@ -415,7 +415,7 @@ export function createDocument(
   if (workspace === "Edit") {
     s.length = 240;
     s.work = [0, 239];
-    s.background = "#161820";
+    s.background = "#17181a";
   }
   return {
     format: "luno-studio",
