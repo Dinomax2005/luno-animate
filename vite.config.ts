@@ -10,4 +10,7 @@ export default defineConfig({
     allowedHosts: [".e2b.app", "localhost", "127.0.0.1"],
   },
   preview: { host: "0.0.0.0", allowedHosts: [".e2b.app", "localhost"] },
+  // mediabunny ships a very large ESM module; pre-bundling it stalls dev first imports
+  // ("Outdated Optimize Dep"), so the dev server serves the real module instead.
+  optimizeDeps: { exclude: ["mediabunny"] },
 });

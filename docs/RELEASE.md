@@ -1,3 +1,9 @@
+# Luno Studio v1.0.2
+
+Canvas pointer release. The artboard now draws its own pointer for **every** tool instead of relying on the system cursor, so the edit point is always visible — including with a stylus, on touch screens, in full-screen and in streamed or remote-desktop environments where the OS cursor is not rendered. Brush and eraser keep the ring sized to the tip (scaled with zoom, dashed when tiny, dashed ring for the eraser, centre dot tinted to the current ink); selection shows an arrow anchored at its exact hotspot; hand shows the grab glyph; type, rectangle, ellipse and rig show their own glyphs; fill and eyedropper show a crosshair ring in the tool's state colour. The pointer follows drags and strokes, hides on leaving the canvas or opening the context menu, never appears in exports, and the system cursor is hidden only while the drawn pointer is active.
+
+Development fix: `mediabunny` (very large ESM) is excluded from dependency pre-bundling, which removes the intermittent "Outdated Optimize Dep" 504 that could stall the first media import in a dev server.
+
 # Luno Studio v1.0.1
 
 Cursor and canvas-navigation release. The canvas now shows a paint cursor: a ring sized to the active brush tip that scales with zoom, with a crosshair and an amber centre dot, drawn above grids and selection guides. It appears on hover, hides outside the artboard and while playing, uses a dashed ring when the brush is smaller than the minimum ring so the exact paint point stays visible, and a dashed variant for the eraser. Plain cursors elsewhere follow the tool (crosshair for paint/fill/eyedropper, grab for hand, default for selection, text for type). No document, format or export behaviour changed.

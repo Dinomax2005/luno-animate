@@ -402,11 +402,14 @@ test("MP4 encodes actual video/audio where available and honestly reports an una
   expect(data.toString("ascii", 4, 8)).toBe("ftyp");
   const decoded = await page.evaluate(
     async (bytes) => {
-      const url = performance
+      const seen = performance
         .getEntriesByType("resource")
         .map((e) => e.name)
-        .find((u) => u.includes("/mediabunny.js"))!;
-      const m = await import(/* @vite-ignore */ url);
+        .find((u) => u.includes("mediabunny"));
+      // mediabunny is served as a real module in dev, so it may already be loaded
+      // from a versionless path; fall back to importing it by package name.
+      const fallback = "/node_modules/mediabunny/dist/modules/src/index.js";
+      const m = await import(/* @vite-ignore */ (seen ?? fallback));
       const input = new m.Input({
         source: new m.BufferSource(new Uint8Array(bytes)),
         formats: m.ALL_FORMATS,
@@ -558,4 +561,60 @@ test("canvas shows a brush-sized paint cursor that follows size, zoom and tool",
   await expect(ring).toHaveCount(1);
   await page.mouse.move(b.x - 90, b.y - 50);
   await expect(ring).toHaveCount(0);
+});
+
+test("an app-drawn pointer is visible and exact for every canvas tool", async ({
+  page,
+}) => {
+  await create(page);
+  const well = page.locator(".canvas-well");
+  const pointer = page.locator(".canvas-pointer");
+  const at = async (fx: number, fy: number) => {
+    const b = (await well.boundingBox())!;
+    await page.mouse.move(b.x + b.width * fx, b.y + b.height * fy);
+    await page.waitForTimeout(120);
+    return { x: b.x + b.width * fx, y: b.y + b.height * fy };
+  };
+  const offset = async (anchor: "centre" | "tip") => {
+    const box = (await pointer.boundingBox())!;
+    const x = anchor === "tip" ? box.x : box.x + box.width / 2;
+    const y = anchor === "tip" ? box.y : box.y + box.height / 2;
+    return { box, x, y };
+  };
+  for (const [tool, anchor] of [
+    ["Brush tool", "centre"],
+    ["Eraser tool", "centre"],
+    ["Fill tool", "centre"],
+    ["Eyedropper tool", "centre"],
+    ["Selection tool", "tip"],
+    ["Hand tool", "tip"],
+    ["Type tool", "centre"],
+    ["Rectangle tool", "centre"],
+    ["Ellipse tool", "centre"],
+    ["Rig pose tool", "centre"],
+  ] as const) {
+    await page.getByRole("button", { name: tool }).click();
+    const point = await at(0.45, 0.45);
+    await expect(pointer).toHaveCount(1);
+    const { x, y } = await offset(anchor);
+    expect(Math.abs(x - point.x)).toBeLessThan(10);
+    expect(Math.abs(y - point.y)).toBeLessThan(10);
+    // a fresh mount must not reset the pointer to the corner
+    await page.mouse.move(24, 24);
+    await expect(pointer).toHaveCount(0);
+    const again = await at(0.6, 0.55);
+    const remounted = await offset(anchor);
+    expect(Math.abs(remounted.x - again.x)).toBeLessThan(10);
+    expect(Math.abs(remounted.y - again.y)).toBeLessThan(10);
+  }
+  // the system cursor is suppressed only while the drawn pointer is active
+  expect(
+    await well.evaluate((el) => getComputedStyle(el).cursor),
+  ).toBe("none");
+  await page.mouse.move(24, 24);
+  expect(
+    await page
+      .locator(".canvas-well")
+      .evaluate((el) => getComputedStyle(el).cursor),
+  ).not.toBe("none");
 });

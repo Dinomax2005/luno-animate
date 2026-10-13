@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import {
+  Bone,
+  Circle,
   Crosshair,
   Expand,
   Grid3X3,
+  Hand,
   Magnet,
   Minus,
+  MousePointer2,
   Plus,
   ScanLine,
+  Square,
+  Type,
 } from "lucide-react";
 import { useStudio, currentScene } from "../state/studio";
 import {
@@ -55,6 +61,28 @@ interface Gesture {
   shape?: "rect" | "ellipse";
   initialMatrix?: ReturnType<typeof worldMatrix>;
 }
+/** App-drawn pointer glyph for tools that do not paint. Always visible, even where the
+ * system cursor is not rendered (tablets, styluses or streamed previews). */
+function PointerGlyph({ tool }: { tool: string }) {
+  return (
+    <>
+      {tool === "select" && (
+        <MousePointer2 size={16} strokeWidth={2.2} className="glyph hotspot" />
+      )}
+      {tool === "hand" && <Hand size={16} strokeWidth={2.2} className="glyph hotspot" />}
+      {tool === "text" && <Type size={15} strokeWidth={2.2} className="glyph centered" />}
+      {tool === "rig" && <Bone size={16} strokeWidth={2.2} className="glyph centered" />}
+      {tool === "rect" && (
+        <Square size={14} strokeWidth={2} className="glyph centered" />
+      )}
+      {tool === "ellipse" && (
+        <Circle size={14} strokeWidth={2} className="glyph centered" />
+      )}
+      {tool === "fill" && <span className="paint-aim centered" />}
+      {tool === "picker" && <span className="paint-aim picking centered" />}
+    </>
+  );
+}
 export function Stage() {
   const doc = useStudio((s) => s.document)!,
     scene = useStudio((s) =>
@@ -75,7 +103,10 @@ export function Stage() {
     [preview, setPreview] = useState<Mark | null>(null),
     [cursor, setCursor] = useState({ x: 0, y: 0 }),
     [hovering, setHovering] = useState(false),
-    [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+    [menu, setMenu] = useState<{ x: number; y: number } | null>(null),
+    pointer = useRef<HTMLDivElement>(null),
+    well = useRef<HTMLDivElement>(null),
+    lastPoint = useRef({ x: 0, y: 0 });
   const fit = Math.min(
       (size.w - 50) / doc.canvas.width,
       (size.h - 90) / doc.canvas.height,
@@ -263,6 +294,17 @@ export function Stage() {
       useStudio.getState().cancelGesture();
     };
   }, []);
+  /** Positions the app-drawn pointer imperatively: no re-render on every pointer move. */
+  const place = (x: number, y: number) => {
+    lastPoint.current = { x, y };
+    const el = pointer.current;
+    if (el) el.style.transform = `translate3d(${x}px,${y}px,0)`;
+  };
+  const placeAt = (e: { clientX: number; clientY: number }) => {
+    const r = well.current?.getBoundingClientRect();
+    if (!r) return;
+    place(e.clientX - r.left, e.clientY - r.top);
+  };
   const pos = (e: PointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     return {
@@ -314,6 +356,8 @@ export function Stage() {
     e.preventDefault();
     e.currentTarget.focus();
     setMenu(null);
+    setHovering(true);
+    placeAt(e);
     const s = useStudio.getState(),
       p = pos(e),
       w = world(p);
@@ -502,6 +546,7 @@ export function Stage() {
   const move = (e: PointerEvent<HTMLCanvasElement>) => {
     const p = pos(e);
     setCursor(p);
+    placeAt(e);
     const g = gesture.current;
     if (!g) return;
     const s = useStudio.getState();
@@ -716,8 +761,17 @@ export function Stage() {
         </div>
       </div>
       <div
-        className="canvas-well"
+        className={`canvas-well${hovering ? " pointer-drawn" : ""}`}
+        ref={well}
         data-tool={tool}
+        onPointerEnter={(e) => {
+          setHovering(true);
+          placeAt(e);
+        }}
+        onPointerLeave={(e) => {
+          if (!e.currentTarget.hasPointerCapture?.(e.pointerId)) setHovering(false);
+        }}
+        onPointerMove={placeAt}
         onWheel={(e) => {
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
@@ -735,8 +789,6 @@ export function Stage() {
             height: doc.canvas.height * scale,
             transform: `translate(${pan.x}px,${pan.y}px)`,
           }}
-          onPointerEnter={() => setHovering(true)}
-          onPointerLeave={() => setHovering(false)}
         >
           <canvas
             ref={canvas}
@@ -767,20 +819,29 @@ export function Stage() {
             width={doc.canvas.width}
             height={doc.canvas.height}
           />
-          {painting && hovering && !playing && !menu && (
-            <div
-              className={`brush-cursor${tool === "erase" ? " eraser" : ""}${cursorExact ? "" : " min"}`}
-              aria-hidden="true"
-              style={{
-                width: cursorSize,
-                height: cursorSize,
-                transform: `translate3d(${cursor.x * scale - cursorSize / 2}px,${cursor.y * scale - cursorSize / 2}px,0)`,
-              }}
-            >
-              <span />
-            </div>
-          )}
         </div>
+        {hovering && !menu && (
+          <div
+            className="canvas-pointer"
+            data-tool={tool}
+            aria-hidden="true"
+            ref={pointer}
+            style={{
+              transform: `translate3d(${lastPoint.current.x}px,${lastPoint.current.y}px,0)`,
+            }}
+          >
+            {painting ? (
+              <div
+                className={`brush-cursor${tool === "erase" ? " eraser" : ""}${cursorExact ? "" : " min"}${playing ? " idle" : ""}`}
+                style={{ width: cursorSize, height: cursorSize }}
+              >
+                <span style={tool === "brush" ? { background: prefs.foreground } : undefined} />
+              </div>
+            ) : (
+              <PointerGlyph tool={tool} />
+            )}
+          </div>
+        )}
       </div>
       <div className="stage-status">
         <span>
