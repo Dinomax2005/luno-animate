@@ -63,7 +63,9 @@ Every function and every accessibility hook asserted by the browser and desktop 
 
 ## 6. Verification after the redesign
 
-CI: **Studio quality run 38351954814 success**; **Build desktop installers run 38351870129 success** — Windows, macOS and Linux packages, packaged Linux desktop acceptance, and `verify-artifacts.mjs` passed twice (verify job and pre-staging job).
+v1.0.1 (paint cursor) shipped the same way: **build desktop installers run 38411293200 success**, draft staged from the exact commit and published as Latest.
+
+CI for the redesign: **Studio quality run 38351954814 success**; **Build desktop installers run 38351870129 success** — Windows, macOS and Linux packages, packaged Linux desktop acceptance, and `verify-artifacts.mjs` passed twice (verify job and pre-staging job).
 
 Published 2026-10-13 at the owner's request: release **v1.0.0** (id 411317444), marked **Latest**, 16 assets — Windows x64 exe, Linux AppImage + deb, macOS arm64/x64 dmg + zip with blockmaps, `SHA256SUMS.txt`, `studio-v1.yml`, `studio-v1-mac.yml`, `studio-v1-linux.yml`. No `latest.yml`, so the legacy feed is untouched. Every asset carries a GitHub-computed sha256 digest. The superseded draft was deleted before staging, so the published release always matches the redesigned interface. Branch HEAD differs from the tag only in documentation, which the build does not consume.
 
