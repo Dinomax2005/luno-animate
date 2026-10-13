@@ -7,6 +7,7 @@ This is an independent 1.0 implementation, not a theme patch on Luno Animate. Th
 ## My product direction
 
 Graphite surfaces, hairline borders and a single amber signal accent, documented in `DESIGN.md`. A custom geometric Luno mark. Deliberate tools instead of a simplified beginner UI. One unified document, with **Draw**, **Motion** and **Edit** workspaces:
+The redesign review, including what the AI-generated-interface fingerprint is and how each tell was rejected, is in [`docs/DESIGN-REVIEW.md`](docs/DESIGN-REVIEW.md).
 
 - **Draw:** eight procedural brush families, pressure, stabilization, flow, pixel marks, ordered cel erasure, bounded area fill and a composited eyedropper. Manual blank/duplicate cels, optional held exposures, onion skins and Undo/Redo.
 - **Motion:** vector shapes, editable text, layer transforms, groups, property keys, interpolation and a custom Bézier editor. A new ten-bone armature, constrained FK/IK posing, new joints and artwork attachments.
