@@ -15,8 +15,10 @@ try {
   const [source = "artifacts", destination = "verified-assets"] =
       process.argv.slice(2),
     version = JSON.parse(await readFile("package.json", "utf8")).version;
-  if (!/^1\.\d+\.\d+$/.test(version))
-    throw new Error("Only supported stable Studio 1.x releases can be staged.");
+  // Any stable release of this product may be staged, including the next major
+  // line: the earlier gate accepted only 1.x and refused this project's own 2.0.
+  if (!/^\d+\.\d+\.\d+$/.test(version))
+    throw new Error("Only stable numbered releases can be staged.");
   const feeds = {
       "studio-v1.yml": [`Pegbar-Studio-${version}-win-x64.exe`],
       "studio-v1-mac.yml": [
@@ -93,7 +95,7 @@ try {
     sums.join("\n") + "\n",
   );
   console.log(
-    `Verified ${files.size} assets, exact v${version} and all Studio 1.x manifests.`,
+    `Verified ${files.size} assets, exact v${version} and all channel manifests.`,
   );
 } catch (error) {
   if (process.env.GITHUB_ACTIONS === "true") {
