@@ -2,7 +2,7 @@
 
 **Goal:** make the interface read as a purpose-built studio tool instead of a generic template, without changing a single function.
 
-Current release: [the latest build](https://github.com/Dinomax2005/luno-animate/releases/latest). The 1.0.0 interface shipped from build `d04cfb2`; 2.0.0 keeps it and adds the timing surfaces described below.
+Current release: [v2.0.0](https://github.com/Dinomax2005/luno-animate/releases/tag/v2.0.0), built from `80e541e` and staged only after every packaging job passed. The 1.0.0 interface shipped from build `d04cfb2`; 2.0.0 keeps it and adds the timing surfaces described below.
 
 ## 2.0.0 additions: why they look like this
 
