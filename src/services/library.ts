@@ -13,7 +13,7 @@ interface DB extends DBSchema {
 }
 let database: ReturnType<typeof openDB<DB>> | undefined;
 function db() {
-  return (database ??= openDB<DB>("luno-studio-library", 1, {
+  return (database ??= openDB<DB>("pegbar-studio-library", 1, {
     upgrade(db) {
       db.createObjectStore("projects", { keyPath: "entry.id" });
       db.createObjectStore("revisions", {

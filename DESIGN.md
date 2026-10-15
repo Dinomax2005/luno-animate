@@ -1,4 +1,4 @@
-# Luno Studio interface direction — locked tokens
+# Pegbar Studio interface direction — locked tokens
 
 Committed direction: **Studio Instrument**. A control surface for people who make things, in the lineage of professional animation and compositing tools. Not a marketing site, not a product landing page.
 

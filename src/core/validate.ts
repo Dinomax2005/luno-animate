@@ -159,7 +159,11 @@ const scene = z.object({
   work: z.tuple([frame, frame]),
 });
 export const documentSchema = z.object({
-  format: z.literal("luno-studio"),
+  // 1.0.x stored the same schema under `luno-studio`. Reading it here upgrades a
+  // project in memory; the next save writes the current identity.
+  format: z
+    .union([z.literal("pegbar-studio"), z.literal("luno-studio")])
+    .transform(() => "pegbar-studio" as const),
   schema: z.literal(1),
   id,
   title: z.string().min(1).max(100),
@@ -209,7 +213,7 @@ export function validateDocument(value: unknown): Document {
   const parsed = documentSchema.safeParse(value);
   if (!parsed.success)
     throw new Error(
-      "Not a Luno Studio 1.0 document. Legacy versions are unsupported; your current work is unchanged.",
+      "Not a Pegbar Studio document. Pre-1.0 releases wrote an incompatible format; your current work is unchanged.",
     );
   const d = parsed.data as Document;
   unique(d.scenes, "scene");

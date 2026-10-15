@@ -573,7 +573,7 @@ export default function App() {
       {!s.ready && (
         <div className="boot-card" role="status">
           <img src="./mark.svg" alt="" />
-          <span>Opening Luno Studio</span>
+          <span>Opening Pegbar Studio</span>
           {bootError ? (
             <>
               <p>{bootError}</p>

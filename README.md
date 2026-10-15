@@ -1,12 +1,12 @@
-# Luno Studio 1.0
+# Pegbar Studio 1.0
 
 **Animation, with intent.** A clean, local-first professional animation workspace. Completely free: no accounts, subscriptions, activation codes, watermarks or locked tools.
 
-This is an independent 1.0 implementation, not a theme patch on Luno Animate. The old application files, engine, interface, tests, branding and packaging have been replaced. **Only Studio 1.x is supported.** Earlier Luno Animate versions and .lam/.luno formats are unsupported; their files and published archives are not deleted or silently migrated.
+This is an independent 1.0 implementation, not a theme patch on Pegbar Animate. The old application files, engine, interface, tests, branding and packaging have been replaced. **Only Studio 1.x is supported.** Earlier Luno Animate versions and .lam/.luno formats are unsupported; their files and published archives are not deleted or silently migrated.
 
 ## My product direction
 
-Graphite surfaces, hairline borders and a single amber signal accent, documented in `DESIGN.md`. A custom geometric Luno mark. Deliberate tools instead of a simplified beginner UI. One unified document, with **Draw**, **Motion** and **Edit** workspaces:
+Graphite surfaces, hairline borders and a single amber signal accent, documented in `DESIGN.md`. A custom geometric Pegbar mark. Deliberate tools instead of a simplified beginner UI. One unified document, with **Draw**, **Motion** and **Edit** workspaces:
 The interface changes and the reasoning behind them are in [`docs/INTERFACE.md`](docs/INTERFACE.md).
 
 - **Draw:** eight procedural brush families, pressure, stabilization, flow, pixel marks, ordered cel erasure, bounded area fill and a composited eyedropper. Manual blank/duplicate cels, optional held exposures, onion skins and Undo/Redo.
@@ -32,7 +32,7 @@ Development browser code uses local/relative assets, not a sandbox localhost API
 
 ## Install and support
 
-Installer assets are staged only after exact-source CI succeeds. A reviewed **v1.0.0** release is the first supported Luno Studio version. Product name **Luno Studio**, app ID `studio.luno.studio`, user-data folder **Luno Studio**, and update channel **studio-v1** are independent of the unsupported predecessor. Do not uninstall an old app or discard legacy projects before independently exporting/backing up that work. There is no automatic conversion of old projects.
+Installer assets are staged only after exact-source CI succeeds. A reviewed **v1.0.0** release is the first supported Pegbar Studio version. Product name **Pegbar Studio**, app ID `studio.pegbar.studio`, user-data folder **Pegbar Studio**, and update channel **studio-v1** are independent of the unsupported predecessor. Do not uninstall an old app or discard legacy projects before independently exporting/backing up that work. There is no automatic conversion of old projects.
 
 Windows NSIS setup includes the application licence and folder/shortcut options. macOS uses DMG/ZIP; Linux uses AppImage/DEB. Unsigned macOS and package-managed DEB updates are manual. Windows/AppImage use verified Studio 1.x manifests; install waits for a durable library save, verified backup, idle warning and no external-file changes. Physical Windows/macOS upgrades are not established by CI builds.
 
@@ -44,7 +44,7 @@ No measured speedup, Adobe parity, universal codec support, damage-proof upgrade
 
 ## Licence and distribution rights
 
-[LICENSE](LICENSE) is a **free proprietary application licence draft**, not MIT/open source. Application reuse, resale, redistribution and rebranding require appropriate permission except where law, GitHub terms or third-party component licences independently grant rights. Creative output is not claimed by Luno.
+[LICENSE](LICENSE) is a **free proprietary application licence draft**, not MIT/open source. Application reuse, resale, redistribution and rebranding require appropriate permission except where law, GitHub terms or third-party component licences independently grant rights. Creative output is not claimed by Pegbar.
 
 Confirm the licensing entity and written permissions before relying on the draft for public distribution. Nothing here supplies third-party permission, guarantees exclusive rights in generated code, or overrides service terms. See [licensing](docs/LICENSING.md).
 

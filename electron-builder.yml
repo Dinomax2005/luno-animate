@@ -1,8 +1,8 @@
-appId: studio.luno.studio
-productName: Luno Studio
-copyright: Copyright © 2026 Luno Studio rights holders
-executableName: luno-studio
-artifactName: Luno-Studio-${version}-${os}-${arch}.${ext}
+appId: studio.pegbar.studio
+productName: Pegbar Studio
+copyright: Copyright © 2026 Pegbar Studio rights holders
+executableName: pegbar-studio
+artifactName: Pegbar-Studio-${version}-${os}-${arch}.${ext}
 directories:
   output: release
   buildResources: assets
@@ -18,10 +18,10 @@ npmRebuild: false
 generateUpdatesFilesForAllChannels: false
 fileAssociations:
   - ext: lam
-    name: Luno Studio 1.0 Project
-    description: Luno Studio unified animation document
+    name: Pegbar Studio 1.0 Project
+    description: Pegbar Studio unified animation document
     role: Editor
-    mimeType: application/vnd.luno.studio
+    mimeType: application/vnd.pegbar.studio
 win:
   icon: assets/icon.ico
   target:
@@ -33,8 +33,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Luno Studio
-  uninstallDisplayName: Luno Studio
+  shortcutName: Pegbar Studio
+  uninstallDisplayName: Pegbar Studio
   deleteAppDataOnUninstall: false
   runAfterFinish: true
   installerIcon: assets/icon.ico
@@ -52,13 +52,13 @@ mac:
     - target: zip
       arch: [x64, arm64]
 dmg:
-  title: Luno Studio
+  title: Pegbar Studio
 linux:
   icon: assets/icon.png
   category: Graphics
   synopsis: Local-first animation, painting and motion studio
   description: Free proprietary animation software with drawing cels, pressure brushes, keyframes, FK/IK armatures, media proxies and local exports.
-  maintainer: Luno Studio
+  maintainer: Pegbar Studio
   target:
     - target: AppImage
       arch: [x64]

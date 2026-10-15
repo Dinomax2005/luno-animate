@@ -52,9 +52,9 @@ test("development/test builds never initialize the update feed", async (t) => {
 test("supported feed uses a new channel rather than inheriting the legacy latest manifests", async (t) => {
   const { updater, sdk } = fixture(t),
     old = process.env.APPIMAGE,
-    disabled = process.env.LUNO_DISABLE_UPDATES;
+    disabled = process.env.PEGBAR_DISABLE_UPDATES;
   process.env.APPIMAGE = "/fake.AppImage";
-  delete process.env.LUNO_DISABLE_UPDATES;
+  delete process.env.PEGBAR_DISABLE_UPDATES;
   try {
     await updater.initialize();
     if (process.platform === "darwin") {
@@ -71,7 +71,7 @@ test("supported feed uses a new channel rather than inheriting the legacy latest
   } finally {
     if (old === undefined) delete process.env.APPIMAGE;
     else process.env.APPIMAGE = old;
-    if (disabled !== undefined) process.env.LUNO_DISABLE_UPDATES = disabled;
+    if (disabled !== undefined) process.env.PEGBAR_DISABLE_UPDATES = disabled;
   }
 });
 test("busy activity blocks even an explicit restart", async (t) => {

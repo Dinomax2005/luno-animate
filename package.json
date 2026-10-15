@@ -1,9 +1,9 @@
 {
-  "name": "luno-studio",
-  "version": "1.0.3",
+  "name": "pegbar-studio",
+  "version": "2.0.0",
   "private": true,
   "description": "A free, local-first animation studio. Drawing, motion and editing on one unified timeline.",
-  "author": "Luno Studio",
+  "author": "Pegbar Studio",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "main": "desktop/main.cjs",

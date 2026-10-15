@@ -48,8 +48,8 @@ export async function openFile() {
       const [handle] = await window.showOpenFilePicker({
         types: [
           {
-            description: "Luno Studio project",
-            accept: { "application/vnd.luno.studio": [".lam"] },
+            description: "Pegbar Studio project",
+            accept: { "application/vnd.pegbar.studio": [".lam"] },
           },
         ],
       });
@@ -134,7 +134,7 @@ export async function saveFile(as = false, copy = false) {
       }
       download(
         new Blob([bytes as Uint8Array<ArrayBuffer>], {
-          type: "application/vnd.luno.studio",
+          type: "application/vnd.pegbar.studio",
         }),
         `${filename(snapshot.title)}.lam`,
       );
@@ -160,8 +160,8 @@ export async function saveFile(as = false, copy = false) {
         suggestedName: `${filename(snapshot.title)}.lam`,
         types: [
           {
-            description: "Luno Studio project",
-            accept: { "application/vnd.luno.studio": [".lam"] },
+            description: "Pegbar Studio project",
+            accept: { "application/vnd.pegbar.studio": [".lam"] },
           },
         ],
       });
@@ -173,7 +173,7 @@ export async function saveFile(as = false, copy = false) {
           link.hash
         )
           throw new Error(
-            "The file changed outside Luno. Use Save As to preserve both versions.",
+            "The file changed outside Pegbar. Use Save As to preserve both versions.",
           );
       }
       const writable = await handle.createWritable({ keepExistingData: false });

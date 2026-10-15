@@ -39,7 +39,7 @@ export function Home() {
   return (
     <div className="home">
       <aside className="home-sidebar">
-        <a className="brand" href="#" onClick={event => event.preventDefault()}><img src="./mark.svg" alt="" /><span>LUNO<small>STUDIO</small></span></a>
+        <a className="brand" href="#" onClick={event => event.preventDefault()}><img src="./mark.svg" alt="" /><span>PEGBAR<small>STUDIO</small></span></a>
         <span className="home-version">Version {VERSION} · all tools enabled</span>
         <div className="home-primary">
           <div className="home-new" aria-label="New project">
@@ -124,16 +124,16 @@ export function Home() {
           ) : (
             <div className="empty-library">
               <h3>{search ? 'No documents match this filter.' : 'No documents yet.'}</h3>
-              <p>{search ? 'Clear the filter to see the full library.' : 'Create a Draw, Motion or Edit project, or open a Luno Studio 1.0 .lam file. Nothing is preinstalled and nothing is uploaded.'}</p>
+              <p>{search ? 'Clear the filter to see the full library.' : 'Create a Draw, Motion or Edit project, or open a Pegbar Studio 1.0 .lam file. Nothing is preinstalled and nothing is uploaded.'}</p>
               {!search && <div className="empty-actions"><button className="button" aria-label="Open project file" onClick={() => void openFile()}><FolderOpen size={13} />Open .lam file</button><button className="button primary" aria-label="New project" onClick={() => s.set({ dialog: 'new' })}><Plus size={13} />New project</button></div>}
             </div>
           )}
           <div className="home-support-note">
             <Shield size={12} />
-            <span>Studio 1.0 uses a new document format. Earlier Luno Animate releases and their project files are unsupported here and are not converted automatically — keep independent copies of legacy work.</span>
+            <span>Studio 1.0 uses a new document format. Earlier Pegbar Animate releases and their project files are unsupported here and are not converted automatically — keep independent copies of legacy work.</span>
           </div>
           <footer>
-            <span>LUNO STUDIO {VERSION}</span>
+            <span>PEGBAR STUDIO {VERSION}</span>
             <span>{window.studio ? 'Filesystem library' : 'IndexedDB library'}<i>·</i>local rendering<i>·</i>no account</span>
           </footer>
         </div>

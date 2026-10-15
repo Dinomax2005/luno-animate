@@ -1,4 +1,4 @@
-# Luno Studio — interface changes
+# Pegbar Studio — interface changes
 
 **Goal:** make the interface read as a purpose-built studio tool instead of a generic template, without changing a single function.
 

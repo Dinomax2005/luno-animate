@@ -17,8 +17,8 @@ async function launch(profile: string) {
     args: ["--no-sandbox", ...(!executable ? ["."] : [])],
     env: {
       ...process.env,
-      LUNO_TEST_PROFILE: profile,
-      LUNO_DISABLE_UPDATES: "1",
+      PEGBAR_TEST_PROFILE: profile,
+      PEGBAR_DISABLE_UPDATES: "1",
     },
   });
 }
@@ -75,7 +75,7 @@ test("packaged first release: isolated identity, closed startup popup, safe brid
     expect(
       app.windows().filter((p) => p.url().endsWith("/startup.html")),
     ).toHaveLength(0);
-    expect(await app.evaluate(({ app }) => app.getName())).toBe("Luno Studio");
+    expect(await app.evaluate(({ app }) => app.getName())).toBe("Pegbar Studio");
     expect(
       await page.evaluate(() => ({
         require: typeof (window as unknown as { require?: unknown }).require,

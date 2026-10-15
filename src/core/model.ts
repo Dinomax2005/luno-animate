@@ -152,7 +152,7 @@ export interface Scene {
   work: [number, number];
 }
 export interface Document {
-  format: "luno-studio";
+  format: "pegbar-studio";
   schema: 1;
   id: string;
   title: string;
@@ -162,7 +162,7 @@ export interface Document {
   references: Reference[];
   created: number;
 }
-export const VERSION = "1.0.3";
+export const VERSION = "2.0.0";
 export const MAX_BYTES = 64_000_000;
 export const MAX_FRAMES = 1800;
 export const uid = () => crypto.randomUUID();
@@ -418,7 +418,7 @@ export function createDocument(
     s.background = "#17181a";
   }
   return {
-    format: "luno-studio",
+    format: "pegbar-studio",
     schema: 1,
     id: uid(),
     title,

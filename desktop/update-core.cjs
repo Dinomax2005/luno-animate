@@ -21,7 +21,7 @@ class Updates {
     this.countdown = null;
     this.state = {
       phase: "idle",
-      message: "Official Luno Studio 1.x updates.",
+      message: "Official Pegbar Studio 1.x updates.",
       version: null,
       percent: 0,
     };
@@ -34,7 +34,7 @@ class Updates {
     this.send(this.state);
   }
   async initialize() {
-    if (!this.app.isPackaged || process.env.LUNO_DISABLE_UPDATES === "1") {
+    if (!this.app.isPackaged || process.env.PEGBAR_DISABLE_UPDATES === "1") {
       this.emit({
         phase: "disabled",
         message: "Development builds never install updates.",
@@ -107,7 +107,7 @@ class Updates {
         phase: "available",
         version: info.version,
         percent: 0,
-        message: `Luno Studio ${info.version} is available. Preparing a verified download.`,
+        message: `Pegbar Studio ${info.version} is available. Preparing a verified download.`,
       });
       void this.download();
     });

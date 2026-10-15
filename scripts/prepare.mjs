@@ -50,7 +50,7 @@ await writeFile("assets/icon.ico", Buffer.concat([header, ...images]));
 const pkg = JSON.parse(await readFile("package.json", "utf8")),
   visited = new Set(),
   sections = [
-    "LUNO STUDIO — THIRD-PARTY NOTICES\nThese licences cover their respective components, not original Luno Studio code.\nElectron/Chromium keep their own distributed runtime notices.\nUnmodified Mediabunny source and licence: mediabunny-source.zip.\n",
+    "PEGBAR STUDIO — THIRD-PARTY NOTICES\nThese licences cover their respective components, not original Pegbar Studio code.\nElectron/Chromium keep their own distributed runtime notices.\nUnmodified Mediabunny source and licence: mediabunny-source.zip.\n",
   ];
 async function notice(folder) {
   if (visited.has(folder)) return;
@@ -121,5 +121,5 @@ await writeFile(
   zipSync(archive, { level: 6 }),
 );
 console.log(
-  `Prepared new Luno Studio brand, native codec/updater and ${visited.size} component notices.`,
+  `Prepared new Pegbar Studio brand, native codec/updater and ${visited.size} component notices.`,
 );

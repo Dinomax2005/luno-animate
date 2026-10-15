@@ -1,5 +1,5 @@
-LUNO STUDIO — THIRD-PARTY NOTICES
-These licences cover their respective components, not original Luno Studio code.
+PEGBAR STUDIO — THIRD-PARTY NOTICES
+These licences cover their respective components, not original Pegbar Studio code.
 Electron/Chromium keep their own distributed runtime notices.
 Unmodified Mediabunny source and licence: mediabunny-source.zip.
 

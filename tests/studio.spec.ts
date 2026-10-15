@@ -72,7 +72,7 @@ test("new identity, project home and optional setup have no fake projects or pai
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByText("LUNO", { exact: false }).first()).toBeVisible();
+  await expect(page.getByText("PEGBAR", { exact: false }).first()).toBeVisible();
   await expect(page.locator(".project-row")).toHaveCount(0);
   await expect(page.locator(".project-table")).toHaveCount(0);
   await expect(

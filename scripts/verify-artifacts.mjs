@@ -18,19 +18,19 @@ try {
   if (!/^1\.\d+\.\d+$/.test(version))
     throw new Error("Only supported stable Studio 1.x releases can be staged.");
   const feeds = {
-      "studio-v1.yml": [`Luno-Studio-${version}-win-x64.exe`],
+      "studio-v1.yml": [`Pegbar-Studio-${version}-win-x64.exe`],
       "studio-v1-mac.yml": [
-        `Luno-Studio-${version}-mac-x64.zip`,
-        `Luno-Studio-${version}-mac-arm64.zip`,
+        `Pegbar-Studio-${version}-mac-x64.zip`,
+        `Pegbar-Studio-${version}-mac-arm64.zip`,
       ],
-      "studio-v1-linux.yml": [`Luno-Studio-${version}-linux-x86_64.AppImage`],
+      "studio-v1-linux.yml": [`Pegbar-Studio-${version}-linux-x86_64.AppImage`],
     },
     required = [
       ...Object.keys(feeds),
       ...Object.values(feeds).flat(),
-      `Luno-Studio-${version}-mac-x64.dmg`,
-      `Luno-Studio-${version}-mac-arm64.dmg`,
-      `Luno-Studio-${version}-linux-amd64.deb`,
+      `Pegbar-Studio-${version}-mac-x64.dmg`,
+      `Pegbar-Studio-${version}-mac-arm64.dmg`,
+      `Pegbar-Studio-${version}-linux-amd64.deb`,
     ],
     files = new Map();
   async function scan(dir) {

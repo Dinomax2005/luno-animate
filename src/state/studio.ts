@@ -60,7 +60,10 @@ interface Preferences {
   timeline: number;
   newsSeen: string;
 }
-const SETTINGS = "luno.studio.preferences.v1";
+const SETTINGS = "pegbar.studio.preferences.v1";
+// 1.0.x stored the same preferences under the earlier key. Read it once so a
+// rename does not silently reset a returning user's workspace.
+const LEGACY_SETTINGS = "luno.studio.preferences.v1";
 function settings(): Preferences {
   const initial: Preferences = {
     theme: "dark",
@@ -78,7 +81,11 @@ function settings(): Preferences {
     newsSeen: "",
   };
   try {
-    const raw = JSON.parse(localStorage.getItem(SETTINGS) ?? "{}");
+    const raw = JSON.parse(
+      localStorage.getItem(SETTINGS) ??
+        localStorage.getItem(LEGACY_SETTINGS) ??
+        "{}",
+    );
     for (const k of ["grid", "snap", "onion", "autoKey", "loop"] as const)
       if (typeof raw[k] === "boolean") initial[k] = raw[k];
     const brush = brushSchema.safeParse(raw.brush);

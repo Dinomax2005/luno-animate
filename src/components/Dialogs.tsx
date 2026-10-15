@@ -150,7 +150,7 @@ function NewProject() {
         </select>
       </div>
       <p className="dialog-note">
-        RGB · embedded assets · local autosave · Luno Studio 1.0 .lam
+        RGB · embedded assets · local autosave · Pegbar Studio 1.0 .lam
       </p>
       <div className="dialog-footer">
         <button className="button secondary" onClick={close}>
@@ -639,7 +639,7 @@ function Setup() {
       <div className="setup-brand">
         <img src="./mark.svg" alt="" />
         <span>
-          LUNO STUDIO <small>{VERSION}</small>
+          PEGBAR STUDIO <small>{VERSION}</small>
         </span>
       </div>
       <div className="dialog-intro">
@@ -703,7 +703,7 @@ function Setup() {
             <br />
             Application redistribution requires permission.
             <br />
-            Luno Studio 1.0 replaces unsupported legacy releases.
+            Pegbar Studio 1.0 replaces unsupported legacy releases.
           </p>
           <button className="subtle" onClick={() => s.set({ dialog: "about" })}>
             Read the application licence
@@ -743,13 +743,13 @@ function Setup() {
 function About() {
   const [tab, setTab] = useState("product");
   return (
-    <Modal title="About Luno Studio" close={close} wide>
+    <Modal title="About Pegbar Studio" close={close} wide>
       <div className="about-brand">
         <img src="./mark.svg" alt="" />
         <div>
-          <h1>Luno Studio</h1>
+          <h1>Pegbar Studio</h1>
           <p>
-            Studio 1.0 · LUNO1LAM documents <span>Version {VERSION}</span>
+            Studio 1.0 · PEGB1LAM documents <span>Version {VERSION}</span>
           </p>
         </div>
       </div>
@@ -777,7 +777,7 @@ function About() {
             tier.
           </p>
           <p>
-            <strong>Only Luno Studio 1.0 is supported.</strong> Earlier Luno
+            <strong>Only Pegbar Studio 1.0 is supported.</strong> Earlier Pegbar
             Animate formats do not open in this application. Keep their original
             files and exported media. Old public downloads may remain as
             unsupported archives; they are not migrated.

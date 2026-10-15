@@ -2,7 +2,10 @@ import { deflateSync, Inflate, strFromU8, strToU8 } from "fflate";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { MAX_BYTES, type Document } from "./model";
 import { parseDocument, validateDocument } from "./validate";
-const MAGIC = strToU8("LUNO1LAM");
+const MAGIC = strToU8("PEGB1LAM");
+// 1.0.x shipped this container as Luno Studio. Those projects still open; they
+// are re-saved with the current signature once you save them again.
+const LEGACY_MAGIC = strToU8("LUNO1LAM");
 export const HEADER = 52;
 export function fingerprint(bytes: Uint8Array): string {
   return [...sha256(bytes)]
@@ -26,13 +29,19 @@ export function encode(document: Document): Uint8Array {
   return result;
 }
 export function decode(bytes: Uint8Array): Document {
-  if (bytes.length < HEADER || MAGIC.some((x, i) => x !== bytes[i]))
+  if (bytes.length < HEADER)
     throw new Error(
-      "Unsupported project. Luno Studio 1.0 does not open legacy Luno Animate files. Your work is unchanged.",
+      "Unsupported project. Pegbar Studio 2.0 does not read the abandoned pre-1.0 format. Your work is unchanged.",
+    );
+  const current = MAGIC.every((x, i) => x === bytes[i]),
+    legacy = LEGACY_MAGIC.every((x, i) => x === bytes[i]);
+  if (!current && !legacy)
+    throw new Error(
+      "Unsupported project. Pegbar Studio 2.0 opens Pegbar Studio 1.0 files and its own, not the abandoned pre-1.0 format. Your work is unchanged.",
     );
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (v.getUint16(8, true) !== 1 || v.getUint16(10, true) !== 1)
-    throw new Error("This project requires another Luno Studio reader.");
+    throw new Error("This project requires another Pegbar Studio reader.");
   const rawSize = v.getUint32(12, true),
     size = v.getUint32(16, true);
   if (

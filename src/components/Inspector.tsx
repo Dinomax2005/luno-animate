@@ -514,7 +514,7 @@ export function Inspector() {
               <p className="panel-note">
                 {scene.layers.length} layers · {doc.scenes.length} scenes
                 <br />
-                RGB · local-first · Luno Studio 1.0
+                RGB · local-first · Pegbar Studio 1.0
               </p>
               <div className="field-grid">
                 <NumberField
@@ -685,7 +685,7 @@ export function Inspector() {
       </div>
       <div className="inspector-footer">
         <span>All tools. No unlocks.</span>
-        <small>LUNO / 1.0</small>
+        <small>PEGBAR / 1.0</small>
       </div>
     </aside>
   );

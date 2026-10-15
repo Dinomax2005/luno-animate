@@ -7,7 +7,7 @@ const { Library, Files } = require("../desktop/storage.cjs");
 const { encode, decode } = require("../desktop/core.cjs");
 function doc(id = "studio-document") {
   return {
-    format: "luno-studio",
+    format: "pegbar-studio",
     schema: 1,
     id,
     title: "Native study",
@@ -30,7 +30,7 @@ function doc(id = "studio-document") {
   };
 }
 async function fixture(t) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "luno-studio-test-"));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "pegbar-studio-test-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const library = new Library(path.join(root, "profile"));
   await library.initial;

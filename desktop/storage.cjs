@@ -3,6 +3,9 @@ const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { decode, fingerprint } = require("./core.cjs");
 const SAFE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/;
+const BACKUP_FORMAT = "pegbar-studio-backup";
+// 1.0.x wrote this manifest as "luno-studio-backup". Old backups still restore.
+const BACKUP_FORMATS = [BACKUP_FORMAT, "luno-studio-backup"];
 function identifier(value) {
   if (
     typeof value !== "string" ||
@@ -207,7 +210,7 @@ class Library {
       folder = path.join(this.root, "backups", id);
     await fs.mkdir(folder);
     const manifest = {
-      format: "luno-studio-backup",
+      format: BACKUP_FORMAT,
       schema: 1,
       id,
       date: Date.now(),
@@ -254,7 +257,7 @@ class Library {
               8_000_000,
             ),
           );
-          if (m.id === entry.name && m.format === "luno-studio-backup")
+          if (m.id === entry.name && BACKUP_FORMATS.includes(m.format))
             result.push({ id: m.id, date: m.date });
         } catch {
           /* Incomplete backups cannot be selected. */
@@ -271,7 +274,7 @@ class Library {
           await read(path.join(folder, "manifest.json"), 8_000_000),
         );
       if (
-        manifest.format !== "luno-studio-backup" ||
+        !BACKUP_FORMATS.includes(manifest.format) ||
         manifest.schema !== 1 ||
         !Array.isArray(manifest.projects) ||
         manifest.projects.length > 1000
@@ -345,7 +348,7 @@ class Files {
       }
       if (expected === "new" || fingerprint(current) !== expected)
         throw new Error(
-          "The file changed outside Luno. Save As to preserve both versions.",
+          "The file changed outside Pegbar. Save As to preserve both versions.",
         );
     };
     await check();

@@ -69,7 +69,7 @@ jobs:
         if: matrix.name == 'Linux'
         run: xvfb-run -a npm run test:desktop
         env:
-          PLAYWRIGHT_ELECTRON_EXECUTABLE: release/linux-unpacked/luno-studio
+          PLAYWRIGHT_ELECTRON_EXECUTABLE: release/linux-unpacked/pegbar-studio
       - uses: actions/upload-artifact@v7
         with:
           name: Studio-${{ matrix.name }}
@@ -142,6 +142,6 @@ jobs:
               echo "::notice::$TAG is already published; leaving its assets untouched. Bump the version to stage a new build."
             fi
           else
-            gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Luno Studio $TAG" --notes-file .cache/release.md
+            gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Pegbar Studio $TAG" --notes-file .cache/release.md
             gh release upload "$TAG" verified-assets/*
           fi

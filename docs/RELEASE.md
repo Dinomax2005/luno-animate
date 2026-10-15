@@ -1,4 +1,4 @@
-# Luno Studio release notes
+# Pegbar Studio release notes
 
 ## 1.0.3
 
@@ -21,7 +21,7 @@
 
 ## 1.0.0
 
-First Studio release: new scene engine, renderer, desktop shell, brand, project format and test suite. Graphite surfaces, hairline borders and a single amber accent, described in `DESIGN.md`. Earlier Luno Animate versions and their project files are out of date and are not opened or converted by this release.
+First Studio release: new scene engine, renderer, desktop shell, brand, project format and test suite. Graphite surfaces, hairline borders and a single amber accent, described in `DESIGN.md`. Earlier Pegbar Animate versions and their project files are out of date and are not opened or converted by this release.
 
 ### Draw
 
@@ -42,11 +42,11 @@ First Studio release: new scene engine, renderer, desktop shell, brand, project 
 
 ## Free to use
 
-No subscriptions, no account, no trials and no watermarks. Every tool is available in every build. The application licence covers the software itself; the work you make with Luno Studio belongs to you and is not claimed by us.
+No subscriptions, no account, no trials and no watermarks. Every tool is available in every build. The application licence covers the software itself; the work you make with Pegbar Studio belongs to you and is not claimed by us.
 
 ## Legacy versions
 
-Every earlier Luno Animate release and its project files are unsupported. Keep your old files and export media from an older build if you still need them. Studio 1.0 uses its own identity, its own update channel and its own `.lam` format, so an old updater or old project reader will not become compatible with it.
+Every earlier Pegbar Animate release and its project files are unsupported. Keep your old files and export media from an older build if you still need them. Studio 1.0 uses its own identity, its own update channel and its own `.lam` format, so an old updater or old project reader will not become compatible with it.
 
 ## Working limits
 

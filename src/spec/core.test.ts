@@ -59,7 +59,7 @@ describe("independent Studio 1.0 model and protected container", () => {
     (w) => {
       const d = createDocument(w);
       expect(validateDocument(d)).toEqual(d);
-      expect(d.format).toBe("luno-studio");
+      expect(d.format).toBe("pegbar-studio");
       expect(d.schema).toBe(1);
     },
   );
@@ -72,7 +72,7 @@ describe("independent Studio 1.0 model and protected container", () => {
     const d = createDocument();
     d.scenes[0].layers[0].cels![0].marks.push(dot());
     const bytes = encode(d);
-    expect(new TextDecoder().decode(bytes.slice(0, 8))).toBe("LUNO1LAM");
+    expect(new TextDecoder().decode(bytes.slice(0, 8))).toBe("PEGB1LAM");
     expect(decode(bytes)).toEqual(d);
     expect(fingerprint(bytes)).toHaveLength(64);
   });
@@ -87,7 +87,24 @@ describe("independent Studio 1.0 model and protected container", () => {
   it("legacy LUNOLAM files are deliberately rejected without migrating or deleting them", () => {
     const bytes = encode(createDocument());
     bytes.set(new TextEncoder().encode("LUNOLAM\0"));
-    expect(() => decode(bytes)).toThrow("legacy");
+    expect(() => decode(bytes)).toThrow("pre-1.0");
+  });
+  it("1.0 studio projects still open, upgrade in memory and re-save under the current signature", () => {
+    const d = createDocument();
+    d.title = "Kept project";
+    const current = encode(d),
+      legacy = new Uint8Array(current);
+    // 1.0.x used the same 52-byte header and schema, under the earlier signature.
+    legacy.set(new TextEncoder().encode("LUNO1LAM"));
+    expect(decode(legacy).title).toBe("Kept project");
+    expect(decode(legacy).format).toBe("pegbar-studio");
+    expect(decode(legacy)).toEqual(d);
+  });
+  it("the earlier format identifier is upgraded rather than rejected", () => {
+    const d = createDocument();
+    const upgraded = validateDocument({ ...d, format: "luno-studio" });
+    expect(upgraded.format).toBe("pegbar-studio");
+    expect(encode(upgraded)).toEqual(encode(d));
   });
   it("NaN and Infinity never enter transforms or pressure", () => {
     const d = createDocument();

@@ -98,7 +98,7 @@ export function Header({ onImport }: { onImport: () => void }) {
                 <button role="menuitem" aria-label={command.label} key={command.id} disabled={command.enabled?.() === false} onClick={() => { setOpen(false); execute(command); }}><span>{command.label}</span><kbd>{command.shortcut}</kbd></button>
               ))}
             </div>
-            <span className="menu-foot">Luno Studio {VERSION}</span>
+            <span className="menu-foot">Pegbar Studio {VERSION}</span>
           </div>
         )}
       </div>

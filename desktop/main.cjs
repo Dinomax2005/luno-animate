@@ -13,13 +13,35 @@ const { randomUUID } = require("node:crypto");
 const { Library, Files, atomic } = require("./storage.cjs");
 const { decode } = require("./core.cjs");
 const { Updates } = require("./updater.bundle.cjs");
-app.setName("Luno Studio");
-app.setPath(
-  "userData",
-  process.env.LUNO_TEST_PROFILE && process.env.LUNO_DISABLE_UPDATES === "1"
-    ? path.resolve(process.env.LUNO_TEST_PROFILE)
-    : path.join(app.getPath("appData"), "Luno Studio"),
+app.setName("Pegbar Studio");
+const customProfile = !!(
+  process.env.PEGBAR_TEST_PROFILE && process.env.PEGBAR_DISABLE_UPDATES === "1"
 );
+const profile = () =>
+  customProfile
+    ? path.resolve(process.env.PEGBAR_TEST_PROFILE)
+    : path.join(app.getPath("appData"), "Pegbar Studio");
+// 1.0.x kept its library in a profile named after the old brand. Adopt that
+// folder once, by rename, so existing projects, revisions and verified backups
+// stay visible in the library. Nothing is deleted and nothing is left behind:
+// a failed rename simply leaves the old folder untouched.
+const LEGACY_PROFILE = "Luno Studio";
+async function adoptLegacyProfile(current) {
+  try {
+    const legacy = path.join(app.getPath("appData"), LEGACY_PROFILE);
+    if (path.resolve(legacy) === path.resolve(current)) return null;
+    const [here, there] = await Promise.all([
+      fs.stat(current).then(() => true, () => false),
+      fs.stat(legacy).then(() => true, () => false),
+    ]);
+    if (here || !there) return null;
+    await fs.rename(legacy, current);
+    return legacy;
+  } catch {
+    return null;
+  }
+}
+app.setPath("userData", profile());
 let main,
   startup,
   library,
@@ -32,7 +54,7 @@ let main,
 const trusted = pathToFileURL(
     path.join(__dirname, "..", "dist", "index.html"),
   ).href,
-  dev = process.env.LUNO_DEV_URL;
+  dev = process.env.PEGBAR_DEV_URL;
 const preparations = new Map();
 function assert(event) {
   if (
@@ -110,7 +132,7 @@ async function deliver(file) {
       title: "Project not opened",
       message: error.message,
       detail:
-        "Your original file has not been changed. Luno Studio 1.0 does not read legacy Luno Animate files.",
+        "Your original file has not been changed. Pegbar Studio 2.0 reads 1.0 projects and its own, not the abandoned pre-1.0 format.",
     });
   }
 }
@@ -132,6 +154,7 @@ else {
   app
     .whenReady()
     .then(async () => {
+      if (!customProfile) await adoptLegacyProfile(app.getPath("userData"));
       library = new Library(app.getPath("userData"));
       await library.initial;
       files = new Files(app.getPath("userData"));
@@ -156,7 +179,7 @@ else {
         height: 960,
         minWidth: 800,
         minHeight: 640,
-        title: "Luno Studio",
+        title: "Pegbar Studio",
         show: false,
         backgroundColor: "#14151b",
         icon: path.join(__dirname, "..", "assets", "icon.png"),
@@ -165,7 +188,7 @@ else {
           nodeIntegration: false,
           contextIsolation: true,
           sandbox: true,
-          partition: "persist:luno-studio-v1",
+          partition: "persist:pegbar-studio-v1",
           webSecurity: true,
         },
       });
@@ -229,9 +252,9 @@ else {
       handle("library-restore", (id) => library.restore(id));
       handle("file-open", async () => {
         const result = await dialog.showOpenDialog(main, {
-          title: "Open Luno Studio project",
+          title: "Open Pegbar Studio project",
           properties: ["openFile"],
-          filters: [{ name: "Luno Studio 1.0", extensions: ["lam"] }],
+          filters: [{ name: "Pegbar Studio 1.0", extensions: ["lam"] }],
         });
         return result.canceled ? null : files.approve(result.filePaths[0]);
       });
@@ -239,11 +262,11 @@ else {
         decode(Buffer.from(bytes));
         if (!token) {
           const result = await dialog.showSaveDialog(main, {
-            title: "Save Luno Studio project",
+            title: "Save Pegbar Studio project",
             defaultPath: `${String(title)
               .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
               .slice(0, 100)}.lam`,
-            filters: [{ name: "Luno Studio project", extensions: ["lam"] }],
+            filters: [{ name: "Pegbar Studio project", extensions: ["lam"] }],
           });
           if (result.canceled || !result.filePath) return null;
           const target = await files.target(result.filePath);
