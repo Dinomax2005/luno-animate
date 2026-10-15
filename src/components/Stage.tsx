@@ -34,7 +34,7 @@ import {
   worldMatrix,
 } from "../core/motion";
 import { contains, localBounds, transformedBounds } from "../core/bounds";
-import { bucket, stabilize } from "../core/paint";
+import { bucket, mirrorMark, stabilize } from "../core/paint";
 import { layer, uid, type Mark, type Point } from "../core/model";
 interface Gesture {
   kind:
@@ -161,6 +161,11 @@ export function Stage() {
       context.save();
       context.transform(...cameraMatrix(doc, scene, frame));
       context.drawImage(buffer, 0, 0);
+      if (prefs.mirror) {
+        const twin = mirrorMark(mark, doc.canvas.width),
+          doubled = twin && paintCanvas(temp, frame, twin);
+        if (doubled) context.drawImage(doubled, 0, 0);
+      }
       context.restore();
     }
   }, [doc, scene, frame, preview, prefs.onion, playing]);
@@ -247,6 +252,57 @@ export function Stage() {
             ctx.fill();
           }
         }
+        ctx.restore();
+      }
+    if (!playing)
+      for (const id of selected) {
+        const l = scene.layers.find((l) => l.id === id);
+        if (
+          !l ||
+          !l.keys.some(
+            (k) => k.values.x !== undefined || k.values.y !== undefined,
+          )
+        )
+          continue;
+        const from = Math.max(0, l.start),
+          to = Math.min(scene.length - 1, l.end),
+          step = to - from > 600 ? 3 : 1,
+          camera = cameraMatrix(doc, scene, 0);
+        ctx.save();
+        ctx.lineWidth = 1 / scale;
+        ctx.strokeStyle = "#d9822b99";
+        ctx.setLineDash([3 / scale, 3 / scale]);
+        ctx.beginPath();
+        let dots = 0;
+        for (let f = from; f <= to; f += step) {
+          const at = point(
+            multiply(camera, worldMatrix(l, scene.layers, f)),
+            { x: 0, y: 0 },
+          );
+          dots++ ? ctx.lineTo(at.x, at.y) : ctx.moveTo(at.x, at.y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        for (const key of l.keys) {
+          if (key.frame < from || key.frame > to) continue;
+          const at = point(
+            multiply(camera, worldMatrix(l, scene.layers, key.frame)),
+            { x: 0, y: 0 },
+          );
+          ctx.beginPath();
+          ctx.arc(at.x, at.y, 3 / scale, 0, Math.PI * 2);
+          ctx.fillStyle = "#e8e8ea";
+          ctx.fill();
+          ctx.stroke();
+        }
+        const here = point(multiply(camera, worldMatrix(l, scene.layers, frame)), {
+          x: 0,
+          y: 0,
+        });
+        ctx.beginPath();
+        ctx.arc(here.x, here.y, 4.5 / scale, 0, Math.PI * 2);
+        ctx.fillStyle = "#d9822b";
+        ctx.fill();
         ctx.restore();
       }
     const g = gesture.current;
@@ -675,7 +731,13 @@ export function Stage() {
     }
     s.endGesture();
     if (!g) return;
-    if (g.kind === "paint") s.addMark(g.mark!, g.expected!);
+    if (g.kind === "paint") {
+      s.addMark(g.mark!, g.expected!);
+      const twin = prefs.mirror
+        ? mirrorMark(g.mark!, doc.canvas.width)
+        : null;
+      if (twin) s.addMark(twin, g.expected!);
+    }
     if (g.kind === "shape") {
       const a = world(g.start),
         b = world(g.pointer);

@@ -254,7 +254,7 @@ else {
         const result = await dialog.showOpenDialog(main, {
           title: "Open Pegbar Studio project",
           properties: ["openFile"],
-          filters: [{ name: "Pegbar Studio 1.0", extensions: ["lam"] }],
+          filters: [{ name: "Pegbar Studio project", extensions: ["lam"] }],
         });
         return result.canceled ? null : files.approve(result.filePaths[0]);
       });

@@ -168,55 +168,80 @@ async function mix(
   }
   return context.startRendering();
 }
-export async function mp4Capabilities(doc: Document, longSide: number) {
+export type Movie = "mp4" | "webm";
+
+/** Which video/audio encoders this device offers for the requested container. */
+export async function movieCapabilities(
+  doc: Document,
+  longSide: number,
+  kind: Movie = "mp4",
+) {
   const m = await import("mediabunny"),
     canvas = canvasFor(doc, longSide),
-    video = await m.canEncodeVideo("avc", {
+    video = (kind === "mp4" ? "avc" : "vp9") as "avc" | "vp9",
+    audio = await m.getFirstEncodableAudioCodec(
+      kind === "mp4" ? ["aac", "opus"] : ["opus", "vorbis"],
+      { numberOfChannels: 2, sampleRate: 48000, bitrate: 128_000 },
+    ),
+    capable = await m.canEncodeVideo(video, {
       width: canvas.width,
       height: canvas.height,
-      bitrate: 5_000_000,
-    }),
-    audio = await m.getFirstEncodableAudioCodec(["aac", "opus"], {
-      numberOfChannels: 2,
-      sampleRate: 48000,
-      bitrate: 128_000,
+      bitrate: kind === "mp4" ? 5_000_000 : 3_000_000,
     });
-  return { video, audio, width: canvas.width, height: canvas.height };
+  return {
+    video: capable ? video : null,
+    audio,
+    width: canvas.width,
+    height: canvas.height,
+  };
 }
-export async function exportMp4(
+export async function mp4Capabilities(doc: Document, longSide: number) {
+  return movieCapabilities(doc, longSide, "mp4");
+}
+export async function exportMovie(
   doc: Document,
   sceneId: string,
   options: ExportOptions,
+  kind: Movie,
   progress: (p: number) => void,
   signal: AbortSignal,
 ): Promise<Blob> {
-  const frames = plan(doc, sceneId, options);
+  const label = kind === "mp4" ? "MP4" : "WebM",
+    frames = plan(doc, sceneId, options);
   if (frames.length / doc.canvas.fps > 120)
     throw new Error(
-      "MP4 render limit: 120 seconds per job. Use a shorter work area.",
+      `${label} render limit: 120 seconds per job. Use a shorter work area.`,
     );
   if (frames.length > 1800)
     throw new Error(
-      "MP4 render limit: 1,800 frames per job. Export a shorter work area or individual scenes.",
+      `${label} render limit: 1,800 frames per job. Export a shorter work area or individual scenes.`,
     );
   const m = await import("mediabunny"),
     canvas = canvasFor(doc, options.longSide),
     target = new m.BufferTarget(),
-    cap = await mp4Capabilities(doc, options.longSide);
+    cap = await movieCapabilities(doc, options.longSide, kind);
   if (!cap.video)
     throw new Error(
-      "H.264 encoding is unavailable on this device. Use the desktop build or export a PNG sequence.",
+      kind === "mp4"
+        ? "H.264 encoding is unavailable on this device. Try WebM, the desktop build, or a PNG sequence."
+        : "VP9 encoding is unavailable on this device. Try MP4 or a PNG sequence.",
     );
   const sound = options.audio ? await mix(doc, frames, signal) : null;
   if (sound && !cap.audio)
     throw new Error(
-      "No supported MP4 audio encoder is available. Disable sound or use another device.",
+      `No supported ${label} audio encoder is available. Disable sound or use another device.`,
     );
   const output = new m.Output({
-      format: new m.Mp4OutputFormat({ fastStart: "in-memory" }),
+      format:
+        kind === "mp4"
+          ? new m.Mp4OutputFormat({ fastStart: "in-memory" })
+          : new m.WebMOutputFormat(),
       target,
     }),
-    video = new m.CanvasSource(canvas, { codec: "avc", bitrate: 5_000_000 });
+    video = new m.CanvasSource(canvas, {
+      codec: cap.video,
+      bitrate: kind === "mp4" ? 5_000_000 : 3_000_000,
+    });
   output.addVideoTrack(video, { frameRate: doc.canvas.fps });
   let audio: InstanceType<typeof m.AudioBufferSource> | undefined;
   if (sound && cap.audio) {
@@ -238,9 +263,126 @@ export async function exportMp4(
     signal.throwIfAborted();
     await output.finalize();
     if (!target.buffer) throw new Error("The encoder produced no output.");
-    return new Blob([target.buffer], { type: "video/mp4" });
+    return new Blob([target.buffer], {
+      type: kind === "mp4" ? "video/mp4" : "video/webm",
+    });
   } catch (e) {
     await output.cancel().catch(() => {});
     throw e;
   }
+}
+export function exportMp4(
+  doc: Document,
+  sceneId: string,
+  options: ExportOptions,
+  progress: (p: number) => void,
+  signal: AbortSignal,
+): Promise<Blob> {
+  return exportMovie(doc, sceneId, options, "mp4", progress, signal);
+}
+
+export interface SpriteSheet {
+  image: Blob;
+  atlas: Blob;
+  columns: number;
+  rows: number;
+  frameWidth: number;
+  frameHeight: number;
+  frames: number;
+}
+
+/**
+ * One PNG holding every rendered frame in a grid, plus a JSON companion that
+ * names each cell. Game engines and web players read the pair directly.
+ */
+export async function exportSpriteSheet(
+  doc: Document,
+  sceneId: string,
+  options: ExportOptions,
+  columns: number,
+  progress: (p: number) => void,
+  signal: AbortSignal,
+): Promise<SpriteSheet> {
+  const frames = plan(doc, sceneId, options);
+  if (frames.length > 400)
+    throw new Error(
+      "Sprite sheet limit: 400 frames per sheet. Use a work area or export scenes separately.",
+    );
+  const single = canvasFor(doc, Math.min(1024, options.longSide)),
+    cell = Math.max(8, Math.round(single.width / 2) * 2),
+    cellHeight = Math.max(8, Math.round(single.height / 2) * 2),
+    across = Math.max(1, Math.min(columns, frames.length)),
+    down = Math.ceil(frames.length / across),
+    sheet = document.createElement("canvas");
+  sheet.width = cell * across;
+  sheet.height = cellHeight * down;
+  if (
+    sheet.width * sheet.height > 64_000_000 ||
+    sheet.width > 16384 ||
+    sheet.height > 16384
+  )
+    throw new Error(
+      "That sheet would exceed 16384 px or 64 megapixels. Reduce the resolution, the column count or the range.",
+    );
+  const context = sheet.getContext("2d")!;
+  const cells: { frame: number; scene: string; x: number; y: number }[] = [];
+  for (let i = 0; i < frames.length; i++) {
+    signal.throwIfAborted();
+    await preload(doc, frames[i].scene, frames[i].frame);
+    single.width = cell;
+    single.height = cellHeight;
+    context.clearRect(
+      (i % across) * cell,
+      Math.floor(i / across) * cellHeight,
+      cell,
+      cellHeight,
+    );
+    render(single, doc, frames[i].scene, frames[i].frame, {
+      transparent: options.transparent,
+    });
+    context.drawImage(
+      single,
+      (i % across) * cell,
+      Math.floor(i / across) * cellHeight,
+    );
+    cells.push({
+      frame: frames[i].frame,
+      scene: frames[i].scene.name,
+      x: (i % across) * cell,
+      y: Math.floor(i / across) * cellHeight,
+    });
+    progress((i + 1) / frames.length);
+    if (i % 4 === 0) await new Promise((r) => setTimeout(r, 0));
+  }
+  const image = await blob(sheet);
+  const atlas = new Blob(
+    [
+      JSON.stringify(
+        {
+          format: "pegbar-studio-sprite",
+          schema: 1,
+          image: "spritesheet",
+          width: sheet.width,
+          height: sheet.height,
+          cell: { width: cell, height: cellHeight },
+          columns: across,
+          rows: down,
+          fps: doc.canvas.fps,
+          frames: cells,
+        },
+        null,
+        2,
+      ),
+    ],
+    { type: "application/json" },
+  );
+  return {
+    image,
+    atlas,
+    columns: across,
+    rows: down,
+    frameWidth: cell,
+    frameHeight: cellHeight,
+    frames: frames.length,
+  };
 }

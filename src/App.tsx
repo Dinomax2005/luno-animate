@@ -208,6 +208,7 @@ export default function App() {
           y: "redo",
           d: "duplicate",
           g: "group",
+          b: "breakdowns",
           c: "copy-keys",
           v: "paste-keys",
         };
@@ -255,6 +256,7 @@ export default function App() {
         event.preventDefault();
         state.keySelection.length ? state.deleteKeys() : state.remove();
       }
+      if (key === "m") state.pref("mirror", !state.preferences.mirror);
       if (key === "x") {
         const fg = state.preferences.foreground;
         state.pref("foreground", state.preferences.background);

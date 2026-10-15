@@ -135,6 +135,7 @@ function ToolOptions() {
           <Field label="Stabilize"><input aria-label="Brush stabilization" type="range" min={0} max={95} value={Math.round(brush.smoothing * 100)} onChange={event => setBrush({ smoothing: Number(event.target.value) / 100 })} /></Field>
           <Field label="Spacing"><input aria-label="Brush spacing" type="range" min={5} max={100} value={Math.round(brush.spacing * 100)} onChange={event => setBrush({ spacing: Number(event.target.value) / 100 })} /></Field>
           <button className="option-toggle" aria-pressed={brush.pressure} aria-label="Pen pressure" onClick={() => setBrush({ pressure: !brush.pressure })}>Pressure</button>
+          <button className="option-toggle" aria-pressed={s.preferences.mirror} aria-label="Mirror stroke" title="M — mirrors every stroke across the canvas centreline" onClick={() => s.pref('mirror', !s.preferences.mirror)}>Mirror</button>
           {s.tool === 'erase' && <span className="option-hint">Removes the last marks on this cel only. Undo restores them.</span>}
         </>
       )}

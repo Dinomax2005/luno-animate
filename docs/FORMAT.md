@@ -1,6 +1,6 @@
-# Pegbar Studio 1.0 project format
+# Pegbar Studio 2.0 project format
 
-A new schema and container, deliberately not a backward reader for Pegbar Animate.
+Schema 1 with the current identifier, deliberately not a reader for the abandoned pre-1.0 Luno Animate container. The container holds an 8-byte signature (`PEGB1LAM`), two version fields, raw and compressed lengths, a SHA-256 digest of the compressed payload and DEFLATE-compressed JSON. Projects written by 1.0 carry the same schema under the `luno-studio` identifier and the `LUNO1LAM` signature; both are read, upgraded in memory and written back under the current identity, so an old project opens without any manual step and is never modified until you save it. The sprite-sheet companion JSON is a separate, self-describing export (`pegbar-studio-sprite`, schema 1) listing cell width, height, columns, rows, frame rate and per-frame positions; it is generated output, never a project source.
 
 `.lam` header: 52 bytes. Bytes 0–7 ASCII `PEGB1LAM`; little-endian uint16 container version 1 at offset 8; uint16 compression flags 1 at 10; uint32 uncompressed size at 12; uint32 compressed size at 16; SHA-256 of compressed payload at 20–51. Payload is raw DEFLATE containing UTF-8 JSON. Uncompressed data is bounded to 64,000,000 bytes; streaming inflation cannot exceed the declared size. Checksums detect corruption, not authorship or malicious intent.
 

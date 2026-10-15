@@ -103,7 +103,7 @@ jobs:
       - run: node scripts/verify-artifacts.mjs artifacts verified-assets
       - name: Preserve verification report
         run: |
-          echo '## Exact-source Studio installers and Studio 1.x manifests verified' >> "$GITHUB_STEP_SUMMARY"
+          echo '## Exact-source Pegbar Studio installers and manifests verified' >> "$GITHUB_STEP_SUMMARY"
           cat verified-assets/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
   draft:
     name: Stage owner-review draft

@@ -124,13 +124,13 @@ export function Home() {
           ) : (
             <div className="empty-library">
               <h3>{search ? 'No documents match this filter.' : 'No documents yet.'}</h3>
-              <p>{search ? 'Clear the filter to see the full library.' : 'Create a Draw, Motion or Edit project, or open a Pegbar Studio 1.0 .lam file. Nothing is preinstalled and nothing is uploaded.'}</p>
+              <p>{search ? 'Clear the filter to see the full library.' : 'Create a Draw, Motion or Edit project, or open a Pegbar Studio .lam file. Nothing is preinstalled and nothing is uploaded.'}</p>
               {!search && <div className="empty-actions"><button className="button" aria-label="Open project file" onClick={() => void openFile()}><FolderOpen size={13} />Open .lam file</button><button className="button primary" aria-label="New project" onClick={() => s.set({ dialog: 'new' })}><Plus size={13} />New project</button></div>}
             </div>
           )}
           <div className="home-support-note">
             <Shield size={12} />
-            <span>Studio 1.0 uses a new document format. Earlier Pegbar Animate releases and their project files are unsupported here and are not converted automatically — keep independent copies of legacy work.</span>
+            <span>Projects saved by 1.0 open here and re-save under the 2.0 signature. Pre-1.0 Luno Animate files are not converted — keep independent copies of that work.</span>
           </div>
           <footer>
             <span>PEGBAR STUDIO {VERSION}</span>

@@ -61,6 +61,7 @@ Every function and every accessibility hook asserted by the browser and desktop 
 
 ## 6. Release history
 
+- **2.0.0** — renamed Pegbar Studio. New surfaces: the motion audit dialog (spacing row, findings with a matching fix on each), motion paths and key dots drawn over the selected layer's canvas, a mirror toggle in the brush options strip, a WebM and sprite-sheet target in the export grid with a columns field, and a `Ctrl B` quick command. Nothing existing was removed: the audit panel and the sprite sheet reuse the established panel, field and grid classes instead of introducing new ones.
 - **1.0.3** — single-row application bar, no bar on the library screen, drawn pointer across the whole application, plain-language release notes.
 - **1.0.2** — canvas pointer for every tool, hotspot-accurate glyphs, remount fix.
 - **1.0.1** — brush-sized paint cursor on the canvas.

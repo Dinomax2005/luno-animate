@@ -720,3 +720,26 @@ html[data-cursor="drawn"], html[data-cursor="drawn"] * { cursor: none !important
 .app-cursor .cur-ew { width: 20px; height: 12px; transform: translate(-10px, -6px); }
 .app-cursor .cur-ns { width: 12px; height: 20px; transform: translate(-6px, -10px); }
 :root[data-theme="light"] .app-cursor .cur path { fill: #1c1d1f; stroke: #ffffff; }
+
+/* Motion audit: a readout, not a chat. Findings read like exposure-sheet notes. */
+.assist-scope { margin-bottom: 7px; color: var(--mute); font-size: 10px; letter-spacing: 0.02em; text-transform: uppercase; }
+.spacing-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.spacing-row button { height: var(--control); padding: 0 6px; background: var(--field); border: 1px solid var(--line); border-radius: var(--r-control); color: var(--dim); font-size: 10px; }
+.spacing-row button:hover { border-color: var(--line-2); color: var(--text); }
+.spacing-row button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.assist-controls { display: flex; align-items: flex-end; gap: 8px; margin-top: 7px; }
+.assist-run { height: var(--control); padding: 0 10px; background: var(--field); border: 1px solid var(--accent); border-radius: var(--r-control); color: var(--accent); font-size: 10px; }
+.assist-run:hover:not([disabled]) { background: var(--accent); color: var(--accent-ink); }
+.assist-run[disabled] { border-color: var(--line); color: var(--mute); }
+.assist-note { margin-top: 7px; color: var(--mute); font-size: 10px; line-height: 1.7; }
+.assist-empty { color: var(--dim); font-size: 11px; line-height: 1.7; }
+.audit-list { display: flex; flex-direction: column; gap: 10px; list-style: none; }
+.audit-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.audit-head strong { font-size: 11px; font-weight: 500; }
+.audit-head small { color: var(--mute); font-size: 10px; }
+.audit-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0 6px 8px; border-left: 2px solid var(--line-2); }
+.audit-note.warning { border-left-color: var(--warn); }
+.audit-note p { color: var(--dim); font-size: 11px; line-height: 1.7; }
+.audit-note button { flex: none; height: 22px; padding: 0 7px; border: 1px solid var(--line); border-radius: var(--r-control); color: var(--dim); font-size: 10px; }
+.audit-note button:hover { border-color: var(--accent); color: var(--accent); }
+.assist-foot { margin-left: auto; color: var(--mute); font-size: 10px; }

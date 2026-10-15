@@ -36,11 +36,17 @@ function fixture(t) {
   t.after(() => updater.dispose());
   return { updater, sdk, calls };
 }
-test("version policy accepts only newer stable Studio 1.x versions", () => {
+test("version policy accepts only newer stable versions, including 2.x", () => {
   assert(newer("1.0.1", "1.0.0"));
   assert(newer("1.1.0", "1.0.9"));
+  assert(newer("2.0.0", "1.0.3"));
+  assert(newer("2.1.0", "2.0.0"));
   for (const v of ["0.4.0", "1.0.0", "2.0.0", "1.0.1-beta.1", "invalid"])
-    assert(!newer(v, "1.0.0"));
+    assert(!newer(v, v === "2.0.0" ? "2.0.0" : "1.0.0"));
+  assert(newer("2.0.1", "2.0.0"));
+  assert(!newer("3.0.0-beta.1", "2.0.0"));
+  for (const v of ["1.0.3", "2.0.0", "invalid"])
+    assert(!newer(v, "2.0.0"), `${v} must not upgrade 2.0.0`);
 });
 test("development/test builds never initialize the update feed", async (t) => {
   const { updater, sdk } = fixture(t);

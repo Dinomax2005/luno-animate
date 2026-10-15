@@ -18,7 +18,7 @@ npmRebuild: false
 generateUpdatesFilesForAllChannels: false
 fileAssociations:
   - ext: lam
-    name: Pegbar Studio 1.0 Project
+    name: Pegbar Studio 2.0 Project
     description: Pegbar Studio unified animation document
     role: Editor
     mimeType: application/vnd.pegbar.studio

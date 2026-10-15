@@ -1,5 +1,24 @@
 # Pegbar Studio release notes
 
+## 2.0.0
+
+The studio is now **Pegbar Studio**. The earlier name collided with an unrelated financial brand, so the package, app id, executable, installer names, window titles and file signature carry the new identity. This is an identity change, not a format break:
+
+- Projects saved by 1.0 open in 2.0, upgrade in memory and re-save under the new signature. Nothing is deleted or rewritten silently.
+- Verified backups created by 1.0 still restore, interface preferences carry over once, and the desktop build adopts the existing library folder by rename on first start, so your projects, revisions and backups stay where you left them.
+- The abandoned pre-1.0 container is still refused without touching the file.
+
+### New in 2.0
+
+- **In-betweens.** Add in-between keys between the poses in your work area, with even spacing, favour-first, favour-last or ease-both rhythm. Every inserted key holds the pose the curve already passes through at that frame, so drawings you have already made stay exactly where they are. Ctrl B adds three evenly spaced in-betweens to the selection.
+- **Motion audit.** A timing readout for the scene, in the spirit of an exposure sheet: long gaps between poses, single-frame pops, dead holds that repeat one pose, constant-speed ramps and linear keys that start and stop instantly. Each finding offers the fix that matches it — space the in-betweens, favour a pose, smooth every key, or remove repeated keys. It reads the keys already in the document and runs on your computer; there is no account, no connection and nothing to pay.
+- **Motion paths.** A selected keyed layer now draws its path across the scene, with a dot on every key and a marker at the playhead, so you can see the arc before you watch it play.
+- **Mirror drawing.** Press M to mirror every stroke across the canvas centreline, the way a light-table mirror doubles a drawing. Erasing mirrors too; fills are left alone because they are positional.
+- **Sprite sheets.** Export every frame as one PNG grid plus a JSON atlas of the cells, for game engines and web players. Choose the column count, the resolution and the range.
+- **WebM.** Export VP9 with Opus audio next to MP4 — the container browsers and web players take directly.
+
+- Fixed: the updater accepts the whole release line again, including 2.x. Earlier builds only accepted 1.x versions and would have ignored this release.
+
 ## 1.0.3
 
 - Fixed: the window no longer shows a menu strip above the editor. The application bar is now a single row, and the library screen has no bar at all.

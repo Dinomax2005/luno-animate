@@ -21,6 +21,14 @@ import {
 } from "../core/model";
 import { brushSchema, validateDocument } from "../core/validate";
 import { bonesAt, celAt, channelAt, clamp, locked, pose } from "../core/motion";
+import {
+  insertBreakdowns,
+  redundantKeys,
+  spacingForFix,
+  stepCount,
+  type FixId,
+  type Spacing,
+} from "../core/assist";
 
 export interface LibraryEntry {
   id: string;
@@ -44,12 +52,14 @@ export type Dialog =
   | "reference"
   | "help"
   | "updates"
+  | "assist"
   | null;
 interface Preferences {
   theme: "dark" | "light";
   grid: boolean;
   snap: boolean;
   onion: boolean;
+  mirror: boolean;
   autoKey: boolean;
   loop: boolean;
   brush: Brush;
@@ -70,6 +80,7 @@ function settings(): Preferences {
     grid: false,
     snap: false,
     onion: true,
+    mirror: false,
     autoKey: true,
     loop: true,
     brush: { ...brushDefaults },
@@ -86,7 +97,14 @@ function settings(): Preferences {
         localStorage.getItem(LEGACY_SETTINGS) ??
         "{}",
     );
-    for (const k of ["grid", "snap", "onion", "autoKey", "loop"] as const)
+    for (const k of [
+      "grid",
+      "snap",
+      "onion",
+      "mirror",
+      "autoKey",
+      "loop",
+    ] as const)
       if (typeof raw[k] === "boolean") initial[k] = raw[k];
     const brush = brushSchema.safeParse(raw.brush);
     if (brush.success) initial.brush = brush.data;
@@ -240,6 +258,12 @@ export interface Studio {
   moveKey: (id: string, key: string, to: number) => void;
   easing: (ease: Key["easing"], curve?: Key["curve"]) => void;
   presetMotion: (kind: "fade" | "slide" | "spin" | "pulse") => void;
+  breakdowns: (
+    count: number,
+    spacing: Spacing,
+    layerId?: string,
+  ) => void;
+  assistFix: (fix: FixId, layerId?: string) => void;
   boneAngles: (
     id: string,
     angles: Record<string, number>,
@@ -265,6 +289,14 @@ export interface Studio {
   referenceNote: (id: string, name: string, notes: string) => void;
   editSound: (id: string, patch: Partial<Scene["sounds"][number]>) => void;
   bind: (layer: string, rig: string | null, bone?: string) => void;
+}
+function area(s: Scene): [number, number] {
+  return s.work[1] > s.work[0] ? [s.work[0], s.work[1]] : [0, s.length - 1];
+}
+function targets(st: Studio, s: Scene, layerId?: string): Layer[] {
+  return s.layers.filter((l) =>
+    layerId ? l.id === layerId : st.selected.includes(l.id),
+  );
 }
 let gesture: Document | null = null;
 export const useStudio = create<Studio>((set, get) => ({
@@ -856,6 +888,69 @@ export const useStudio = create<Studio>((set, get) => ({
         }
       }
     });
+  },
+  breakdowns: (count, spacing, layerId) => {
+    const st = get();
+    let added = 0;
+    st.commit("Add in-betweens", (_d, s) => {
+      for (const l of targets(st, s, layerId))
+        added += insertBreakdowns(l, area(s), count, spacing);
+    });
+    st.notify(
+      added
+        ? `${added} in-between${added === 1 ? "" : "s"} added. Each one carries the pose the curve already passes through.`
+        : "No move to break down. Place two keys in the work area, then add in-betweens.",
+      !added,
+    );
+  },
+  assistFix: (fix, layerId) => {
+    const st = get();
+    const label =
+      fix === "collapse"
+        ? "Remove repeated keys"
+        : fix === "smooth"
+          ? "Smooth every key"
+          : "Space the in-betweens";
+    let touched = 0;
+    st.commit(label, (_d, s) => {
+      const range = area(s);
+      for (const l of targets(st, s, layerId)) {
+        if (locked(l, s.layers)) continue;
+        if (fix === "collapse") {
+          const drop = new Set(redundantKeys(l, range));
+          if (!drop.size) continue;
+          l.keys = l.keys.filter((k) => !drop.has(k.id));
+          touched++;
+          continue;
+        }
+        if (fix === "smooth") {
+          if (!l.keys.length) continue;
+          l.keys = l.keys.map(({ curve: _curve, ...key }) => ({
+            ...key,
+            easing: "smooth" as const,
+          }));
+          touched++;
+          continue;
+        }
+        const spacing = spacingForFix(fix),
+          steps = [...l.keys]
+            .filter((k) => k.frame >= range[0] && k.frame <= range[1])
+            .sort((a, b) => a.frame - b.frame)
+            .map((k) => k.frame);
+        for (let i = 0; i < steps.length - 1; i++) {
+          const gap = steps[i + 1] - steps[i];
+          if (gap < 2) continue;
+          const count = fix === "spread" ? Math.min(gap - 1, 8) : stepCount(gap);
+          touched += insertBreakdowns(l, [steps[i], steps[i + 1]], count, spacing);
+        }
+      }
+    });
+    st.notify(
+      touched
+        ? `${label}: done on ${touched === 1 ? "one layer" : `${touched} layers`}. Undo reverses it.`
+        : `${label}: nothing to change in the work area.`,
+      !touched,
+    );
   },
   boneAngles: (id, angles, record = true) => {
     const s = get();

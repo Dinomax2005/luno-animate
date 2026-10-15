@@ -42,6 +42,18 @@ export function samples(mark: Mark): Point[] {
   out.push(source.at(-1)!);
   return out;
 }
+/**
+ * The same stroke reflected across the canvas centreline, the way a light-table
+ * mirror doubles a drawing. Fills are positional, so they are left alone.
+ */
+export function mirrorMark(mark: Mark, width: number): Mark | null {
+  if (mark.tool === "fill") return null;
+  return {
+    ...mark,
+    id: mark.id + "-m",
+    points: mark.points.map((p) => ({ ...p, x: width - p.x })),
+  };
+}
 export function paintWork(mark: Mark): number {
   return mark.tool === "fill"
     ? 1

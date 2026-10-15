@@ -514,7 +514,7 @@ export function Inspector() {
               <p className="panel-note">
                 {scene.layers.length} layers · {doc.scenes.length} scenes
                 <br />
-                RGB · local-first · Pegbar Studio 1.0
+                RGB · local-first · Pegbar Studio 2.0
               </p>
               <div className="field-grid">
                 <NumberField

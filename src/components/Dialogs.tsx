@@ -7,7 +7,9 @@ import {
   Code2,
   FileArchive,
   Film,
+  Grid3X3,
   Image,
+  MonitorPlay,
   Keyboard,
   Pencil,
   RefreshCw,
@@ -19,10 +21,11 @@ import { VERSION, type Workspace } from "../core/model";
 import { encode } from "../core/codec";
 import {
   exportImage,
-  exportMp4,
+  exportMovie,
   exportSequence,
+  exportSpriteSheet,
   exportSvg,
-  mp4Capabilities,
+  movieCapabilities,
   plan,
 } from "../core/export";
 import { saveMedia } from "../services/files";
@@ -31,6 +34,7 @@ import { flush, refresh } from "../services/library";
 import licence from "../../LICENSE?raw";
 import notices from "../../public/legal/NOTICE.txt?raw";
 import { Modal, NumberField, Section } from "./Common";
+import { auditScene, spacings, type Spacing } from "../core/assist";
 const close = () => useStudio.setState({ dialog: null });
 export function Dialogs({ onImport }: { onImport: () => void }) {
   const dialog = useStudio((s) => s.dialog);
@@ -42,6 +46,7 @@ export function Dialogs({ onImport }: { onImport: () => void }) {
   if (dialog === "setup") return <Setup />;
   if (dialog === "help") return <Help />;
   if (dialog === "updates") return <Updates />;
+  if (dialog === "assist") return <Assist />;
   return null;
 }
 function NewProject() {
@@ -150,7 +155,7 @@ function NewProject() {
         </select>
       </div>
       <p className="dialog-note">
-        RGB · embedded assets · local autosave · Pegbar Studio 1.0 .lam
+        RGB · embedded assets · local autosave · Pegbar Studio 2.0 .lam
       </p>
       <div className="dialog-footer">
         <button className="button secondary" onClick={close}>
@@ -175,9 +180,9 @@ function Export() {
   const s = useStudio(),
     doc = s.document!,
     scene = doc.scenes.find((sc) => sc.id === s.sceneId)!,
-    [format, setFormat] = useState<"mp4" | "png" | "svg" | "sequence" | "lam">(
-      "mp4",
-    ),
+    [format, setFormat] = useState<
+      "mp4" | "webm" | "sprite" | "png" | "svg" | "sequence" | "lam"
+    >("mp4"),
     [all, setAll] = useState(doc.scenes.length > 1),
     [work, setWork] = useState(false),
     [resolution, setResolution] = useState(1280),
@@ -187,16 +192,17 @@ function Export() {
     [progress, setProgress] = useState(0),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
+    [columns, setColumns] = useState(6),
     [cap, setCap] = useState<Awaited<
-      ReturnType<typeof mp4Capabilities>
+      ReturnType<typeof movieCapabilities>
     > | null>(null),
     abort = useRef<AbortController | null>(null),
     preview = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     let active = true;
-    if (format === "mp4") {
+    if (format === "mp4" || format === "webm") {
       setCap(null);
-      mp4Capabilities(doc, resolution)
+      movieCapabilities(doc, resolution, format)
         .then((value) => {
           if (active) setCap(value);
         })
@@ -266,15 +272,40 @@ function Export() {
             abort.current.signal,
           );
           ext = "zip";
-        } else {
-          output = await exportMp4(
+        } else if (format === "sprite") {
+          const sheet = await exportSpriteSheet(
             doc,
             scene.id,
             options,
+            columns,
             setProgress,
             abort.current.signal,
           );
-          ext = "mp4";
+          abort.current.signal.throwIfAborted();
+          const saved = await saveMedia(sheet.image, name, "png");
+          if (saved)
+            await saveMedia(
+              sheet.atlas,
+              `${name}-atlas`,
+              "json",
+            ).catch(() => false);
+          if (saved) {
+            s.notify(
+              `Sprite sheet exported: ${sheet.frames} frames, ${sheet.columns}×${sheet.rows} cells of ${sheet.frameWidth}×${sheet.frameHeight} px, with a JSON atlas.`,
+            );
+            close();
+          }
+          return;
+        } else {
+          output = await exportMovie(
+            doc,
+            scene.id,
+            options,
+            format,
+            setProgress,
+            abort.current.signal,
+          );
+          ext = format;
         }
         abort.current.signal.throwIfAborted();
         if (await saveMedia(output, name, ext)) {
@@ -299,8 +330,9 @@ function Export() {
         <span className="eyebrow">LOCAL RENDER</span>
         <h1>Export</h1>
         <p>
-          MP4 up to 1800 frames or 120 s · PNG · PNG-sequence ZIP ·
-          flattened raster SVG · portable .lam copy. Encoded on this device.
+          MP4 or WebM up to 1800 frames or 120 s · PNG · PNG-sequence ZIP ·
+          sprite sheet · flattened raster SVG · portable .lam copy. Encoded on
+          this device.
         </p>
       </div>
       <div className="export-layout">
@@ -320,13 +352,19 @@ function Export() {
               ? "SVG is a flattened raster snapshot. Editable vector data remains in .lam."
               : format === "sequence"
                 ? "Individual transparent PNG files, with frame metadata, in one ZIP."
-                : "Guides, selection handles and reference-board images are excluded."}
+                : format === "sprite"
+                  ? "One PNG grid of every frame plus a JSON atlas of the cells."
+                  : format === "webm"
+                    ? "VP9 with Opus audio, the format web players and browsers take directly."
+                    : "Guides, selection handles and reference-board images are excluded."}
           </p>
         </div>
         <div className="export-options">
           <div className="export-formats">
             {[
               { id: "mp4", name: "MP4", icon: Film },
+              { id: "webm", name: "WebM", icon: MonitorPlay },
+              { id: "sprite", name: "Sprite", icon: Grid3X3 },
               { id: "png", name: "PNG", icon: Image },
               { id: "svg", name: "SVG", icon: Code2 },
               { id: "sequence", name: "Sequence", icon: FileArchive },
@@ -372,7 +410,10 @@ function Export() {
               </select>
             </label>
           )}
-          {(format === "mp4" || format === "sequence") && (
+          {(format === "mp4" ||
+            format === "webm" ||
+            format === "sprite" ||
+            format === "sequence") && (
             <>
               <label className="text-field">
                 <span>Scenes</span>
@@ -397,7 +438,16 @@ function Export() {
               </label>
             </>
           )}
-          {format === "mp4" && (
+          {format === "sprite" && (
+            <NumberField
+              label="Columns"
+              value={columns}
+              min={1}
+              max={20}
+              onChange={setColumns}
+            />
+          )}
+          {(format === "mp4" || format === "webm") && (
             <>
               <label className="checkbox">
                 <input
@@ -411,13 +461,16 @@ function Export() {
               <p className="codec-note">
                 {cap
                   ? cap.video
-                    ? `H.264 ready · ${cap.audio === "aac" ? "AAC" : cap.audio === "opus" ? "Opus" : "no"} audio encoder`
-                    : "H.264 unavailable. Try desktop or PNG sequence."
+                    ? `${cap.video === "avc" ? "H.264" : "VP9"} ready · ${cap.audio ? (cap.audio === "aac" ? "AAC" : cap.audio === "opus" ? "Opus" : cap.audio) : "no"} audio encoder`
+                    : `${format === "mp4" ? "H.264" : "VP9"} unavailable. Try the other container, the desktop build or a PNG sequence.`
                   : "Checking encoders on this device…"}
               </p>
             </>
           )}
-          {format === "png" || format === "svg" || format === "sequence" ? (
+          {format === "png" ||
+          format === "svg" ||
+          format === "sprite" ||
+          format === "sequence" ? (
             <label className="checkbox">
               <input
                 type="checkbox"
@@ -457,12 +510,24 @@ function Export() {
         </button>
         <button
           className="button primary"
-          disabled={busy || !name.trim() || (format === "mp4" && !cap?.video)}
+          disabled={
+            busy ||
+            !name.trim() ||
+            ((format === "mp4" || format === "webm") && !cap?.video)
+          }
           onClick={() => void run()}
         >
           {busy
             ? "Rendering…"
-            : `Export ${format === "lam" ? "project" : format === "sequence" ? "sequence" : format.toUpperCase()}`}
+            : `Export ${
+                format === "lam"
+                  ? "project"
+                  : format === "sequence"
+                    ? "sequence"
+                    : format === "sprite"
+                      ? "sprite sheet"
+                      : format.toUpperCase()
+              }`}
           <ArrowDownToLine size={13} />
         </button>
       </div>
@@ -703,7 +768,7 @@ function Setup() {
             <br />
             Application redistribution requires permission.
             <br />
-            Pegbar Studio 1.0 replaces unsupported legacy releases.
+            Pegbar Studio 2.0 replaces unsupported legacy releases.
           </p>
           <button className="subtle" onClick={() => s.set({ dialog: "about" })}>
             Read the application licence
@@ -749,7 +814,7 @@ function About() {
         <div>
           <h1>Pegbar Studio</h1>
           <p>
-            Studio 1.0 · PEGB1LAM documents <span>Version {VERSION}</span>
+            Pegbar Studio 2.0 · PEGB1LAM documents <span>Version {VERSION}</span>
           </p>
         </div>
       </div>
@@ -777,10 +842,12 @@ function About() {
             tier.
           </p>
           <p>
-            <strong>Only Pegbar Studio 1.0 is supported.</strong> Earlier Pegbar
-            Animate formats do not open in this application. Keep their original
-            files and exported media. Old public downloads may remain as
-            unsupported archives; they are not migrated.
+            <strong>Pegbar Studio 2.0 opens every 1.0 project.</strong> The
+            earlier identity is gone, the file signature is new, and a project
+            saved by 1.0 opens, upgrades in memory and re-saves here unchanged.
+            Pre-1.0 Luno Animate formats do not open; keep their original files
+            and exported media. Old public downloads may remain as unsupported
+            archives, and they are not migrated.
           </p>
           <p className="dialog-note">
             The application licence covers the software itself and is under
@@ -812,13 +879,140 @@ function About() {
     </Modal>
   );
 }
+function Assist() {
+  const doc = useStudio((s) => s.document)!,
+    sceneId = useStudio((s) => s.sceneId),
+    selected = useStudio((s) => s.selected),
+    frame = useStudio((s) => s.frame),
+    addInBetweens = useStudio((s) => s.breakdowns),
+    applyFix = useStudio((s) => s.assistFix),
+    [steps, setSteps] = useState(3),
+    [spacing, setSpacing] = useState<Spacing>("even");
+  const scene = doc.scenes.find((s) => s.id === sceneId)!,
+    range: [number, number] =
+      scene.work[1] > scene.work[0]
+        ? [scene.work[0], scene.work[1]]
+        : [0, scene.length - 1],
+    found = auditScene(scene, range),
+    scoped = selected.length
+      ? found.filter((f) => selected.includes(f.layer.id))
+      : found,
+    animated = scoped.filter((f) => f.notes.length),
+    keys = scoped.reduce((total, f) => total + f.keys, 0);
+  return (
+    <Modal title="Motion audit" close={close} wide>
+      <div className="dialog-intro">
+        <span className="eyebrow">ANIMATION / TIMING</span>
+        <h1>Motion audit</h1>
+        <p>
+          Reads the keys already in this scene and reports what the timing does,
+          the way an exposure sheet does. It runs on this computer: no account,
+          no connection, and nothing leaves the project.
+        </p>
+      </div>
+      <Section title="Add in-betweens">
+        <p className="assist-scope">
+          Work area {range[0]}–{range[1]} ·{" "}
+          {selected.length
+            ? `${selected.length} selected layer${selected.length === 1 ? "" : "s"}`
+            : "select a layer first"}
+        </p>
+        <div className="spacing-row" role="group" aria-label="Spacing">
+          {spacings.map((option) => (
+            <button
+              key={option.id}
+              aria-pressed={spacing === option.id}
+              onClick={() => setSpacing(option.id)}
+              title={option.hint}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="assist-controls">
+          <NumberField
+            label="In-betweens per step"
+            value={steps}
+            min={1}
+            max={8}
+            onChange={setSteps}
+          />
+          <button
+            className="assist-run"
+            disabled={!selected.length}
+            onClick={() => addInBetweens(steps, spacing)}
+          >
+            Add in-betweens
+          </button>
+        </div>
+        <p className="assist-note">
+          Each new key holds the pose the curve already passes through at that
+          frame, so drawings you have already made stay exactly where they are.
+        </p>
+      </Section>
+      <Section title={`Findings · ${scoped.length ? `${keys} keys` : "empty scene"}`}>
+        {!scoped.length && (
+          <p className="assist-empty">
+            Nothing in this scene animates yet. Key two poses and reopen this
+            panel.
+          </p>
+        )}
+        {scoped.length > 0 && !animated.length && (
+          <p className="assist-empty">
+            Nothing to report in the work area: the moves are short, varied and
+            already have their in-betweens.
+          </p>
+        )}
+        <ul className="audit-list">
+          {scoped.map((entry) =>
+            entry.notes.length ? (
+              <li key={entry.layer.id}>
+                <div className="audit-head">
+                  <strong>{entry.layer.name}</strong>
+                  <small>
+                    {entry.keys} keys · {entry.channels.length} animated{" "}
+                    {entry.channels.length === 1 ? "property" : "properties"}
+                    {selected.includes(entry.layer.id) ? " · selected" : ""}
+                  </small>
+                </div>
+                {entry.notes.map((note) => (
+                  <div
+                    className={`audit-note ${note.level}`}
+                    key={note.id}
+                  >
+                    <div>
+                      <p>{note.text}</p>
+                    </div>
+                    {note.fix && (
+                      <button onClick={() => applyFix(note.fix!, entry.layer.id)}>
+                        {note.fixLabel}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </li>
+            ) : null,
+          )}
+        </ul>
+      </Section>
+      <div className="property-actions">
+        <button onClick={() => useStudio.setState({ dialog: null })}>
+          Close
+        </button>
+        <small className="assist-foot">
+          Playhead {frame} · {scene.length} frames · {doc.canvas.fps} fps
+        </small>
+      </div>
+    </Modal>
+  );
+}
 function Help() {
   return (
     <Modal title="Tools and shortcuts" close={close} wide>
       <div className="dialog-intro">
         <span className="eyebrow">STUDIO REFERENCE</span>
         <h1>Tools, keys and limits</h1>
-        <p>Shortcuts, tool behaviour and the working limits of Studio 1.0.</p>
+        <p>Shortcuts, tool behaviour and the working limits of Pegbar Studio 2.0.</p>
       </div>
       <div className="help-grid">
         {[
@@ -829,6 +1023,10 @@ function Help() {
           {
             title: "Motion",
             text: "V selects. Drag to move; use corner handles to scale and the upper handle to rotate. K inserts keys. Auto-key records changed properties after frame one. Expand timeline rows to inspect individual channels.",
+          },
+          {
+            title: "Timing",
+            text: "Ctrl B adds in-betweens between the poses in the work area; the audit lists long gaps, single-frame pops, dead holds and linear keys with a fix beside each finding. Motion paths and key dots are drawn over a selected keyed layer. M mirrors every stroke across the canvas centreline.",
           },
           {
             title: "Rig",
@@ -908,7 +1106,7 @@ function Updates() {
         <span className="eyebrow">APPLICATION / MAINTENANCE</span>
         <h1>Updates and verified backups</h1>
         <p>
-          Official Studio 1.0 releases. Your library stays on this computer.
+          Official Pegbar Studio releases. Your library stays on this computer.
         </p>
       </div>
       <div className="update-state">

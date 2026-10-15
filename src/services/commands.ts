@@ -223,6 +223,21 @@ export function commands(importMedia: () => void): Command[] {
       },
     },
     {
+      id: "breakdowns",
+      label: "Add in-betweens",
+      group: "Animation",
+      shortcut: "Ctrl B",
+      enabled: () => active() && !!s().selected.length,
+      run: () => s().breakdowns(3, "even"),
+    },
+    {
+      id: "assist",
+      label: "Motion audit…",
+      group: "Animation",
+      enabled: active,
+      run: () => s().set({ dialog: "assist" }),
+    },
+    {
       id: "focus",
       label: "Focus canvas",
       group: "View",

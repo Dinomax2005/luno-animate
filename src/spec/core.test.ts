@@ -6,6 +6,7 @@ import {
   uid,
   type Document,
   type Key,
+  type Layer,
   type Mark,
 } from "../core/model";
 import { validateDocument } from "../core/validate";
@@ -23,7 +24,20 @@ import {
   solveIK,
   worldMatrix,
 } from "../core/motion";
-import { paintWork, samples, seeded, stabilize } from "../core/paint";
+import {
+  mirrorMark,
+  paintWork,
+  samples,
+  seeded,
+  stabilize,
+} from "../core/paint";
+import {
+  auditLayer,
+  gapFrames,
+  insertBreakdowns,
+  redundantKeys,
+  spacingAt,
+} from "../core/assist";
 import { useStudio } from "../state/studio";
 import { plan } from "../core/export";
 const dot = (color = "#343345"): Mark => ({
@@ -53,7 +67,7 @@ const reset = (d: Document = createDocument()) =>
     playing: false,
   });
 beforeEach(() => reset());
-describe("independent Studio 1.0 model and protected container", () => {
+describe("studio document model and protected container", () => {
   it.each(["Draw", "Motion", "Edit"] as const)(
     "constructs a valid unified %s document",
     (w) => {
@@ -469,5 +483,98 @@ describe("export planning", () => {
     copy.id = uid();
     d.scenes.push(copy);
     expect(plan(d, copy.id, { all: false, work: false })).toHaveLength(72);
+  });
+});
+describe("motion assist stays on device and preserves drawn frames", () => {
+  const armed = (): Layer => {
+    const l = layer("shape", { width: 1280, height: 720 }, "Mover");
+    l.keys = [
+      { id: uid(), frame: 0, easing: "smooth", values: { x: 100 } },
+      { id: uid(), frame: 24, easing: "smooth", values: { x: 500 } },
+    ];
+    return l;
+  };
+  it("spacing profiles order the steps they promise", () => {
+    expect([0, 1, 2].map((i) => spacingAt(i, 3, "even"))).toEqual([
+      0.25, 0.5, 0.75,
+    ]);
+    const first = [0, 1, 2].map((i) => spacingAt(i, 3, "first")),
+      last = [0, 1, 2].map((i) => spacingAt(i, 3, "last"));
+    expect(first).toEqual([...first].sort((a, b) => a - b));
+    expect(first[1] - first[0]).toBeLessThan(first[2] - first[1]);
+    expect(last[2] - last[1]).toBeLessThan(last[1] - last[0]);
+  });
+  it("degenerate requests collapse instead of stacking keys on one frame", () => {
+    expect(gapFrames(0, 2, 8, "even")).toEqual([1]);
+    expect(gapFrames(0, 1, 4, "even")).toEqual([]);
+    expect(gapFrames(0, 24, 0, "even")).toEqual([]);
+    expect(new Set(gapFrames(10, 13, 6, "even")).size).toBe(
+      gapFrames(10, 13, 6, "even").length,
+    );
+  });
+  it("in-betweens land on the pose the curve already passes through", () => {
+    const l = armed();
+    const before = [0, 6, 12, 18, 24].map((f) => pose(l, f).x);
+    expect(insertBreakdowns(l, [0, 24], 3, "even")).toBe(3);
+    expect(l.keys.map((k) => k.frame)).toEqual([0, 6, 12, 18, 24]);
+    expect([0, 6, 12, 18, 24].map((f) => pose(l, f).x)).toEqual(before);
+  });
+  it("in-betweens keep the timing of the key they follow", () => {
+    const l = armed();
+    l.keys[0].easing = "bezier";
+    l.keys[0].curve = [0.9, 0, 0.1, 1];
+    insertBreakdowns(l, [0, 24], 2, "both");
+    const inserted = l.keys.filter((k) => k.frame !== 0 && k.frame !== 24);
+    expect(inserted).toHaveLength(2);
+    expect(inserted.every((k) => k.easing === "bezier")).toBe(true);
+    expect(inserted[0].curve).toEqual([0.9, 0, 0.1, 1]);
+  });
+  it("in-betweens respect the work area and ignore locked or empty layers", () => {
+    const l = armed();
+    l.keys.push({ id: uid(), frame: 48, easing: "linear", values: { x: 100 } });
+    expect(insertBreakdowns(l, [0, 24], 2, "even")).toBe(2);
+    expect(l.keys.filter((k) => k.frame > 24 && k.frame < 48)).toHaveLength(0);
+    const still = layer("shape", { width: 1280, height: 720 }, "Still");
+    expect(insertBreakdowns(still, [0, 24], 2, "even")).toBe(0);
+  });
+  it("the audit names a pop, a long gap, a dead hold and a linear ramp", () => {
+    const l = armed();
+    l.keys.push({ id: uid(), frame: 25, easing: "linear", values: { x: 2000 } });
+    l.keys.push({ id: uid(), frame: 40, easing: "linear", values: { x: 2000 } });
+    const notes = auditLayer(l, [0, 40]),
+      ids = notes.map((n) => n.id);
+    expect(ids.some((id) => id.startsWith("pop-"))).toBe(true);
+    expect(ids).toContain("dead");
+    expect(ids).toContain("linear");
+    expect(notes.every((n) => n.text.length > 20)).toBe(true);
+  });
+  it("a still layer is reported as a hold, not as an error", () => {
+    const l = armed();
+    l.keys[1].values = { x: 100 };
+    const notes = auditLayer(l, [0, 24]);
+    expect(notes.map((n) => n.id)).toContain("no-motion");
+    expect(notes[0].fix).toBe("collapse");
+  });
+  it("repeated keys are the only ones a collapse may remove", () => {
+    const l = armed();
+    l.keys.push({ id: uid(), frame: 12, easing: "smooth", values: { x: 300 } });
+    const drop = redundantKeys(l, [0, 24]);
+    expect(drop).toHaveLength(0);
+    const middle = l.keys.find((k) => k.frame === 12)!;
+    expect(middle.values.x).toBe(300);
+    l.keys.forEach((k) => (k.values.x = 100));
+    expect(redundantKeys(l, [0, 24])).toEqual([middle.id]);
+  });
+  it("a mirrored stroke is a real second mark, and fills are left alone", () => {
+    const mark = dot();
+    mark.points = [
+      { x: 100, y: 40, p: 1 },
+      { x: 300, y: 60, p: 0.5 },
+    ];
+    const twin = mirrorMark(mark, 1280)!;
+    expect(twin.id).not.toBe(mark.id);
+    expect(twin.points.map((p) => p.x)).toEqual([1180, 980]);
+    expect(twin.points.map((p) => p.y)).toEqual([40, 60]);
+    expect(mirrorMark({ ...mark, tool: "fill" }, 1280)).toBeNull();
   });
 });

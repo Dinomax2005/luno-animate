@@ -1,5 +1,7 @@
+// Accepts the shipped line and anything newer: this must never refuse the
+// project's own next major release.
 const newer = (next, current) => {
-  if (!/^1\.\d+\.\d+$/.test(next)) return false;
+  if (!/^\d+\.\d+\.\d+$/.test(next)) return false;
   const a = next.split(".").map(Number),
     b = current.split(".").map(Number);
   for (let i = 0; i < 3; i++) {
@@ -21,7 +23,7 @@ class Updates {
     this.countdown = null;
     this.state = {
       phase: "idle",
-      message: "Official Pegbar Studio 1.x updates.",
+      message: "Official Pegbar Studio updates.",
       version: null,
       percent: 0,
     };
@@ -86,7 +88,7 @@ class Updates {
     sdk.on("checking-for-update", () =>
       this.emit({
         phase: "checking",
-        message: "Checking the Studio 1.x release channel…",
+        message: "Checking the official release channel…",
       }),
     );
     sdk.on("update-not-available", () =>

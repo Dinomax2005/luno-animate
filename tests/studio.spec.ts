@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { decode } from "../src/core/codec";
+import { decode, encode } from "../src/core/codec";
 import type { Document } from "../src/core/model";
 import type { Studio } from "../src/state/studio";
 import { pose, bonesAt } from "../src/core/motion";
@@ -514,19 +514,35 @@ test("compact workbench and new light theme keep real docks and exports usable",
   expect(await page.evaluate(() => document.body.scrollWidth)).toBe(390);
 });
 
-test("unsupported legacy files cannot replace the active new-format document", async ({
+test("pre-1.0 files cannot replace the active document while 1.0 projects still open", async ({
   page,
 }) => {
   await create(page, "Draw", "Protected work");
   await ink(page);
   const before = (await snapshot(page)).document;
   await page.getByLabel("Import media file").setInputFiles({
-    name: "legacy.lam",
+    name: "unknown.lam",
     mimeType: "application/octet-stream",
     buffer: Buffer.from("LUNOLAM\0" + "x".repeat(60)),
   });
-  await expect(page.getByRole("alert")).toContainText("legacy");
+  await expect(page.getByRole("alert")).toContainText("pre-1.0");
   expect((await snapshot(page)).document).toEqual(before);
+
+  // A 1.0 project carries the same schema under the earlier signature: it must
+  // still open, and re-save under the current one.
+  const exported = await portable(page);
+  const bytes = Buffer.from(encode(exported));
+  bytes.write("LUNO1LAM", 0, "utf8");
+  await page.getByLabel("Import media file").setInputFiles({
+    name: "from-1.0.lam",
+    mimeType: "application/octet-stream",
+    buffer: bytes,
+  });
+  await expect(page.getByLabel("Document title")).toHaveValue(exported.title);
+  const reopened = await portable(page);
+  expect(Buffer.from(encode(reopened)).subarray(0, 8).toString("utf8")).toBe(
+    "PEGB1LAM",
+  );
 });
 
 test("canvas shows a brush-sized paint cursor that follows size, zoom and tool", async ({
@@ -635,4 +651,133 @@ test("an app-drawn pointer is visible and exact for every canvas tool", async ({
   await page.getByLabel("Document title").click();
   await page.waitForTimeout(150);
   await expect(appCursor).toHaveAttribute("data-kind", "text");
+});
+
+test("in-betweens keep every existing pose and the audit names the timing", async ({
+  page,
+}) => {
+  await create(page);
+  // A keyed layer with a linear move: the timing the audit must describe.
+  const armed = await page.evaluate(async () => {
+    const url = performance
+      .getEntriesByType("resource")
+      .map((e) => e.name)
+      .find((u) => /\/src\/state\/studio\.ts(?:\?|$)/.test(u))!;
+    const { useStudio } = await import(/* @vite-ignore */ url);
+    const s = useStudio.getState();
+    s.add("shape", "rect");
+    const id = useStudio.getState().selected[0];
+    useStudio.getState().commit("Seed move", (_d, scene) => {
+      const l = scene.layers.find((candidate) => candidate.id === id)!;
+      l.keys = [
+        { id: crypto.randomUUID(), frame: 0, easing: "linear", values: { x: 200 } },
+        { id: crypto.randomUUID(), frame: 12, easing: "linear", values: { x: 550 } },
+        { id: crypto.randomUUID(), frame: 24, easing: "linear", values: { x: 900 } },
+      ];
+    });
+    const scene = useStudio.getState().document!.scenes[0];
+    const { pose } = await import(/* @vite-ignore */ url.replace("state/studio.ts", "core/motion.ts"));
+    const layer = scene.layers.find((candidate) => candidate.id === id)!;
+    return {
+      id,
+      before: [0, 6, 12, 18, 24].map((frame) => pose(layer, frame).x),
+    };
+  });
+
+  // The panel reports what the keys do, and offers the fix that matches.
+  await page.getByRole("button", { name: "Application menu" }).click();
+  await page.getByRole("menuitem", { name: "Animation", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Motion audit…", exact: true })
+    .click();
+  const audit = page.getByRole("dialog", { name: "Motion audit" });
+  await expect(audit).toContainText("Work area 0–71");
+  await expect(audit.getByText(/constant speed/)).toBeVisible();
+  await expect(audit.getByText(/linear, so they start and stop instantly/)).toBeVisible();
+  await audit
+    .getByRole("button", { name: "Favour first pose", exact: true })
+    .first()
+    .click();
+  const after = await page.evaluate(async (id) => {
+    const url = performance
+      .getEntriesByType("resource")
+      .map((e) => e.name)
+      .find((u) => /\/src\/state\/studio\.ts(?:\?|$)/.test(u))!;
+    const { useStudio } = await import(/* @vite-ignore */ url);
+    const scene = useStudio.getState().document!.scenes[0];
+    const { pose } = await import(/* @vite-ignore */ url.replace("state/studio.ts", "core/motion.ts"));
+    const layer = scene.layers.find((candidate) => candidate.id === id)!;
+    return {
+      frames: layer.keys.map((k) => k.frame),
+      poses: [0, 6, 12, 18, 24].map((frame) => pose(layer, frame).x),
+    };
+  }, armed.id);
+  // Poses on the original frames are untouched; new keys sit between them.
+  expect(after.poses.map((x) => Math.round(x))).toEqual(
+    armed.before.map((x) => Math.round(x)),
+  );
+  expect(after.frames).toContain(0);
+  expect(after.frames).toContain(24);
+  expect(after.frames.length).toBeGreaterThan(2);
+  await audit.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(audit).toHaveCount(0);
+});
+
+test("export offers WebM and sprite sheets, and brush options carry the mirror", async ({
+  page,
+}) => {
+  await create(page);
+  await page.keyboard.press("Control+e");
+  const dialog = page.getByRole("dialog", { name: "Export animation" });
+  await expect(dialog.getByRole("button", { name: "WebM", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Sprite", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Sprite", exact: true }).click();
+  await expect(dialog.getByRole("spinbutton", { name: "Columns" })).toHaveValue("6");
+  await expect(
+    dialog.getByRole("button", { name: "Export sprite sheet", exact: true }),
+  ).toBeEnabled();
+  await dialog.getByRole("button", { name: "Sprite", exact: true }).click();
+  await dialog.getByRole("button", { name: "WebM", exact: true }).click();
+  await expect(
+    dialog.getByRole("button", { name: /Export WEBM/i }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  const mirror = page.getByRole("button", { name: "Mirror stroke", exact: true });
+  await expect(mirror).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("m");
+  await expect(mirror).toHaveAttribute("aria-pressed", "true");
+  // A mirrored stroke is a second real mark, not a preview-only effect.
+  const marks = await page.evaluate(async () => {
+    const url = performance
+      .getEntriesByType("resource")
+      .map((e) => e.name)
+      .find((u) => /\/src\/state\/studio\.ts(?:\?|$)/.test(u))!;
+    const { useStudio } = await import(/* @vite-ignore */ url);
+    const layer = useStudio
+      .getState()
+      .document!.scenes[0].layers.find((l) => l.kind === "paint")!;
+    return layer.cels?.[0].marks.length ?? 0;
+  });
+  expect(marks).toBe(0);
+  await ink(page);
+  expect(
+    await page.evaluate(async () => {
+      const url = performance
+        .getEntriesByType("resource")
+        .map((e) => e.name)
+        .find((u) => /\/src\/state\/studio\.ts(?:\?|$)/.test(u))!;
+      const { useStudio } = await import(/* @vite-ignore */ url);
+      const layer = useStudio
+        .getState()
+        .document!.scenes[0].layers.find((l) => l.kind === "paint")!;
+      const marks = layer.cels?.[0].marks ?? [];
+      return {
+        count: marks.length,
+        mirrored: marks.length === 2 &&
+          marks[1].points[0].x === 1280 - marks[0].points[0].x,
+      };
+    }),
+  ).toEqual({ count: 2, mirrored: true });
+  await page.keyboard.press("m");
+  await expect(mirror).toHaveAttribute("aria-pressed", "false");
 });
