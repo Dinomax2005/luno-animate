@@ -2,7 +2,18 @@
 
 **Goal:** make the interface read as a purpose-built studio tool instead of a generic template, without changing a single function.
 
-Current release: [the latest build](https://github.com/Dinomax2005/luno-animate/releases/latest). The 1.0.0 interface shipped from build `d04cfb2`.
+Current release: [the latest build](https://github.com/Dinomax2005/luno-animate/releases/latest). The 1.0.0 interface shipped from build `d04cfb2`; 2.0.0 keeps it and adds the timing surfaces described below.
+
+## 2.0.0 additions: why they look like this
+
+The new work was held to the same test as the rest of the interface — it has to look like an instrument, not a feature announcement.
+
+- **Motion audit.** Animators read timing from an exposure sheet: a column of frames with a note beside the problem, not a chat window. So the panel is a two-part dialog — controls for adding in-betweens, then a findings list grouped per layer, each note carrying the one action that resolves it. No assistant bubbles, no suggested-prompts block, no accent-glow "smart" affordance. The one-line scope header (`WORK AREA 0–71 · 1 SELECTED LAYER`) uses the same uppercase micro-label as the rest of the chrome, so a returner reads it the way they read the timeline ruler.
+- **Spacing row.** Four equal segmented buttons rather than a dropdown, because the choice is rhythmic and worth seeing at a glance; the selected one takes the amber fill exactly like the workspace tabs and export grid.
+- **Findings.** A hairline left rule marks each note; an amber rule marks the ones that will bite if ignored. The fix button sits on the note's baseline instead of floating in a toolbar, so the sentence and its action stay one object.
+- **Motion paths.** The path is dashed amber, key dots are neutral, and the playhead marker is solid amber — hierarchy by role, not by decoration. It draws only for a selected layer that actually animates, so the canvas stays clean while drawing.
+- **Mirror.** A pressed-state toggle in the options strip next to Pressure, in the same shape as Grid and Snap. The mirrored stroke is a real second mark, so Undo, export and portable files all behave normally.
+- **Export grid.** Two new tiles in the existing 5-up grid rather than a new format dialog: WebM beside MP4, Sprite beside Sequence, with the columns field appearing only for a sheet, exactly the way the audio checkbox appears only for a movie.
 
 ## 1. What the defaults are
 
