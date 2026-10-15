@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { decode, encode } from "../src/core/codec";
-import type { Document } from "../src/core/model";
+import type { Document, Layer } from "../src/core/model";
 import type { Studio } from "../src/state/studio";
 import { pose, bonesAt } from "../src/core/motion";
 async function create(page: Page, workspace = "Draw", name = "Studio test") {
@@ -667,20 +667,20 @@ test("in-betweens keep every existing pose and the audit names the timing", asyn
     const s = useStudio.getState();
     s.add("shape", "rect");
     const id = useStudio.getState().selected[0];
-    useStudio.getState().commit("Seed move", (_d, scene) => {
-      const l = scene.layers.find((candidate) => candidate.id === id)!;
+    useStudio.getState().commit("Seed move", (_d: Document, scene: Document["scenes"][number]) => {
+      const l = scene.layers.find((candidate: Layer) => candidate.id === id)!;
       l.keys = [
         { id: crypto.randomUUID(), frame: 0, easing: "linear", values: { x: 200 } },
         { id: crypto.randomUUID(), frame: 12, easing: "linear", values: { x: 550 } },
         { id: crypto.randomUUID(), frame: 24, easing: "linear", values: { x: 900 } },
       ];
     });
-    const scene = useStudio.getState().document!.scenes[0];
+    const scene = useStudio.getState().document!.scenes[0] as Document["scenes"][number];
     const { pose } = await import(/* @vite-ignore */ url.replace("state/studio.ts", "core/motion.ts"));
-    const layer = scene.layers.find((candidate) => candidate.id === id)!;
+    const layer = scene.layers.find((candidate: Layer) => candidate.id === id)!;
     return {
       id,
-      before: [0, 6, 12, 18, 24].map((frame) => pose(layer, frame).x),
+      before: [0, 6, 12, 18, 24].map((frame: number) => pose(layer, frame).x),
     };
   });
 
@@ -704,12 +704,12 @@ test("in-betweens keep every existing pose and the audit names the timing", asyn
       .map((e) => e.name)
       .find((u) => /\/src\/state\/studio\.ts(?:\?|$)/.test(u))!;
     const { useStudio } = await import(/* @vite-ignore */ url);
-    const scene = useStudio.getState().document!.scenes[0];
+    const scene = useStudio.getState().document!.scenes[0] as Document["scenes"][number];
     const { pose } = await import(/* @vite-ignore */ url.replace("state/studio.ts", "core/motion.ts"));
-    const layer = scene.layers.find((candidate) => candidate.id === id)!;
+    const layer = scene.layers.find((candidate: Layer) => candidate.id === id)!;
     return {
-      frames: layer.keys.map((k) => k.frame),
-      poses: [0, 6, 12, 18, 24].map((frame) => pose(layer, frame).x),
+      frames: layer.keys.map((k: Layer["keys"][number]) => k.frame),
+      poses: [0, 6, 12, 18, 24].map((frame: number) => pose(layer, frame).x),
     };
   }, armed.id);
   // Poses on the original frames are untouched; new keys sit between them.
@@ -753,9 +753,8 @@ test("export offers WebM and sprite sheets, and brush options carry the mirror",
       .map((e) => e.name)
       .find((u) => /\/src\/state\/studio\.ts(?:\?|$)/.test(u))!;
     const { useStudio } = await import(/* @vite-ignore */ url);
-    const layer = useStudio
-      .getState()
-      .document!.scenes[0].layers.find((l) => l.kind === "paint")!;
+    const scene = useStudio.getState().document!.scenes[0] as Document["scenes"][number];
+    const layer = scene.layers.find((l: Layer) => l.kind === "paint")!;
     return layer.cels?.[0].marks.length ?? 0;
   });
   expect(marks).toBe(0);
@@ -767,13 +766,13 @@ test("export offers WebM and sprite sheets, and brush options carry the mirror",
         .map((e) => e.name)
         .find((u) => /\/src\/state\/studio\.ts(?:\?|$)/.test(u))!;
       const { useStudio } = await import(/* @vite-ignore */ url);
-      const layer = useStudio
-        .getState()
-        .document!.scenes[0].layers.find((l) => l.kind === "paint")!;
+      const scene = useStudio.getState().document!.scenes[0] as Document["scenes"][number];
+      const layer = scene.layers.find((l: Layer) => l.kind === "paint")!;
       const marks = layer.cels?.[0].marks ?? [];
       return {
         count: marks.length,
-        mirrored: marks.length === 2 &&
+        mirrored:
+          marks.length === 2 &&
           marks[1].points[0].x === 1280 - marks[0].points[0].x,
       };
     }),
